@@ -39,11 +39,14 @@ if [ ! -f .env ]; then
 fi
 chmod 600 .env
 
-# ---- Writable dirs & data file ----
+# ---- Writable dirs & data file (app container runs as UID 999) ----
 mkdir -p logs data materials materials/prompts
 if [ ! -f experiment_data.xlsx ]; then
     echo "[INFO] experiment_data.xlsx will be created on first run."
 fi
+chown -R 999:999 logs data materials 2>/dev/null || true
+[ -f experiment_data.xlsx ] && chown 999:999 experiment_data.xlsx 2>/dev/null || true
+chmod -R u+rwX logs data materials 2>/dev/null || true
 
 # ---- Build images ----
 echo "[6/7] Building Docker images..."

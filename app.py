@@ -59,13 +59,16 @@ if _missing:
 # ---- Logging ----
 LOG_DIR = os.environ.get("LOG_DIR", os.path.join(BASE_DIR, "logs"))
 os.makedirs(LOG_DIR, exist_ok=True)
+_log_handlers = [logging.StreamHandler()]
+_log_file = os.path.join(LOG_DIR, "app.log")
+try:
+    _log_handlers.append(logging.FileHandler(_log_file, encoding="utf-8"))
+except OSError as e:
+    print(f"[WARN] Cannot write log file {_log_file}: {e}; using stdout only.", flush=True)
 logging.basicConfig(
     level=logging.DEBUG if DEBUG_MODE else logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler(os.path.join(LOG_DIR, "app.log"), encoding="utf-8"),
-    ],
+    handlers=_log_handlers,
 )
 logger = logging.getLogger(__name__)
 

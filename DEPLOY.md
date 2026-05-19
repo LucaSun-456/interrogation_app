@@ -70,7 +70,13 @@ bash certbot-setup.sh spe-avatar.com 你的邮箱@example.com
 
 访问：https://spe-avatar.com
 
-若 `app` 容器一直 Restarting，先查日志：`docker compose logs app --tail 30`（常见原因：`.env` 缺少 `SECRET_KEY` / `ADMIN_PASSWORD` 等）。
+若 `app` 容器一直 Restarting，先查日志：`docker compose logs app --tail 30`。
+
+| 日志关键词 | 处理 |
+|-----------|------|
+| `Permission denied: '/app/logs/app.log'` | 在服务器执行：`bash scripts/fix-server-permissions.sh` |
+| `location directive is not allowed here` | `git pull` 更新 `nginx/nginx.conf`，或删掉 `http {}` 里错误的 `location` 块 |
+| `Missing required environment variables` | 补全 `.env` 后 `docker compose up -d --force-recreate app` |
 
 ## 六、更新版本
 
