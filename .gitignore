@@ -19,6 +19,7 @@ ENV/
 # Logs & runtime data
 *.log
 app.log
+logs/
 data/
 *.xlsx
 training_feedback/

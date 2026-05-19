@@ -39,7 +39,8 @@ if [ ! -f .env ]; then
 fi
 chmod 600 .env
 
-# ---- Create data file if needed ----
+# ---- Writable dirs & data file ----
+mkdir -p logs training_feedback data
 if [ ! -f experiment_data.xlsx ]; then
     echo "[INFO] experiment_data.xlsx will be created on first run."
 fi
@@ -60,6 +61,6 @@ echo ""
 echo "Next steps:"
 echo "1. Edit .env with real API keys and passwords"
 echo "2. Point your domain DNS A record to this server's IP"
-echo "3. Run: bash certbot-setup.sh your-domain.com"
+echo "3. Run: bash certbot-setup.sh spe-avatar.com your@email.com"
 echo "4. Update nginx/conf.d/app.conf with your domain, then:"
 echo "   docker compose exec nginx nginx -s reload"

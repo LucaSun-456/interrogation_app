@@ -57,12 +57,14 @@ if _missing:
     raise RuntimeError(f"Missing required environment variables: {', '.join(_missing)}")
 
 # ---- Logging ----
+LOG_DIR = os.environ.get("LOG_DIR", os.path.join(BASE_DIR, "logs"))
+os.makedirs(LOG_DIR, exist_ok=True)
 logging.basicConfig(
     level=logging.DEBUG if DEBUG_MODE else logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler(os.path.join(BASE_DIR, "app.log"), encoding="utf-8"),
+        logging.FileHandler(os.path.join(LOG_DIR, "app.log"), encoding="utf-8"),
     ],
 )
 logger = logging.getLogger(__name__)
@@ -1554,7 +1556,9 @@ def convert_pdf_to_docx(pdf_path, docx_path):
     doc.save(docx_path)
 
 
-LIVEAVATAR_VOICES_FILE = os.path.join(BASE_DIR, "liveavatar_voices.json")
+DATA_DIR = os.environ.get("DATA_DIR", os.path.join(BASE_DIR, "data"))
+os.makedirs(DATA_DIR, exist_ok=True)
+LIVEAVATAR_VOICES_FILE = os.path.join(DATA_DIR, "liveavatar_voices.json")
 _liveavatar_voice_map = {}
 
 

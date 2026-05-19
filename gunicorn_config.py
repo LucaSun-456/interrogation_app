@@ -4,7 +4,8 @@ import os
 bind = "0.0.0.0:8000"
 backlog = 2048
 
-workers = int(os.environ.get("GUNICORN_WORKERS", multiprocessing.cpu_count() * 2 + 1))
+# Default 1 worker for small VPS (1–2 GB RAM). Set GUNICORN_WORKERS in .env to scale up.
+workers = int(os.environ.get("GUNICORN_WORKERS", "1"))
 worker_class = "sync"
 worker_connections = 1000
 timeout = 120

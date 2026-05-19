@@ -1109,9 +1109,10 @@
     <div class="interview-toolbar">
       <button type="button" class="btn btn-outline" onclick="openInterviewCaseSidebar()">📋 案件背景</button>
       <button type="button" class="btn btn-outline" onclick="openInterviewTranscriptModal()">💬 文字对话记录</button>
+      <span id="trainingSessionTimer" style="margin-left:auto;font-size:12px;color:var(--accent);font-weight:600;"></span>
     </div>
     <p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">
-      每次训练 3-10 分钟。点击下方按钮开始录音，再次点击停止，系统将自动转写并与 Avatar 对话。
+      每次访谈最长 <strong>10 分钟</strong>，到时将自动结束。点击下方按钮开始录音，再次点击停止，系统将自动转写并与 Avatar 对话。
     </p>
     <div id="trainingLiveVideoContainer" style="width:100%;background:#000;border-radius:8px;min-height:280px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;position:relative;overflow:hidden;">
       <div id="trainingVideoPlaceholder" style="color:#9ca3af;font-size:14px;text-align:center;padding:16px;">等待视频连接...</div>
@@ -1761,6 +1762,14 @@ window.addEventListener('beforeunload', function(e) {
       }
     }
     navigator.sendBeacon('/api/abandon', JSON.stringify({ phone: APP.phone }));
+  }
+
+  const avatarToken = (APP.trainingLiveAvatar && APP.trainingLiveAvatar.sessionToken) || liveAvatarSessionToken;
+  if (avatarToken) {
+    navigator.sendBeacon(
+      '/api/avatar/stop',
+      new Blob([JSON.stringify({ session_token: avatarToken })], { type: 'application/json' })
+    );
   }
 });
 
@@ -2932,6 +2941,7 @@ let liveAvatarRetryCount = 0;
 let isAvatarSpeaking = false;
 let liveAvatarVideoConnected = false;
 const MAX_LIVEAVATAR_RETRIES = 2;
+const AVATAR_SESSION_MAX_MS = 10 * 60 * 1000;
 
 APP.livePracticeRecorder = null;
 APP.livePracticeChunks = [];
@@ -2942,6 +2952,74 @@ function updateAvatarStatus(msg, isError) {
   if (el) {
     el.textContent = msg;
     el.style.color = isError ? '#ff6b6b' : '#aaa';
+  }
+}
+
+function clearAvatarSessionTimer() {
+  if (APP._avatarSessionTimer) {
+    clearTimeout(APP._avatarSessionTimer);
+    APP._avatarSessionTimer = null;
+  }
+  stopAvatarSessionCountdownUI();
+}
+
+function stopAvatarSessionCountdownUI() {
+  if (APP._avatarCountdownInterval) {
+    clearInterval(APP._avatarCountdownInterval);
+    APP._avatarCountdownInterval = null;
+  }
+  const t1 = $('trainingSessionTimer');
+  const t2 = $('avatarSessionTimer');
+  if (t1) t1.textContent = '';
+  if (t2) t2.textContent = '';
+}
+
+function startAvatarSessionCountdownUI() {
+  stopAvatarSessionCountdownUI();
+  const tick = () => {
+    if (!APP._avatarSessionEndsAt) return;
+    const leftSec = Math.max(0, Math.ceil((APP._avatarSessionEndsAt - Date.now()) / 1000));
+    const mm = Math.floor(leftSec / 60);
+    const ss = String(leftSec % 60).padStart(2, '0');
+    const label = '剩余 ' + mm + ':' + ss;
+    const t1 = $('trainingSessionTimer');
+    const t2 = $('avatarSessionTimer');
+    if (t1) t1.textContent = label;
+    if (t2) t2.textContent = label;
+    if (leftSec <= 0) stopAvatarSessionCountdownUI();
+  };
+  tick();
+  APP._avatarCountdownInterval = setInterval(tick, 1000);
+}
+
+function startAvatarSessionTimer(kind) {
+  clearAvatarSessionTimer();
+  APP._avatarSessionKind = kind;
+  APP._avatarSessionEndsAt = Date.now() + AVATAR_SESSION_MAX_MS;
+  APP._avatarSessionTimer = setTimeout(function() {
+    onAvatarSessionTimeout(kind);
+  }, AVATAR_SESSION_MAX_MS);
+  startAvatarSessionCountdownUI();
+}
+
+async function onAvatarSessionTimeout(kind) {
+  clearAvatarSessionTimer();
+  if (kind === 'training') {
+    if (!APP.trainingSession) return;
+    alert('本次访谈已达 10 分钟上限，已自动结束。请提交有罪/无罪判断。');
+    if (APP.trainingIsRecording) stopTrainingRecording();
+    if ($('trainingRecordBtn')) $('trainingRecordBtn').disabled = true;
+    if ($('trainingRecordStatus')) $('trainingRecordStatus').textContent = '已达 10 分钟上限';
+    await cleanupTrainingAvatar();
+    $('submitTrainingJudgmentBtn').classList.remove('hidden');
+    const t = $('trainingSessionTimer');
+    if (t) t.textContent = '已结束（10 分钟）';
+  } else {
+    alert('本次访谈已达 10 分钟上限，已自动结束。');
+    await cleanupLiveAvatar();
+    updateAvatarStatus('⏱️ 已达 10 分钟上限，会话已结束', true);
+    const t = $('avatarSessionTimer');
+    if (t) t.textContent = '已结束（10 分钟）';
   }
 }
 
@@ -2968,6 +3046,7 @@ async function initLiveAvatar(data) {
       </div>
       <div id="avatarStatus" style="padding:8px 16px;color:#aaa;font-size:12px;text-align:center;background:#16213e;">
         🔄 正在连接 LiveAvatar 服务...
+        <span id="avatarSessionTimer" style="display:block;margin-top:6px;color:#ffc107;font-weight:600;"></span>
       </div>
       <div id="avatarChatInput" style="background:#16213e;border-top:1px solid #2a2a4a;padding:12px 16px;">
         <p style="font-size:12px;color:#9ca3af;margin:0 0 10px 0;line-height:1.5;">语音讯问：点击「开始录音」说话，再次点击「停止录音」将自动转写并发送。</p>
@@ -3152,6 +3231,8 @@ async function connectLiveAvatar() {
     APP._keepAliveInterval = setInterval(() => {
       api('/api/avatar/keep-alive', { session_token: liveAvatarSessionToken }).catch(() => {});
     }, 150000);
+
+    startAvatarSessionTimer('live');
 
   } catch (err) {
     lastError = 'WebSocket 连接失败: ' + err.message;
@@ -3456,6 +3537,7 @@ async function retryLiveAvatar() {
 }
 
 async function cleanupLiveAvatar() {
+  clearAvatarSessionTimer();
   try {
     if (APP.livePracticeRecorder && APP.livePracticeRecorder.state === 'recording') {
       APP.livePracticeRecorder.onstop = null;
@@ -4051,6 +4133,8 @@ async function initTrainingAvatar(sessionData) {
     wsUrl = sessionResp.ws_url;
     livekitUrl = sessionResp.livekit_url;
     livekitToken = sessionResp.livekit_token;
+    APP.trainingLiveAvatar = APP.trainingLiveAvatar || {};
+    APP.trainingLiveAvatar.sessionToken = sessionResp.session_token || sessionToken;
     updateTrainingStatus('正在加载 LiveKit SDK...');
 
     // Step 3: Load LiveKit SDK and connect
@@ -4064,6 +4148,7 @@ async function initTrainingAvatar(sessionData) {
 
     $('trainingChatPlaceholder').classList.remove('hidden');
     $('trainingChatPlaceholder').innerHTML = 'Avatar 已就绪，请开始您的访谈。';
+    startAvatarSessionTimer('training');
   } catch (err) {
     updateTrainingStatus('');
     showError('启动训练 Avatar 失败: ' + err.message);
@@ -4440,9 +4525,16 @@ function showTrainingFeedback(feedback, sessionNum, avatarGuiltLabel) {
 }
 
 async function cleanupTrainingAvatar() {
+  clearAvatarSessionTimer();
   try {
     if (APP.trainingIsRecording) stopTrainingRecording();
   } catch(e) {}
+  const trainingToken = APP.trainingLiveAvatar && APP.trainingLiveAvatar.sessionToken;
+  if (trainingToken) {
+    try {
+      await api('/api/avatar/stop', { session_token: trainingToken });
+    } catch(e) {}
+  }
   try {
     if (APP.trainingLiveAvatar && APP.trainingLiveAvatar.ws) {
       APP.trainingLiveAvatar.ws.close();
