@@ -83,10 +83,28 @@ logger = logging.getLogger(__name__)
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
+
+def rate_limit_client_key():
+    """Per-user key; use Cloudflare / proxy client IP when present."""
+    cf_ip = request.headers.get("CF-Connecting-IP", "").strip()
+    if cf_ip:
+        return cf_ip
+    real_ip = request.headers.get("X-Real-IP", "").strip()
+    if real_ip:
+        return real_ip
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return get_remote_address()
+
+
+_rate_default = os.environ.get("RATE_LIMIT_DEFAULT", "800 per hour;3000 per day")
+_default_limits = [x.strip() for x in _rate_default.split(";") if x.strip()]
+
 limiter = Limiter(
-    get_remote_address,
+    rate_limit_client_key,
     app=app,
-    default_limits=["200 per day", "50 per hour"],
+    default_limits=_default_limits,
     storage_uri="memory://",
 )
 
@@ -4598,6 +4616,7 @@ def manage_page():
 
 
 @app.route("/api/health")
+@limiter.exempt
 def health_check():
     """Health check endpoint for monitoring and load balancer."""
     try:

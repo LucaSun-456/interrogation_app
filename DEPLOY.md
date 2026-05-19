@@ -41,9 +41,42 @@ cd /opt/interrogation-app
 scp .env root@你的服务器IP:/opt/interrogation-app/.env
 ```
 
-## 三、DNS
+## 三、DNS 与 HTTPS（二选一）
 
-在域名控制台添加：
+### 方案 A：Cloudflare 反代 + 免费 HTTPS（推荐，无需 Certbot）
+
+适合国内 VPS，**不用在服务器申请证书**。
+
+1. 注册 [Cloudflare](https://dash.cloudflare.com)，添加站点 `spe-avatar.com`（免费计划即可）。
+2. 按提示把域名 **Nameserver** 改到 Cloudflare（在 GoDaddy 域名管理里把 NS 换成 Cloudflare 提供的两个地址）。
+3. 等 NS 生效后，在 Cloudflare **DNS** 里添加：
+
+| 类型 | 名称 | 内容 | 代理 |
+|------|------|------|------|
+| A | `@` | `47.103.48.94`（你的 VPS IP） | **已代理（橙色云）** |
+| A | `www` | 同上（可选） | **已代理** |
+
+4. **SSL/TLS** → 加密模式选 **灵活（Flexible）**  
+   - 用户 ↔ Cloudflare：HTTPS  
+   - Cloudflare ↔ 你的服务器：HTTP（80），与当前 Nginx 配置一致  
+
+5. **SSL/TLS** → 边缘证书 → 开启 **始终使用 HTTPS（Always Use HTTPS）**。
+
+6. 服务器上 **只需 HTTP**，不必跑 Certbot：
+   ```bash
+   # 若曾复制过 SSL 配置且没有证书，可删掉避免 443 报错
+   rm -f nginx/conf.d/app-ssl.conf
+   docker compose exec nginx nginx -t && docker compose exec nginx nginx -s reload
+   ```
+7. 阿里云安全组：放行 **80**（必须）；443 可不开放（Flexible 模式下 Cloudflare 连源站用 80）。
+
+访问：**https://spe-avatar.com**
+
+> Avatar / WebRTC 走浏览器直连 LiveAvatar API，一般不受 Cloudflare 影响。若访谈异常，可在 Cloudflare 该子域暂时关闭代理（灰云）排查。
+
+### 方案 B：服务器 Certbot（不用 Cloudflare 时）
+
+在域名控制台（GoDaddy 等）添加：
 
 | 类型 | 主机 | 值 |
 |------|------|-----|
@@ -59,7 +92,9 @@ chmod +x deploy.sh certbot-setup.sh deploy-update.sh
 bash deploy.sh
 ```
 
-## 五、HTTPS 证书
+## 五、HTTPS 证书（仅方案 B：不用 Cloudflare 时）
+
+若已用 **Cloudflare Flexible**，跳过本节。
 
 首次部署 **只启用 HTTP**（`app.conf`），避免尚未申请证书时 Nginx 因缺少 `fullchain.pem` 无法启动。证书就绪后：
 
