@@ -79,34 +79,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ---- Security: Rate Limiting ----
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-
-
-def rate_limit_client_key():
-    """Per-user key; use Cloudflare / proxy client IP when present."""
-    cf_ip = request.headers.get("CF-Connecting-IP", "").strip()
-    if cf_ip:
-        return cf_ip
-    real_ip = request.headers.get("X-Real-IP", "").strip()
-    if real_ip:
-        return real_ip
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return get_remote_address()
-
-
-_rate_default = os.environ.get("RATE_LIMIT_DEFAULT", "800 per hour;3000 per day")
-_default_limits = [x.strip() for x in _rate_default.split(";") if x.strip()]
-
-limiter = Limiter(
-    rate_limit_client_key,
-    app=app,
-    default_limits=_default_limits,
-    storage_uri="memory://",
-)
+# Rate limiting: handled at nginx reverse proxy (no app-level limits).
 
 # ---- Security: HTTP Headers ----
 from flask_talisman import Talisman
@@ -2456,7 +2429,6 @@ def questionnaire_post_page():
 
 
 @app.route("/api/register", methods=["POST"])
-@limiter.limit("10 per minute")
 def register():
     data = request.get_json()
     phone = (data.get("phone") or "").strip()
@@ -2567,7 +2539,6 @@ def register():
 
 
 @app.route("/api/verify-attention", methods=["POST"])
-@limiter.limit("10 per minute")
 def verify_attention():
     data = request.get_json()
     phone = (data.get("phone") or "").strip()
@@ -2873,7 +2844,6 @@ def verify_control_attention():
 
 
 @app.route("/api/chat", methods=["POST"])
-@limiter.limit("20 per minute")
 def chat():
     data = request.get_json()
     phone = (data.get("phone") or "").strip()
@@ -3454,7 +3424,6 @@ def build_avatar_training_system_prompt(training_type, avatar_setting, avatar_gu
 
 
 @app.route("/api/avatar/token", methods=["POST"])
-@limiter.limit("10 per minute")
 def api_avatar_token():
     """Create a LITE mode session token. LITE mode allows the app to use its own LLM.
     Returns session_token and session_id. Frontend should then use api_avatar_session to start."""
@@ -3575,7 +3544,6 @@ def api_avatar_embed():
 
 
 @app.route("/api/avatar/session", methods=["POST"])
-@limiter.limit("10 per minute")
 def api_avatar_session():
     """Create a LITE mode session, start it, and return LiveKit + WebSocket connection info.
     LITE mode uses the app's own DeepSeek LLM for suspect responses."""
@@ -3666,7 +3634,6 @@ def api_avatar_session():
 
 
 @app.route("/api/tts", methods=["POST"])
-@limiter.limit("10 per minute")
 def api_tts():
     """Convert text to speech using ElevenLabs, return PCM 24kHz base64 audio for LiveAvatar LITE mode."""
     if not ELEVENLABS_API_KEY:
@@ -4314,7 +4281,6 @@ def api_avatar_practice_save_transcript():
 
 
 @app.route("/api/avatar-training/chat", methods=["POST"])
-@limiter.limit("20 per minute")
 def api_avatar_training_chat():
     """Chat endpoint for avatar training sessions. Sends user message to DeepSeek and returns response."""
     data = request.get_json()
@@ -4387,7 +4353,6 @@ def api_avatar_training_chat():
 
 
 @app.route("/api/avatar-training/tts", methods=["POST"])
-@limiter.limit("10 per minute")
 def api_avatar_training_tts():
     """TTS endpoint for avatar training sessions."""
     if not ELEVENLABS_API_KEY:
@@ -4440,7 +4405,6 @@ def api_avatar_training_tts():
 
 
 @app.route("/api/avatar-training/stt", methods=["POST"])
-@limiter.limit("20 per minute")
 def api_avatar_training_stt():
     """Speech-to-text endpoint for avatar training voice interrogation."""
     if not ELEVENLABS_API_KEY:
@@ -4616,7 +4580,6 @@ def manage_page():
 
 
 @app.route("/api/health")
-@limiter.exempt
 def health_check():
     """Health check endpoint for monitoring and load balancer."""
     try:
