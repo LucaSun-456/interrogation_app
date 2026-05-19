@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理 - 审讯实验系统</title>
+<style>
+  :root {
+    --primary: #1a3a5c;
+    --bg: #f0f2f5;
+    --card-bg: #ffffff;
+    --text: #2c3e50;
+    --text-light: #7f8c8d;
+    --border: #dce1e8;
+    --accent: #c0392b;
+    --success: #27ae60;
+    --warning: #d97706;
+    --suspect: #1d4ed8;
+    --interviewer: #15803d;
+    --radius: 10px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    padding: 20px;
+  }
+  h1 { font-size: 22px; margin-bottom: 8px; }
+  h2 { font-size: 18px; margin: 0 0 12px; color: var(--primary); }
+  .card {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .toolbar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .nav-link { color: var(--primary); text-decoration: none; font-size: 13px; }
+  .nav-link:hover { text-decoration: underline; }
+  .btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .btn-refresh { background: var(--primary); color: white; }
+  .btn-refresh:hover { background: #2b5882; }
+  .btn-danger { background: var(--accent); color: white; }
+  .btn-danger:hover { background: #df4a3b; }
+  .btn-reset { background: #f3f4f6; color: #1f2937; border: 1px solid var(--border); }
+  .count { font-size: 13px; color: var(--text-light); margin-bottom: 8px; }
+  .empty { text-align: center; padding: 24px; color: var(--text-light); }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .badge-s { background: #dbeafe; color: var(--suspect); }
+  .badge-i { background: #dcfce7; color: var(--interviewer); }
+  .badge-ok { background: #e8f8ef; color: var(--success); }
+  .badge-warn { background: #fff7ed; color: var(--warning); }
+
+  .filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+  }
+  .filter-item label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-light);
+    margin-bottom: 4px;
+  }
+  .filter-item input, .filter-item select {
+    width: 100%;
+    height: 34px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0 10px;
+    font-size: 13px;
+    background: white;
+  }
+
+  .group-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 10px;
+  }
+  .group-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: #fafcff;
+  }
+  .group-title {
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 8px;
+  }
+  .group-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+
+  .calendar-wrap {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 10px;
+  }
+  .day-col {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: white;
+  }
+  .day-head {
+    padding: 8px 10px;
+    background: #eff6ff;
+    color: var(--primary);
+    font-size: 13px;
+    font-weight: 700;
+    border-bottom: 1px solid var(--border);
+  }
+  .slot-row {
+    border-bottom: 1px dashed #e9edf3;
+    padding: 8px 10px;
+  }
+  .slot-row:last-child { border-bottom: none; }
+  .slot-time {
+    font-size: 12px;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 6px;
+  }
+  .slot-day-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+  }
+  .slot-day-btn {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    background: white;
+    cursor: pointer;
+    text-align: left;
+    font-size: 13px;
+  }
+  .slot-day-btn:hover { background: #eff6ff; border-color: #93c5fd; }
+  .slot-day-btn .sub { font-size: 11px; color: #6b7280; margin-top: 4px; }
+  .slot-detail-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .slot-roles {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .role-box {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px;
+    min-height: 62px;
+    font-size: 11px;
+    background: #f9fafb;
+  }
+  .role-box.s { border-color: #bfdbfe; }
+  .role-box.i { border-color: #bbf7d0; }
+  .role-title {
+    font-size: 11px;
+    color: var(--text-light);
+    margin-bottom: 4px;
+  }
+  .appt-chip {
+    display: block;
+    padding: 3px 6px;
+    border-radius: 6px;
+    margin-top: 4px;
+    background: #eef2ff;
+    color: #1f2937;
+  }
+  .appt-chip.cancelled {
+    background: #f3f4f6;
+    color: #6b7280;
+    text-decoration: line-through;
+  }
+  .chip-empty {
+    color: #9ca3af;
+    font-style: italic;
+  }
+
+  .table-wrap { overflow: auto; max-height: 360px; border: 1px solid var(--border); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 980px; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { position: sticky; top: 0; background: #f7f9fc; color: var(--primary); z-index: 1; }
+  tr:hover { background: #f8fafc; }
+  .profile-cell { max-width: 320px; white-space: pre-wrap; color: var(--text-light); font-size: 11px; }
+  .footer { text-align: center; font-size: 12px; color: var(--text-light); margin-top: 20px; }
+</style>
+</head>
+<body>
+<div id="fileProtocolWarning" style="display:none; background:#e74c3c; color:white; padding:16px 20px; border-radius:8px; margin-bottom:16px; font-size:14px; line-height:1.8;">
+  <strong>错误：</strong>你正在以 <code>file://</code> 协议直接打开此页面，API 请求无法使用。<br>
+  请通过 Flask 服务器访问：
+  <a href="http://localhost:5000/manage" style="color:white; font-weight:bold;">http://localhost:5000/manage</a>
+</div>
+
+<h1>审讯实验系统 - 数据管理</h1>
+<div class="toolbar">
+  <a href="/" class="nav-link">← 返回首页</a>
+  <button class="btn btn-refresh" onclick="loadData()">刷新数据</button>
+</div>
+
+<div class="card">
+  <h2>查找与筛选</h2>
+  <div class="filters">
+    <div class="filter-item">
+      <label>组别</label>
+      <input id="fGroup" placeholder="如：1 / 2 / 10">
+    </div>
+    <div class="filter-item">
+      <label>手机号</label>
+      <input id="fPhone" placeholder="输入手机号片段">
+    </div>
+    <div class="filter-item">
+      <label>时间（预约时间）</label>
+      <input id="fTime" placeholder="如：2026-05-04 或 14:30">
+    </div>
+    <div class="filter-item">
+      <label>角色</label>
+      <select id="fRole">
+        <option value="">全部</option>
+        <option value="S">嫌疑人</option>
+        <option value="I">审讯者</option>
+      </select>
+    </div>
+    <div class="filter-item">
+      <label>预约状态</label>
+      <select id="fStatus">
+        <option value="">全部</option>
+        <option value="confirmed">已确认</option>
+        <option value="cancelled">已取消</option>
+      </select>
+    </div>
+    <div class="filter-item">
+      <label>完成状态</label>
+      <select id="fCompleted">
+        <option value="">全部</option>
+        <option value="1">已完成</option>
+        <option value="0">未完成</option>
+      </select>
+    </div>
+  </div>
+  <div class="toolbar" style="margin-top:10px;">
+    <button class="btn btn-reset" onclick="resetFilters()">重置筛选</button>
+    <span class="count" id="filterHint"></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>参与实验结果（组别看板）</h2>
+  <div class="count" id="participantCount">加载中...</div>
+  <div id="groupGrid" class="group-grid"></div>
+</div>
+
+<div class="card">
+  <h2>预约时段管理</h2>
+  <p class="count" style="margin-bottom:10px;">默认时段：上午 9:30–11:00、下午 14:00–17:00、晚上 19:30–21:00（每 30 分钟一档），开放未来 5 天。点击下方日期配置各时段是否开放预约。</p>
+  <div id="slotConfigWrap" class="calendar-wrap"></div>
+</div>
+
+<div class="card">
+  <h2>预约记录（日历视图）</h2>
+  <div class="count" id="appointmentCount">加载中...</div>
+  <div id="calendarWrap" class="calendar-wrap"></div>
+</div>
+
+<div class="card">
+  <h2>参与者明细</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>手机号</th>
+          <th>组别</th>
+          <th>编号</th>
+          <th>角色</th>
+          <th>案件</th>
+          <th>有罪/无辜</th>
+          <th>培训类型</th>
+          <th>是否完成</th>
+          <th>访谈问卷</th>
+          <th>档案</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="participantTable"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>预约明细</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>手机号</th>
+          <th>组别</th>
+          <th>角色</th>
+          <th>预约时间</th>
+          <th>状态</th>
+          <th>创建时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="appointmentTable"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>访谈问卷明细</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>手机号</th>
+          <th>组别</th>
+          <th>角色</th>
+          <th>阶段</th>
+          <th>预约时间</th>
+          <th>提交时间</th>
+          <th>答案</th>
+        </tr>
+      </thead>
+      <tbody id="questionnaireTable"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="footer">
+  <p>数据存储在 experiment_data.xlsx 文件中，可直接用 Excel 打开查看。</p>
+  <p>© IRB Research Project</p>
+</div>
+
+<script>
+const APP = {
+  participants: [],
+  appointments: [],
+  questionnaires: [],
+  questionnaireOverrides: [],
+  participantByPhone: new Map(),
+};
+
+function getAuthHeaders() {
+  var pwd = sessionStorage.getItem('admin_password');
+  if (!pwd) return {};
+  return {
+    'Authorization': 'Basic ' + btoa('admin:' + pwd),
+    'X-Requested-With': 'XMLHttpRequest'
+  };
+}
+
+function roleLabel(role) {
+  return role === 'S' ? '嫌疑人' : role === 'I' ? '审讯者' : '-';
+}
+
+const TRAINING_GROUP_LABELS = {
+  control: 'A',
+  theory_sue: 'B',
+  avatar_general: 'C',
+  avatar_specific: 'D',
+};
+
+function trainingLabel(tp) {
+  const label = TRAINING_GROUP_LABELS[tp];
+  return label ? label + ' 组' : (tp || '-');
+}
+
+function caseLabel(ct) {
+  return ct === 'arson' ? '纵火' : ct === 'theft' ? '盗窃' : '-';
+}
+
+function guiltLabel(g) {
+  return g === 'Guilty' ? '有罪' : g === 'Innocent' ? '无辜' : '-';
+}
+
+function getFilters() {
+  return {
+    group: (document.getElementById('fGroup').value || '').trim(),
+    phone: (document.getElementById('fPhone').value || '').trim(),
+    time: (document.getElementById('fTime').value || '').trim(),
+    role: document.getElementById('fRole').value || '',
+    status: document.getElementById('fStatus').value || '',
+    completed: document.getElementById('fCompleted').value || '',
+  };
+}
+
+function resetFilters() {
+  ['fGroup', 'fPhone', 'fTime'].forEach(id => document.getElementById(id).value = '');
+  ['fRole', 'fStatus', 'fCompleted'].forEach(id => document.getElementById(id).value = '');
+  applyFiltersAndRender();
+}
+
+function participantMatches(p, f) {
+  if (f.group && !String(p.group_name || '').includes(f.group)) return false;
+  if (f.phone && !String(p.phone || '').includes(f.phone)) return false;
+  if (f.role && String(p.role || '') !== f.role) return false;
+  if (f.completed && String(p.completed || 0) !== f.completed) return false;
+  return true;
+}
+
+function appointmentMatches(a, f) {
+  const p = APP.participantByPhone.get(a.phone) || {};
+  if (f.group && !String(p.group_name || '').includes(f.group)) return false;
+  if (f.phone && !String(a.phone || '').includes(f.phone)) return false;
+  if (f.time && !String(a.time_slot || '').includes(f.time)) return false;
+  if (f.role && String(a.role || '') !== f.role) return false;
+  if (f.status && String(a.status || '') !== f.status) return false;
+  if (f.completed && String(p.completed || 0) !== f.completed) return false;
+  return true;
+}
+
+function questionnaireMatches(q, f) {
+  const p = APP.participantByPhone.get(q.phone) || {};
+  if (f.group && !String(p.group_name || '').includes(f.group)) return false;
+  if (f.phone && !String(q.phone || '').includes(f.phone)) return false;
+  if (f.time && !String(q.appointment_slot || '').includes(f.time) && !String(q.submitted_at || '').includes(f.time)) return false;
+  if (f.role && String(q.role || '') !== f.role) return false;
+  if (f.completed && String(p.completed || 0) !== f.completed) return false;
+  return true;
+}
+
+function applyFiltersAndRender() {
+  const f = getFilters();
+  const participants = APP.participants.filter(p => participantMatches(p, f));
+  const appointments = APP.appointments.filter(a => appointmentMatches(a, f));
+  const questionnaires = APP.questionnaires.filter(q => questionnaireMatches(q, f));
+  document.getElementById('filterHint').textContent =
+    `当前显示：${participants.length} 位参与者，${appointments.length} 条预约，${questionnaires.length} 份问卷`;
+  renderGroupGrid(participants, appointments);
+  renderCalendar(appointments);
+  renderParticipantTable(participants);
+  renderAppointmentTable(appointments);
+  renderQuestionnaireTable(questionnaires);
+  document.getElementById('participantCount').textContent = `共 ${participants.length} 位参与者`;
+  document.getElementById('appointmentCount').textContent = `共 ${appointments.length} 条预约记录`;
+}
+
+function getQuestionnaireStatus(phone) {
+  const rows = APP.questionnaires.filter(q => q.phone === phone);
+  const pre = rows.some(q => q.phase === 'pre');
+  const post = rows.some(q => q.phase === 'post');
+  const ovPre = APP.questionnaireOverrides.find(q => q.phone === phone && q.phase === 'pre');
+  const ovPost = APP.questionnaireOverrides.find(q => q.phone === phone && q.phase === 'post');
+  const preOpen = ovPre && String(ovPre.is_open) !== '0';
+  const postOpen = ovPost && String(ovPost.is_open) !== '0';
+  return { pre, post, preOpen, postOpen };
+}
+
+function renderGroupGrid(participants, appointments) {
+  const groupMap = new Map();
+  participants.forEach(p => {
+    const g = String(p.group_name || '未分组');
+    if (!groupMap.has(g)) {
+      groupMap.set(g, { participants: [], apptPhones: new Set(), apptConfirmedPhones: new Set() });
+    }
+    groupMap.get(g).participants.push(p);
+  });
+
+  appointments.forEach(a => {
+    const p = APP.participantByPhone.get(a.phone);
+    const g = String((p && p.group_name) || '未分组');
+    if (!groupMap.has(g)) {
+      groupMap.set(g, { participants: [], apptPhones: new Set(), apptConfirmedPhones: new Set() });
+    }
+    const info = groupMap.get(g);
+    info.apptPhones.add(a.phone);
+    if (a.status === 'confirmed') info.apptConfirmedPhones.add(a.phone);
+  });
+
+  const keys = Array.from(groupMap.keys()).sort((a, b) => Number(a) - Number(b));
+  const host = document.getElementById('groupGrid');
+  if (!keys.length) {
+    host.innerHTML = '<div class="empty" style="grid-column:1/-1;">暂无符合条件的数据</div>';
+    return;
+  }
+
+  host.innerHTML = keys.map(g => {
+    const info = groupMap.get(g);
+    const members = info.participants;
+    const suspectCount = members.filter(p => p.role === 'S').length;
+    const interviewerCount = members.filter(p => p.role === 'I').length;
+    const completedCount = members.filter(p => Number(p.completed) === 1).length;
+    const bookedCount = members.filter(p => info.apptConfirmedPhones.has(p.phone)).length;
+    const bothReady = suspectCount >= 1 && interviewerCount >= 1 && bookedCount >= 2;
+    const allCompleted = members.length > 0 && completedCount === members.length;
+    return `
+      <div class="group-card">
+        <div class="group-title">第 ${g} 组</div>
+        <div class="group-row"><span>组内人数</span><strong>${members.length}</strong></div>
+        <div class="group-row"><span>嫌疑人</span><span>${suspectCount}</span></div>
+        <div class="group-row"><span>审讯者</span><span>${interviewerCount}</span></div>
+        <div class="group-row"><span>已完成实验</span><span>${completedCount}/${members.length || 0}</span></div>
+        <div class="group-row"><span>已确认预约</span><span>${bookedCount}/${members.length || 0}</span></div>
+        <div style="margin-top:8px;">
+          <span class="badge ${allCompleted ? 'badge-ok' : 'badge-warn'}">${allCompleted ? '全员已完成' : '有人未完成'}</span>
+          <span class="badge ${bothReady ? 'badge-ok' : 'badge-warn'}">${bothReady ? '双方已预约' : '预约未齐'}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderCalendar(appointments) {
+  const dayMap = new Map();
+  appointments.forEach(a => {
+    const slot = String(a.time_slot || '');
+    if (!slot) return;
+    const day = slot.slice(0, 10);
+    const time = slot.slice(11, 16);
+    if (!dayMap.has(day)) dayMap.set(day, new Map());
+    const daySlots = dayMap.get(day);
+    if (!daySlots.has(time)) daySlots.set(time, []);
+    daySlots.get(time).push(a);
+  });
+
+  const host = document.getElementById('calendarWrap');
+  const days = Array.from(dayMap.keys()).sort();
+  if (!days.length) {
+    host.innerHTML = '<div class="empty" style="grid-column:1/-1;">暂无符合条件的预约</div>';
+    return;
+  }
+
+  host.innerHTML = days.map(day => {
+    const slots = Array.from(dayMap.get(day).keys()).sort();
+    const slotHtml = slots.map(time => {
+      const list = dayMap.get(day).get(time);
+      const suspectList = list.filter(x => x.role === 'S');
+      const interviewerList = list.filter(x => x.role === 'I');
+      return `
+        <div class="slot-row">
+          <div class="slot-time">${time}</div>
+          <div class="slot-roles">
+            <div class="role-box s">
+              <div class="role-title">嫌疑人</div>
+              ${renderRoleChips(suspectList)}
+            </div>
+            <div class="role-box i">
+              <div class="role-title">审讯者</div>
+              ${renderRoleChips(interviewerList)}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    return `<div class="day-col"><div class="day-head">${day}</div>${slotHtml}</div>`;
+  }).join('');
+}
+
+function renderRoleChips(list) {
+  if (!list.length) return '<div class="chip-empty">空</div>';
+  return list.map(a => {
+    const p = APP.participantByPhone.get(a.phone) || {};
+    const cls = a.status === 'cancelled' ? 'cancelled' : '';
+    const gid = p.group_name ? `第${p.group_name}组` : '未分组';
+    return `<span class="appt-chip ${cls}">${a.phone || '-'} · ${gid} · ${a.status === 'confirmed' ? '已确认' : '已取消'}</span>`;
+  }).join('');
+}
+
+function renderParticipantTable(participants) {
+  const tbody = document.getElementById('participantTable');
+  if (!participants.length) {
+    tbody.innerHTML = '<tr><td colspan="12" class="empty">暂无符合条件的数据</td></tr>';
+    return;
+  }
+  tbody.innerHTML = participants.map(p => {
+    const roleCls = p.role === 'S' ? 'badge-s' : 'badge-i';
+    const profileStr = p.profile ? JSON.stringify(p.profile, null, 2) : '-';
+    const qs = getQuestionnaireStatus(p.phone);
+    const qHtml = `
+      <div style="font-size:11px;line-height:1.6;">
+        <div>前问卷：${qs.pre ? '✅ 已提交' : '❌ 未提交'} ${qs.preOpen ? '（手动开放中）' : ''}</div>
+        <div>后问卷：${qs.post ? '✅ 已提交' : '❌ 未提交'} ${qs.postOpen ? '（手动开放中）' : ''}</div>
+      </div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">
+        <button class="btn btn-outline" style="font-size:11px;padding:3px 8px;" onclick="setQuestionnaireOverride('${p.phone}', 'pre', true)">开前问卷</button>
+        <button class="btn btn-outline" style="font-size:11px;padding:3px 8px;" onclick="setQuestionnaireOverride('${p.phone}', 'pre', false)">关前问卷</button>
+        <button class="btn btn-outline" style="font-size:11px;padding:3px 8px;" onclick="setQuestionnaireOverride('${p.phone}', 'post', true)">开后问卷</button>
+        <button class="btn btn-outline" style="font-size:11px;padding:3px 8px;" onclick="setQuestionnaireOverride('${p.phone}', 'post', false)">关后问卷</button>
+      </div>
+    `;
+    return `
+      <tr>
+        <td>${p.id}</td>
+        <td>${p.phone || '-'}</td>
+        <td>${p.group_name || '-'}</td>
+        <td>${p.full_id || '-'}</td>
+        <td><span class="badge ${roleCls}">${roleLabel(p.role)}</span></td>
+        <td>${caseLabel(p.case_type)}</td>
+        <td>${guiltLabel(p.guilt)}</td>
+        <td>${trainingLabel(p.training_type)}</td>
+        <td>${Number(p.completed) === 1 ? '<span class="badge badge-ok">已完成</span>' : '<span class="badge badge-warn">未完成</span>'}</td>
+        <td>${qHtml}</td>
+        <td class="profile-cell">${profileStr}</td>
+        <td><button class="btn btn-danger" onclick="deleteParticipant(${p.id})">删除</button></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderAppointmentTable(appointments) {
+  const tbody = document.getElementById('appointmentTable');
+  if (!appointments.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">暂无符合条件的数据</td></tr>';
+    return;
+  }
+  tbody.innerHTML = appointments.map(a => {
+    const p = APP.participantByPhone.get(a.phone) || {};
+    const statusColor = a.status === 'confirmed' ? 'var(--success)' : 'var(--text-light)';
+    const statusLabel = a.status === 'confirmed' ? '已确认' : a.status === 'cancelled' ? '已取消' : (a.status || '-');
+    return `
+      <tr>
+        <td>${a.id}</td>
+        <td>${a.phone || '-'}</td>
+        <td>${p.group_name || '-'}</td>
+        <td>${roleLabel(a.role)}</td>
+        <td>${a.time_slot || '-'}</td>
+        <td style="color:${statusColor};font-weight:700;">${statusLabel}</td>
+        <td>${a.booked_at || '-'}</td>
+        <td><button class="btn btn-danger" onclick="deleteAppointment(${a.id})">删除</button></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderQuestionnaireTable(rows) {
+  const tbody = document.getElementById('questionnaireTable');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">暂无符合条件的数据</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r => {
+    const p = APP.participantByPhone.get(r.phone) || {};
+    let ans = '-';
+    try {
+      const obj = JSON.parse(r.answers_json || '{}');
+      ans = Object.entries(obj).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(',') : v}`).join('\n');
+    } catch (_) {
+      ans = r.answers_json || '-';
+    }
+    return `
+      <tr>
+        <td>${r.id || '-'}</td>
+        <td>${r.phone || '-'}</td>
+        <td>${p.group_name || '-'}</td>
+        <td>${roleLabel(r.role)}</td>
+        <td>${r.phase === 'pre' ? '访谈前' : '访谈后'}</td>
+        <td>${r.appointment_slot || '-'}</td>
+        <td>${r.submitted_at || '-'}</td>
+        <td class="profile-cell">${ans}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function bindFilters() {
+  ['fGroup', 'fPhone', 'fTime'].forEach(id => {
+    document.getElementById(id).addEventListener('input', applyFiltersAndRender);
+  });
+  ['fRole', 'fStatus', 'fCompleted'].forEach(id => {
+    document.getElementById(id).addEventListener('change', applyFiltersAndRender);
+  });
+}
+
+let slotConfigCache = null;
+let slotConfigSelectedDay = null;
+
+function buildSlotDayMap(slots) {
+  const dayMap = new Map();
+  slots.forEach(s => {
+    const day = s.slot.slice(0, 10);
+    const time = s.slot.slice(11, 16);
+    if (!dayMap.has(day)) dayMap.set(day, []);
+    dayMap.get(day).push({ ...s, time });
+  });
+  return dayMap;
+}
+
+function renderSlotConfig() {
+  const wrap = document.getElementById('slotConfigWrap');
+  if (!wrap || !slotConfigCache) return;
+  const slots = slotConfigCache.slots || [];
+  const dayMap = buildSlotDayMap(slots);
+  const days = Array.from(dayMap.keys()).sort();
+
+  if (!days.length) {
+    wrap.innerHTML = '<div class="empty">暂无可用时段</div>';
+    return;
+  }
+
+  if (!slotConfigSelectedDay) {
+    let html = '<div class="slot-day-list">';
+    days.forEach(day => {
+      const items = dayMap.get(day);
+      const enabledCount = items.filter(s => s.enabled).length;
+      const bookedCount = items.filter(s => (s.roles_booked || []).length > 0).length;
+      html += `<button type="button" class="slot-day-btn" onclick="openSlotDay('${day}')">
+        <div style="font-weight:700;">${day}</div>
+        <div class="sub">开放 ${enabledCount}/${items.length} · 已有预约 ${bookedCount} 个时段</div>
+      </button>`;
+    });
+    html += '</div>';
+    wrap.innerHTML = html;
+    return;
+  }
+
+  const items = (dayMap.get(slotConfigSelectedDay) || []).sort((a, b) => a.time.localeCompare(b.time));
+  let html = `<div class="slot-detail-head">
+    <button type="button" class="btn btn-outline" style="font-size:12px;padding:6px 12px;" onclick="backToSlotDayList()">← 返回日期列表</button>
+    <strong style="font-size:14px;">${slotConfigSelectedDay}</strong>
+  </div>`;
+  html += '<div class="day-col" style="max-width:420px;">';
+  items.forEach(s => {
+    const roles = (s.roles_booked || []).map(r => r === 'S' ? '嫌疑人' : '审讯者').join('、') || '无';
+    const status = s.fully_booked ? '已满' : (roles !== '无' ? '部分预约' : '空');
+    const slotEsc = s.slot.replace(/'/g, "\\'");
+    html += `<div class="slot-row">
+      <div class="slot-time">${s.time} <span style="font-weight:400;color:#6b7280;">(${status})</span></div>
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+        <input type="checkbox" ${s.enabled ? 'checked' : ''} onchange="toggleSlot('${slotEsc}', this.checked)">
+        开放预约
+      </label>
+      <div style="font-size:11px;color:#6b7280;margin-top:4px;">已预约：${roles}</div>
+    </div>`;
+  });
+  html += '</div>';
+  wrap.innerHTML = html;
+}
+
+function openSlotDay(day) {
+  slotConfigSelectedDay = day;
+  renderSlotConfig();
+}
+
+function backToSlotDayList() {
+  slotConfigSelectedDay = null;
+  renderSlotConfig();
+}
+
+async function loadSlotConfig() {
+  const wrap = document.getElementById('slotConfigWrap');
+  if (!wrap) return;
+  try {
+    const headers = getAuthHeaders();
+    if (!headers.Authorization) return;
+    const resp = await fetch('/api/admin/appointment-slots', { headers });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    slotConfigCache = await resp.json();
+    renderSlotConfig();
+  } catch (err) {
+    wrap.innerHTML = `<div class="empty" style="color:var(--accent);">时段加载失败：${err.message}</div>`;
+  }
+}
+
+async function toggleSlot(slot, enabled) {
+  try {
+    const headers = getAuthHeaders();
+    if (!headers.Authorization) { promptForPassword(); return; }
+    const resp = await fetch('/api/admin/appointment-slots', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slot, enabled }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '设置失败');
+    loadSlotConfig();
+  } catch (err) {
+    alert('设置时段失败: ' + err.message);
+    loadSlotConfig();
+  }
+}
+
+async function loadData() {
+  try {
+    const headers = getAuthHeaders();
+    if (!headers.Authorization) { promptForPassword(); return; }
+    const resp = await fetch('/api/admin/results', { headers });
+    if (resp.status === 401) { sessionStorage.removeItem('admin_password'); promptForPassword(); return; }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status + ': ' + resp.statusText);
+    const data = await resp.json();
+    APP.participants = data.participants || [];
+    APP.appointments = data.appointments || [];
+    APP.questionnaires = data.interview_questionnaires || [];
+    APP.questionnaireOverrides = data.questionnaire_overrides || [];
+    APP.participantByPhone = new Map();
+    APP.participants.forEach(p => APP.participantByPhone.set(p.phone, p));
+    applyFiltersAndRender();
+    loadSlotConfig();
+  } catch (err) {
+    console.error('loadData error:', err);
+    document.getElementById('groupGrid').innerHTML = `<div class="empty" style="grid-column:1/-1;color:var(--accent);">加载失败：${err.message}</div>`;
+  }
+}
+
+async function setQuestionnaireOverride(phone, phase, isOpen) {
+  try {
+    const headers = getAuthHeaders();
+    if (!headers.Authorization) { promptForPassword(); return; }
+    const resp = await fetch('/api/admin/questionnaire/override', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, phase, is_open: isOpen }),
+    });
+    if (resp.status === 401) { sessionStorage.removeItem('admin_password'); promptForPassword(); return; }
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '设置失败');
+    loadData();
+  } catch (err) {
+    alert('设置问卷开放失败: ' + err.message);
+  }
+}
+
+function promptForPassword() {
+  const pwd = prompt('请输入管理员密码：');
+  if (pwd) {
+    sessionStorage.setItem('admin_password', pwd);
+    loadData();
+  }
+}
+
+async function deleteParticipant(id) {
+  if (!confirm('确定删除参与者 #' + id + ' ？此操作不可撤销。')) return;
+  try {
+    const headers = getAuthHeaders();
+    if (!headers.Authorization) { promptForPassword(); return; }
+    const resp = await fetch('/api/admin/results/' + id, { method: 'DELETE', headers });
+    if (resp.status === 401) { sessionStorage.removeItem('admin_password'); promptForPassword(); return; }
+    if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || '删除失败'); }
+    loadData();
+  } catch (err) {
+    alert('删除失败: ' + err.message);
+  }
+}
+
+async function deleteAppointment(id) {
+  if (!confirm('确定删除预约 #' + id + ' ？此操作不可撤销。')) return;
+  try {
+    const headers = getAuthHeaders();
+    if (!headers.Authorization) { promptForPassword(); return; }
+    const resp = await fetch('/api/admin/appointments/' + id, { method: 'DELETE', headers });
+    if (resp.status === 401) { sessionStorage.removeItem('admin_password'); promptForPassword(); return; }
+    if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || '删除失败'); }
+    loadData();
+  } catch (err) {
+    alert('删除失败: ' + err.message);
+  }
+}
+
+if (window.location.protocol === 'file:') {
+  document.getElementById('fileProtocolWarning').style.display = 'block';
+} else {
+  bindFilters();
+  loadData();
+}
+</script>
+</body>
+</html>

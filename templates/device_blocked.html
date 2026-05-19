@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>请使用电脑访问</title>
+<style>
+  :root {
+    --primary: #1a3a5c;
+    --accent: #c0392b;
+    --bg: #f0f2f5;
+    --text: #2c3e50;
+    --text-light: #7f8c8d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+  .card {
+    max-width: 480px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+    padding: 36px 28px;
+    text-align: center;
+  }
+  .icon { font-size: 56px; margin-bottom: 16px; }
+  h1 { font-size: 20px; color: var(--primary); margin-bottom: 12px; }
+  p { font-size: 14px; line-height: 1.8; color: var(--text-light); margin-bottom: 10px; }
+  .hint {
+    margin-top: 20px;
+    padding: 12px 16px;
+    background: #fff8e1;
+    border: 1px solid #ffc107;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #856404;
+    text-align: left;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">💻</div>
+    <h1>请使用电脑打开</h1>
+    <p>本实验系统需要在<strong>台式机或笔记本电脑</strong>的浏览器中完成。</p>
+    <p>检测到您当前可能正在使用手机或平板访问，暂不支持继续操作。</p>
+    <div class="hint">
+      <strong>操作建议：</strong><br>
+      1. 在电脑浏览器中打开研究人员提供的链接<br>
+      2. 推荐使用 Chrome、Edge 或 Firefox 最新版本<br>
+      3. 确保网络稳定，并允许使用摄像头与麦克风（如需虚拟审讯训练）
+    </div>
+  </div>
+</body>
+</html>

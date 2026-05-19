@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.claude/
+*.bat
+*.ps1
+cert.pem
+key.pem
+liveavatar-web-sdk-master/
+*.log
+.env
+.env.local
+.gitignore
+*.md
+!README.md

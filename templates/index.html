@@ -1,0 +1,5010 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>审讯实验系统 - Interrogation Experiment</title>
+<style>
+  :root {
+    --primary: #1a3a5c;
+    --primary-light: #2c5f8a;
+    --primary-dark: #0f2440;
+    --accent: #c0392b;
+    --accent-hover: #e74c3c;
+    --bg: #f0f2f5;
+    --card-bg: #ffffff;
+    --text: #2c3e50;
+    --text-light: #7f8c8d;
+    --border: #dce1e8;
+    --success: #27ae60;
+    --warning: #f39c12;
+    --shadow: 0 2px 12px rgba(0,0,0,0.08);
+    --radius: 8px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  .header {
+    background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+    color: white;
+    padding: 16px 24px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    position: relative;
+  }
+  .header h1 { font-size: 20px; font-weight: 600; }
+  .header .subtitle { font-size: 12px; opacity: 0.8; margin-top: 2px; }
+  .header-nav {
+    margin-top: 10px;
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .header-nav a {
+    color: #eaf2ff;
+    text-decoration: none;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 14px;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+  .header-nav a:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+  .manage-gear-btn {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    width: 34px;
+    height: 34px;
+    border: 1px solid rgba(255,255,255,0.45);
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+  }
+  .manage-gear-btn:hover {
+    background: rgba(255,255,255,0.2);
+  }
+
+  .container {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 24px 16px;
+  }
+  .card {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 28px 24px;
+    margin-bottom: 16px;
+  }
+  .card h2 {
+    font-size: 18px;
+    color: var(--primary);
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--border);
+  }
+  .card h3 {
+    font-size: 15px;
+    color: var(--primary);
+    margin: 16px 0 8px;
+  }
+  .hidden { display: none !important; }
+
+  /* Form elements */
+  .form-group { margin-bottom: 14px; }
+  .form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+  .form-group .hint { font-size: 11px; color: var(--text-light); margin-bottom: 4px; }
+  .form-group input[type="text"],
+  .form-group input[type="number"] {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 15px;
+    transition: border-color 0.2s;
+  }
+  .form-group input:focus {
+    outline: none;
+    border-color: var(--primary-light);
+    box-shadow: 0 0 0 2px rgba(44,95,138,0.15);
+  }
+  .radio-group, .checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .radio-group label, .checkbox-group label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    font-size: 13px;
+    font-weight: 400;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .radio-group label:hover, .checkbox-group label:hover {
+    border-color: var(--primary-light);
+    background: #eef4fa;
+  }
+  .radio-group label:has(input:checked),
+  .checkbox-group label:has(input:checked) {
+    border-color: var(--primary);
+    background: #dce8f5;
+  }
+  .radio-group label:has(input:checked) span,
+  .checkbox-group label:has(input:checked) span {
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  .btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-block;
+    text-align: center;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled { background: #bdc3c7; cursor: not-allowed; }
+  .btn-secondary {
+    background: var(--primary);
+    color: white;
+  }
+  .btn-secondary:hover { background: var(--primary-light); }
+  .btn-outline {
+    background: transparent;
+    color: var(--primary);
+    border: 1px solid var(--primary);
+    margin-right: 8px;
+  }
+  .btn-outline:hover { background: #eef4fa; }
+
+  /* Status badges */
+  .badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .badge-red { background: #fde8e8; color: var(--accent); }
+  .badge-green { background: #d4edda; color: #155724; }
+  .badge-blue { background: #dce8f5; color: var(--primary); }
+  .badge-yellow { background: #fff3cd; color: #856404; }
+
+  /* Context box */
+  .context-box {
+    background: #f7f9fc;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 20px;
+    font-size: 13px;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    max-height: 400px;
+    overflow-y: auto;
+    margin-bottom: 16px;
+  }
+
+  /* Attention check */
+  .attention-question {
+    background: #fff8e1;
+    border: 1px solid #ffc107;
+    border-radius: 6px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+  }
+  .attention-question.correct { background: #d4edda; border-color: var(--success); }
+  .attention-question.wrong { background: #fde8e8; border-color: var(--accent); }
+  .attention-question .q-title { font-weight: 600; margin-bottom: 8px; color: var(--text); }
+  .feedback { font-size: 13px; margin-top: 8px; font-weight: 600; }
+
+  /* Completion screen */
+  .completion-box {
+    text-align: center;
+    padding: 40px 20px;
+    background: linear-gradient(135deg, #d4edda, #c3e6cb);
+    border-radius: var(--radius);
+    border: 2px solid var(--success);
+  }
+  .completion-box .id-display {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--primary);
+    margin: 12px 0;
+    letter-spacing: 2px;
+    background: white;
+    display: inline-block;
+    padding: 8px 24px;
+    border-radius: 8px;
+    border: 2px dashed var(--primary);
+  }
+  .completion-box .screenshot-note {
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 14px;
+    margin-top: 16px;
+    padding: 12px;
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid var(--accent);
+  }
+
+  /* Info rows */
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f2f5;
+    font-size: 14px;
+  }
+  .info-row .label { color: var(--text-light); }
+  .info-row .value { font-weight: 600; }
+
+  .step-list { margin-top: 8px; }
+  .step-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f2f5;
+  }
+  .step-number {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 600;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .step-label { font-size: 14px; font-weight: 600; color: var(--text); }
+  .step-desc { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+
+  /* Chat interface for avatar training */
+  .chat-container {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .chat-messages {
+    height: 360px;
+    overflow-y: auto;
+    padding: 16px;
+    background: #fafbfc;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .chat-msg {
+    max-width: 80%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .chat-msg.user {
+    align-self: flex-end;
+    background: var(--primary);
+    color: white;
+    border-bottom-right-radius: 4px;
+  }
+  .chat-msg.ai {
+    align-self: flex-start;
+    background: #e9ecef;
+    color: var(--text);
+    border-bottom-left-radius: 4px;
+  }
+  .chat-msg .sender {
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    opacity: 0.7;
+  }
+  .chat-input-area {
+    display: flex;
+    gap: 8px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--border);
+    background: #fff;
+  }
+  .chat-input-area textarea {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    resize: none;
+    font-family: inherit;
+    min-height: 40px;
+  }
+  .chat-input-area textarea:focus { outline: none; border-color: var(--primary-light); }
+  .chat-input-area button {
+    padding: 8px 18px;
+    border: none;
+    border-radius: 6px;
+    background: var(--primary);
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .chat-input-area button:hover { background: var(--primary-light); }
+  .chat-input-area button:disabled { background: #bdc3c7; cursor: not-allowed; }
+  .typing-indicator {
+    align-self: flex-start;
+    padding: 8px 14px;
+    background: #e9ecef;
+    border-radius: 12px;
+    font-size: 12px;
+    color: var(--text-light);
+  }
+
+  /* Section header for profile */
+  .section-header {
+    background: #f7f9fc;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--primary);
+    border-bottom: 1px solid var(--border);
+    margin: 20px 0 10px;
+    border-radius: 6px 6px 0 0;
+  }
+  .section-en { font-weight: 400; font-size: 11px; color: var(--text-light); }
+
+  /* Progress bar */
+  .progress-bar {
+    background: var(--border);
+    border-radius: 4px;
+    height: 6px;
+    margin-bottom: 16px;
+  }
+  .progress-fill {
+    background: var(--primary);
+    border-radius: 4px;
+    height: 6px;
+    transition: width 0.3s;
+  }
+
+  /* Loading overlay */
+  .loading-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  .loading-overlay.show { display: flex; }
+  .loading-box {
+    background: white;
+    padding: 24px 36px;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+  }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 4px solid #eee;
+    border-top: 4px solid var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .footer-note {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-light);
+    margin-top: 16px;
+    padding: 16px;
+  }
+
+  /* Screenshot confirmation modal */
+  .screenshot-modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  .screenshot-modal-overlay.show { display: flex; }
+  .screenshot-modal {
+    background: white;
+    border-radius: 12px;
+    padding: 32px;
+    text-align: center;
+    max-width: 420px;
+    width: 90%;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.25);
+    animation: modalIn 0.25s ease;
+  }
+  @keyframes modalIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+  .screenshot-modal .icon { font-size: 48px; margin-bottom: 12px; }
+  .screenshot-modal h3 { color: var(--primary); border: none; margin-bottom: 8px; font-size: 17px; }
+  .screenshot-modal p { font-size: 13px; color: var(--text-light); margin-bottom: 20px; line-height: 1.6; }
+  .screenshot-modal .btn-group { display: flex; gap: 8px; flex-direction: column; }
+  .screenshot-modal .btn-confirm {
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--success);
+    color: white;
+  }
+  .screenshot-modal .btn-confirm:hover { background: #219a52; }
+  .screenshot-modal .btn-remind {
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    background: white;
+    color: var(--text-light);
+  }
+  .screenshot-modal .btn-remind:hover { background: #f5f5f5; }
+
+  @media (max-width: 600px) {
+    .container { padding: 12px 8px; }
+    .card { padding: 18px 14px; }
+    .info-row { flex-direction: column; }
+  }
+
+  /* Time slot buttons */
+  .slot-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .slot-btn:hover { border-color: var(--primary-light); background: #eef4fa; }
+  .slot-btn.selected { border-color: var(--primary); background: var(--primary); color: white; }
+  .slot-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .appt-detail-box {
+    background: #f7f9fc;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+  }
+  .appt-detail-box .row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    font-size: 14px;
+  }
+  .appt-detail-box .row .lbl { color: var(--text-light); }
+  .appt-detail-box .row .val { font-weight: 600; }
+
+  /* Availability tags */
+  .avail-tag {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin: 2px;
+  }
+  .avail-tag.suspect { background: #dce8f5; color: var(--primary); }
+  .avail-tag.interviewer { background: #d4edda; color: #155724; }
+
+  /* Previous step button */
+  .btn-prev {
+    background: transparent;
+    color: var(--text-light);
+    border: 1px solid var(--border);
+    margin-right: 10px;
+  }
+  .btn-prev:hover { background: #f5f5f5; color: var(--text); }
+
+  /* Serious Game choice buttons */
+  .sg-choice-btn {
+    padding: 14px 24px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.13);
+    background: rgba(255,255,255,0.07);
+    color: #fff;
+    font-size: 15px;
+    cursor: pointer;
+    min-width: 200px;
+    transition: all 0.2s;
+  }
+  .sg-choice-btn:hover {
+    background: rgba(45,125,255,0.20);
+    border-color: rgba(45,125,255,0.45);
+  }
+
+  /* Number reminder modal */
+  .number-reminder-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  .number-reminder-overlay.show { display: flex; }
+  .number-reminder-modal {
+    background: white;
+    border-radius: 12px;
+    padding: 32px;
+    text-align: center;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.25);
+    animation: modalIn 0.25s ease;
+  }
+  .number-reminder-modal .big-number {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--accent);
+    margin: 16px 0;
+    letter-spacing: 3px;
+    padding: 10px 20px;
+    background: #fef0ef;
+    border-radius: 10px;
+    border: 2px dashed var(--accent);
+    display: inline-block;
+  }
+  .number-reminder-modal .warning-icon { font-size: 40px; margin-bottom: 8px; }
+
+  /* New booking UI */
+  .booking-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 10px;
+  }
+  .booking-date-group {
+    margin-bottom: 20px;
+  }
+  .booking-date-header {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--primary);
+    padding: 10px 14px;
+    background: #f7f9fc;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .booking-date-header .day-badge {
+    background: var(--primary);
+    color: white;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+  }
+  .booking-date-header .day-badge.today {
+    background: var(--accent);
+  }
+  .slot-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.15s;
+    cursor: pointer;
+  }
+  .slot-card:hover { border-color: var(--primary-light); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .slot-card.booked-full {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #f5f5f5;
+  }
+  .slot-card.booked-full:hover { border-color: var(--border); box-shadow: none; }
+  .slot-card.recommended {
+    border-color: #ff9800;
+    background: #fff8e1;
+    box-shadow: 0 2px 8px rgba(255, 152, 0, 0.15);
+  }
+  .slot-card.recommended:hover {
+    border-color: #f57c00;
+    box-shadow: 0 4px 16px rgba(255, 152, 0, 0.25);
+    transform: translateY(-1px);
+  }
+  .slot-card .time-display {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .slot-card .time-display small {
+    font-weight: 400;
+    font-size: 12px;
+    color: var(--text-light);
+  }
+  .slot-card .role-spots {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .role-spot {
+    padding: 4px 10px;
+    border-radius: 14px;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .role-spot.open { background: #e8f5e9; color: #2e7d32; border-color: #a5d6a7; }
+  .role-spot.taken { background: #fde8e8; color: #c62828; border-color: #ef9a9a; text-decoration: line-through; }
+  .role-spot.mine { background: #dce8f5; color: var(--primary); border-color: var(--primary-light); font-weight: 700; }
+  .slot-card .book-btn {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--primary);
+    color: white;
+    transition: all 0.15s;
+  }
+  .slot-card .book-btn:hover { background: var(--primary-light); }
+  .slot-card .book-btn.cancel-btn { background: var(--accent); }
+  .slot-card .book-btn.cancel-btn:hover { background: #e74c3c; }
+  .slot-card .book-btn:disabled { background: #bdc3c7; cursor: not-allowed; }
+  .book-btn-recommend { background: #ff9800 !important; animation: pulse 2s infinite; }
+  .book-btn-recommend:hover { background: #f57c00 !important; }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.4); }
+    50% { box-shadow: 0 0 0 6px rgba(255, 152, 0, 0); }
+  }
+
+  .my-booking-card {
+    background: linear-gradient(135deg, #dce8f5, #e8f0fa);
+    border: 2px solid var(--primary);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+  }
+  .my-booking-card .booking-id {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--primary);
+    letter-spacing: 2px;
+    margin: 8px 0;
+  }
+
+  /* Step indicator */
+  .step-indicator {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    margin-bottom: 16px;
+  }
+  .step-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+  }
+  .step-dot.active { background: var(--primary); width: 24px; border-radius: 4px; }
+
+  .device-block-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: var(--bg);
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+  .device-block-overlay:not(.hidden) { display: flex; }
+  .device-block-card {
+    max-width: 480px;
+    background: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 36px 28px;
+    text-align: center;
+  }
+  .device-block-card .icon { font-size: 56px; margin-bottom: 16px; }
+  .device-block-card h2 { font-size: 20px; color: var(--primary); margin-bottom: 12px; border: none; padding: 0; }
+  .device-block-card p { font-size: 14px; line-height: 1.8; color: var(--text-light); margin-bottom: 8px; }
+  .device-block-hint {
+    margin-top: 20px;
+    padding: 12px 16px;
+    background: #fff8e1;
+    border: 1px solid #ffc107;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #856404;
+    text-align: left;
+    line-height: 1.7;
+  }
+  html.device-blocked #app,
+  html.device-blocked .header { display: none !important; }
+
+  /* Interview: case sidebar + transcript popup */
+  .interview-toolbar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .interview-case-sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: min(420px, 92vw);
+    height: 100vh;
+    background: var(--card-bg);
+    box-shadow: -4px 0 24px rgba(0,0,0,0.15);
+    z-index: 9500;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    display: flex;
+    flex-direction: column;
+  }
+  .interview-case-sidebar.open { transform: translateX(0); }
+  .interview-case-sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--primary);
+    color: #fff;
+  }
+  .interview-case-sidebar-header h3 {
+    margin: 0;
+    font-size: 15px;
+    color: #fff;
+  }
+  .interview-case-sidebar-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    font-size: 13px;
+    line-height: 1.75;
+  }
+  .interview-case-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    z-index: 9400;
+  }
+  .interview-transcript-modal {
+    position: fixed;
+    z-index: 9600;
+    right: 20px;
+    bottom: 20px;
+    width: min(400px, calc(100vw - 40px));
+    max-height: min(480px, 70vh);
+    background: var(--card-bg);
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+  }
+  .interview-transcript-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: #f7f9fc;
+    border-radius: 10px 10px 0 0;
+  }
+  .interview-transcript-modal-header h4 {
+    margin: 0;
+    font-size: 14px;
+    color: var(--primary);
+  }
+  .interview-transcript-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.65;
+  }
+  .interview-transcript-line {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+  }
+  .interview-transcript-line.user {
+    background: #e3f2fd;
+    text-align: right;
+  }
+  .interview-transcript-line.avatar {
+    background: #fce4ec;
+  }
+  .interview-transcript-empty {
+    color: var(--text-light);
+    text-align: center;
+    padding: 24px 8px;
+    font-size: 13px;
+  }
+
+</style>
+<script src="/static/device-check.js" defer></script>
+</head>
+<body>
+
+<div id="device-block-overlay" class="device-block-overlay hidden" role="alert" aria-live="polite">
+  <div class="device-block-card">
+    <div class="icon">💻</div>
+    <h2>请使用电脑打开</h2>
+    <p>本实验系统需要在<strong>台式机或笔记本电脑</strong>的浏览器中完成。</p>
+    <p>检测到您当前可能正在使用手机或平板访问，暂不支持继续操作。</p>
+    <div class="device-block-hint">
+      <strong>操作建议：</strong><br>
+      1. 在电脑浏览器中打开研究人员提供的实验链接<br>
+      2. 推荐使用 Chrome、Edge 或 Firefox 最新版本<br>
+      3. 进行虚拟审讯训练时需允许摄像头与麦克风权限
+    </div>
+    </div>
+</div>
+
+<div class="header">
+  <button class="manage-gear-btn" onclick="openManagePanel()" title="管理后台">⚙</button>
+  <h1>审讯实验系统</h1>
+  <div class="subtitle">Interrogation Experiment System — IRB Research Project</div>
+  <div class="header-nav">
+    <a href="/">实验主流程</a>
+    <a href="/questionnaire/pre">访谈前问卷</a>
+    <a href="/questionnaire/post">访谈后问卷</a>
+  </div>
+</div>
+
+<div class="container" id="app">
+
+  <!-- ===== SCREEN 0: Phone Input ===== -->
+  <div class="card" id="screen-phone">
+    <h2>欢迎参与实验</h2>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:16px;">
+      在开始之前，请输入您的手机号。系统将为您随机分配实验条件。
+    </p>
+    <div class="form-group">
+      <label>手机号 / Phone Number</label>
+      <input type="text" id="phoneInput" placeholder="请输入手机号" maxlength="15">
+    </div>
+    <button class="btn btn-primary" onclick="register()">开始实验</button>
+    <button class="btn btn-outline" onclick="showBookingFromHome()" style="margin-top:10px;width:100%;">预约管理（查看/修改预约时间）</button>
+    <p style="text-align:center;font-size:11px;color:var(--text-light);margin-top:8px;">
+      您的手机号仅用于实验编号管理，不会泄露给第三方。
+    </p>
+  </div>
+
+  <!-- ===== CONSENT SCREEN ===== -->
+  <div class="card hidden" id="screen-consent">
+    <h2>知情同意书</h2>
+    <div id="consentContent" style="white-space: pre-wrap; font-size:14px; color:var(--text-color); max-height:400px; overflow-y:auto; padding:16px; background:#fafbfc; border:1px solid var(--border); border-radius:8px; margin-bottom:16px;">
+      加载中...
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-outline" style="flex:1;" onclick="location.reload()">不同意并退出</button>
+      <button class="btn btn-primary" id="btnAgree" style="flex:2;" onclick="agreeConsent()">我已阅读并同意参与实验</button>
+    </div>
+  </div>
+
+  <!-- ===== DASHBOARD / PROGRESS SCREEN ===== -->
+  <div class="card hidden" id="screen-dashboard">
+    <h2 id="dashboardTitle">实验流程</h2>
+    <div class="info-row"><span class="label">角色</span><span class="value badge badge-blue" id="dashboardRole"></span></div>
+    <div class="info-row"><span class="label">编号</span><span class="value" id="dashboardId"></span></div>
+    <div class="info-row"><span class="label">组别</span><span class="value" id="dashboardGroup"></span></div>
+    <div id="dashboardTrainingInfo" class="hidden"></div>
+    <h3 style="margin-top:16px;">你需要完成的步骤</h3>
+    <div id="dashboardSteps" style="margin-bottom:16px;"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-prev" onclick="showPhoneScreen()">← 返回</button>
+      <button class="btn btn-primary" id="dashboardStartBtn" onclick="startFromDashboard()" style="flex:1;">开始</button>
+    </div>
+  </div>
+
+  <!-- ===== SUSPECT SCREEN 1: Assignment & Context ===== -->
+  <div class="card hidden" id="screen-suspect-context">
+    <h2 id="suspectTitle">您的角色：嫌疑人</h2>
+    <div class="info-row"><span class="label">案件类型</span><span class="value" id="suspectCase"></span></div>
+    <div class="info-row"><span class="label">所属组别</span><span class="value badge badge-blue" id="suspectGroupLabel"></span></div>
+    <h3>案件背景（请仔细阅读）</h3>
+    <div class="context-box" id="suspectContext"></div>
+    <button class="btn btn-outline" onclick="downloadSuspectContext()" style="margin-bottom:8px;">📥 下载案件背景</button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-prev" onclick="showPhoneScreen()">← 上一步</button>
+      <button class="btn btn-primary" onclick="showAttentionCheck()" style="flex:1;">我已阅读完毕，进入测试</button>
+    </div>
+  </div>
+
+  <!-- ===== SUSPECT: Attention Check Failed (terminated) ===== -->
+  <div class="card hidden" id="screen-attention-terminated">
+    <h2 style="color:var(--accent);">无法继续参与实验</h2>
+    <p id="attentionTerminatedMsg" style="font-size:14px;line-height:1.8;margin:16px 0;">
+      两次回答均不正确，无法参与正式实验。您的手机号已被记录，无法再次参与。
+    </p>
+    <p style="font-size:13px;color:var(--text-light);">如有疑问，请联系研究人员。</p>
+    <button class="btn btn-primary" onclick="showPhoneScreen()" style="margin-top:16px;">返回首页</button>
+  </div>
+
+  <!-- ===== SUSPECT SCREEN 2: Attention Check ===== -->
+  <div class="card hidden" id="screen-attention">
+    <h2>注意力检测</h2>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:16px;">
+      请根据刚才阅读的案件背景回答以下问题。必须全部回答正确才能继续。
+    </p>
+    <div id="attentionQuestions"></div>
+    <div id="attentionFeedback" style="margin-bottom:12px;"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-prev" onclick="goBackToSuspectContext()">← 上一步</button>
+      <button class="btn btn-primary" id="attentionSubmitBtn" onclick="submitAttention()" style="flex:1;">提交答案</button>
+      <button class="btn btn-outline hidden" id="attentionRetryBtn" onclick="retryAttention()">重新回答</button>
+    </div>
+  </div>
+
+  <!-- ===== SUSPECT SCREEN 3: Serious Game (Embedded) ===== -->
+  <div class="card hidden" id="screen-game">
+    <h2>模拟行动游戏</h2>
+    <!-- Game intro -->
+    <div id="sg-intro">
+      <p style="margin-bottom:12px;">在接下来的环节中，您需要观看一系列视频并根据您的角色做出选择。请认真观看并如实选择。</p>
+      <button class="btn btn-primary" onclick="showSgAiDisclaimer()">开始游戏</button>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <button class="btn btn-prev" onclick="showAttentionCheck()" style="flex:1;">← 上一步</button>
+      </div>
+    </div>
+    <!-- Game play area -->
+    <div id="sg-play" class="hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:13px;color:var(--text-light);">
+          步骤 <strong id="sg-step-num">1</strong> / <strong id="sg-step-total">10</strong>
+        </span>
+        <span id="sg-status-text" style="font-size:12px;color:var(--text-light);"></span>
+      </div>
+      <div style="position:relative;width:100%;padding-top:56.25%;background:#000;border-radius:8px;overflow:hidden;">
+        <div id="sg-player" style="position:absolute;top:0;left:0;width:100%;height:100%;"></div>
+        <!-- Choice overlay -->
+        <div id="sg-choice-overlay" class="hidden" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:flex-end;justify-content:center;padding-bottom:30px;background:transparent;z-index:10;pointer-events:none;">
+          <div style="pointer-events:auto;background:rgba(15,22,32,0.92);border:1px solid rgba(34,48,67,0.9);border-radius:14px;padding:20px 30px;text-align:center;box-shadow:0 18px 60px rgba(0,0,0,0.55);">
+            <div id="sg-question" style="font-size:18px;font-weight:700;margin-bottom:16px;color:#fff;"></div>
+            <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+              <button class="sg-choice-btn" data-choice="A" onclick="sgSubmitChoice('A')"></button>
+              <button class="sg-choice-btn" data-choice="B" onclick="sgSubmitChoice('B')"></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Game completed -->
+    <div id="sg-completed" class="hidden" style="text-align:center;padding:30px;">
+      <div style="font-size:48px;">✓</div>
+      <h3 style="color:var(--success);border:none;">模拟行动游戏完成</h3>
+      <p style="margin-top:8px;font-size:13px;color:var(--text-light);">您已完成所有视频观看和选择。</p>
+      <button class="btn btn-primary" onclick="sgProceedToProfile()" style="margin-top:16px;">继续填写个人信息 →</button>
+    </div>
+  </div>
+
+  <!-- ===== SUSPECT SCREEN 4: Profile Questionnaire ===== -->
+  <div class="card hidden" id="screen-profile">
+    <h2>个人信息问卷</h2>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:12px;">
+      请根据您的<strong>真实情况</strong>填写以下信息。这些信息将用于实验分析。
+    </p>
+    <div class="progress-bar"><div class="progress-fill" id="profileProgress" style="width:0%;"></div></div>
+    <div id="profileForm"></div>
+    <button class="btn btn-outline" onclick="downloadProfile()" style="margin-bottom:8px;">📥 下载问卷</button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-prev" onclick="showGameLink()">← 上一步</button>
+      <button class="btn btn-primary" onclick="submitProfile()" style="flex:1;">提交问卷</button>
+    </div>
+  </div>
+
+  <!-- ===== INTERVIEWER SCREEN: Assignment ===== -->
+  <div class="card hidden" id="screen-interviewer">
+    <h2>您的角色：审讯者</h2>
+    <div class="info-row"><span class="label">所属组别</span><span class="value badge badge-blue" id="interviewerGroup"></span></div>
+    <div id="trainingContent" style="margin-top:16px;"></div>
+    <div id="avatarChatArea" class="hidden"></div>
+    <button class="btn btn-primary hidden" id="interviewerCompleteBtn" onclick="completeInterviewer()">完成培训，结束实验</button>
+  </div>
+
+  <!-- ===== CASE INFO SCREEN (for interviewers after training) ===== -->
+  <div class="card hidden" id="screen-case-info">
+    <h2 id="caseInfoTitle">案件信息</h2>
+    <div id="caseInfoContent"></div>
+    <div class="info-row" style="margin-top:12px;"><span class="label">您的组别</span><span class="value badge badge-blue" id="caseInfoGroup"></span></div>
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
+      <button class="btn btn-outline" onclick="downloadCaseInfo()">📥 下载案件信息</button>
+      <button class="btn btn-primary" id="caseInfoNextBtn" onclick="goToNextAfterCaseInfo()" style="flex:1;">我已阅读完毕，继续</button>
+    </div>
+  </div>
+
+  <!-- ===== AVATAR TRAINING SESSIONS SCREEN ===== -->
+  <div class="card hidden" id="screen-avatar-training">
+    <h2>虚拟审讯训练（6 次）</h2>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:8px;">
+      您需要完成 <strong>6 次</strong> 虚拟审讯训练，每次 3-10 分钟。
+    </p>
+    <div style="background:#f7f9fc;border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;line-height:1.8;" id="trainingTypeHint">
+      <div>请按顺序完成 6 次训练会话。</div>
+      <div style="margin-top:4px;color:var(--accent);font-weight:600;">
+        ⚠️ 必须完成全部 6 次训练并提交判断，才算报名成功并获得实验编号。
+      </div>
+    </div>
+    <div id="trainingSessionList"></div>
+    <div id="trainingSessionActions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;"></div>
+  </div>
+
+  <!-- Interview case sidebar + transcript popup (shared) -->
+  <div id="interviewCaseBackdrop" class="interview-case-backdrop hidden" onclick="closeInterviewCaseSidebar()"></div>
+  <aside id="interviewCaseSidebar" class="interview-case-sidebar" aria-hidden="true">
+    <div class="interview-case-sidebar-header">
+      <h3>案件背景（审讯者视角）</h3>
+      <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:12px;color:#fff;border-color:rgba(255,255,255,0.6);" onclick="closeInterviewCaseSidebar()">关闭</button>
+    </div>
+    <div class="interview-case-sidebar-body" id="interviewCaseSidebarBody">
+      <p style="color:var(--text-light);">加载中...</p>
+    </div>
+  </aside>
+  <div id="interviewTranscriptModal" class="interview-transcript-modal hidden" role="dialog" aria-label="文字对话记录">
+    <div class="interview-transcript-modal-header">
+      <h4>文字对话记录</h4>
+      <button type="button" class="btn btn-outline" style="padding:2px 10px;font-size:12px;" onclick="closeInterviewTranscriptModal()">关闭</button>
+    </div>
+    <div class="interview-transcript-modal-body" id="interviewTranscriptBody">
+      <div class="interview-transcript-empty">暂无对话记录</div>
+    </div>
+  </div>
+
+  <!-- ===== AVATAR TRAINING SESSION ACTIVE ===== -->
+  <div class="card hidden" id="screen-avatar-training-active">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h2 style="border:none;margin:0;" id="activeSessionTitle">训练 #1</h2>
+      <span class="badge badge-blue" id="activeSessionSetting"></span>
+    </div>
+    <div class="interview-toolbar">
+      <button type="button" class="btn btn-outline" onclick="openInterviewCaseSidebar()">📋 案件背景</button>
+      <button type="button" class="btn btn-outline" onclick="openInterviewTranscriptModal()">💬 文字对话记录</button>
+    </div>
+    <p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">
+      每次训练 3-10 分钟。点击下方按钮开始录音，再次点击停止，系统将自动转写并与 Avatar 对话。
+    </p>
+    <div id="trainingLiveVideoContainer" style="width:100%;background:#000;border-radius:8px;min-height:280px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;position:relative;overflow:hidden;">
+      <div id="trainingVideoPlaceholder" style="color:#9ca3af;font-size:14px;text-align:center;padding:16px;">等待视频连接...</div>
+    </div>
+    <div id="trainingChatArea" class="hidden" aria-hidden="true">
+      <div id="trainingChatPlaceholder"></div>
+      <div id="trainingChatMessages"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button class="btn btn-primary" id="trainingRecordBtn" onclick="toggleTrainingRecording()" style="flex:1;">🎙️ 开始录音</button>
+      <span id="trainingRecordStatus" style="font-size:12px;color:var(--text-light);align-self:center;">待录音</span>
+      <button class="btn btn-outline" onclick="interruptTrainingAvatar()">打断</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button class="btn btn-outline" onclick="endTrainingSession()" style="flex:1;">结束本次访谈</button>
+    </div>
+    <button class="btn btn-primary hidden" id="submitTrainingJudgmentBtn" onclick="showTrainingJudgmentForm()">提交判断 →</button>
+    <div id="trainingJudgmentForm" class="hidden" style="margin-top:12px;padding:16px;background:#f7f9fc;border-radius:8px;"></div>
+    <div id="trainingFeedbackArea" class="hidden" style="margin-top:12px;padding:16px;background:#f0f7ff;border-radius:8px;"></div>
+  </div>
+
+  <!-- ===== COMPLETION SCREEN ===== -->
+  <div class="card hidden" id="screen-completion">
+    <div class="completion-box">
+      <div style="font-size:48px;">✓</div>
+      <h2 style="color:var(--success);border:none;margin-top:8px;">实验完成</h2>
+      <p style="margin-top:8px;font-size:14px;color:var(--text);" id="completionMsg"></p>
+      <p style="margin-top:12px;font-size:12px;color:var(--text-light);">请截图此页面保存您的实验编号，并发送给研究人员确认。</p>
+      <button class="btn btn-outline" onclick="downloadAllMaterials()" style="margin-top:12px;width:100%;">📥 下载全部材料</button>
+    </div>
+  </div>
+
+  <!-- ===== BOOKING SYSTEM (new unified design) ===== -->
+  <div class="card hidden" id="screen-booking">
+    <h2>正式访谈时间预约</h2>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:4px;">
+      每个时间段有<strong>两个名额</strong>：<span class="avail-tag suspect">嫌疑人</span> 和 <span class="avail-tag interviewer">审讯者</span>。
+      当同一个时间段<strong>嫌疑人和审讯者都预约后</strong>，该时间段即配对成功。
+    </p>
+    <p style="font-size:12px;color:var(--text-light);margin-bottom:4px;">
+      💡 <strong style="color:#e65100;">建议优先选择已有对方角色预约的时间段（橙色高亮）</strong>，这样可以快速完成配对，尽早开展正式访谈。
+    </p>
+    <div style="font-size:12px;color:var(--text-light);margin-bottom:16px;">
+      🟢 可预约 &nbsp;|&nbsp; 🔴 已被预约 &nbsp;|&nbsp; 🟠 橙色边框 = 已有对方预约 &nbsp;|&nbsp; ⭐ 每人仅可预约一个时间段
+    </div>
+
+    <!-- Phone input for booking lookup -->
+    <div id="bookingPhoneInput" class="hidden">
+      <div class="form-group">
+        <label>请输入您的手机号查看可预约时段</label>
+        <input type="text" id="bookingPhone" placeholder="请输入注册时使用的手机号" maxlength="15">
+      </div>
+      <button class="btn btn-primary" onclick="loadBookingSlots()">查询可预约时段</button>
+      <button class="btn btn-outline" onclick="goBackFromBooking()" style="margin-top:8px;">返回</button>
+    </div>
+
+    <!-- My booking info -->
+    <div id="myBookingInfo" class="hidden"></div>
+
+    <!-- Slot listing -->
+    <div id="bookingSlotList" class="hidden"></div>
+
+    <!-- Booking result -->
+    <div id="bookingResult" class="hidden"></div>
+
+    <!-- Booking action area (for interviewer flow routing) -->
+    <div id="bookingActionArea"></div>
+  </div>
+
+  <!-- ===== ERROR SCREEN ===== -->
+  <div class="card hidden" id="screen-error">
+    <h2>出错了</h2>
+    <p style="color:var(--accent);" id="errorMsg"></p>
+    <button class="btn btn-secondary" onclick="location.reload()">重新开始</button>
+  </div>
+</div>
+
+<!-- Serious game AI disclaimer modal -->
+<div class="number-reminder-overlay" id="sgAiDisclaimerModal">
+  <div class="number-reminder-modal">
+    <div class="warning-icon">🎬</div>
+    <h3 style="color:var(--primary);border:none;margin-bottom:8px;">关于模拟行动视频</h3>
+    <p style="font-size:13px;color:var(--text);margin-bottom:12px;line-height:1.8;text-align:left;">
+      本环节中的视频由 <strong>AI 生成</strong>。画面中可能出现一些细节上的不一致（例如场景、物品或时间线的细微偏差）。
+    </p>
+    <p style="font-size:13px;color:var(--text);margin-bottom:20px;line-height:1.8;text-align:left;">
+      请您<strong>忽略这些小的不一致</strong>，只需关注并记住视频的<strong>核心情节</strong>即可。请根据您的角色认真观看并如实选择。
+    </p>
+    <button class="btn-primary" onclick="confirmSgAiDisclaimer()" style="padding:12px 40px;font-size:15px;width:auto;">
+      我已了解，开始游戏
+    </button>
+  </div>
+</div>
+
+<!-- Number reminder modal -->
+<div class="number-reminder-overlay" id="numberReminderModal">
+  <div class="number-reminder-modal">
+    <div class="warning-icon">📋</div>
+    <h3 style="color:var(--primary);border:none;margin-bottom:8px;">重要提示</h3>
+    <p style="font-size:13px;color:var(--text);margin-bottom:12px;line-height:1.8;">
+      您的<strong>实验编号</strong>将在完成所有环节并成功预约时间后显示。
+    </p>
+    <p style="font-size:12px;color:var(--text-light);margin-bottom:6px;">
+      编号的第一段数字代表您所属的<strong>实验分组</strong>，同一分组的参与者将配对进行实验。
+    </p>
+    <p style="font-size:12px;color:var(--accent);margin-bottom:20px;font-weight:600;">
+      ⚠️ 届时请务必截图保存您的编号！
+    </p>
+    <button class="btn-primary" onclick="closeNumberReminder()" style="padding:12px 40px;font-size:15px;width:auto;">
+      我知道了
+    </button>
+  </div>
+</div>
+
+<!-- Screenshot confirmation modal -->
+<div class="screenshot-modal-overlay" id="screenshotModal">
+  <div class="screenshot-modal">
+    <div class="icon">📸</div>
+    <h3>请确认您已截图</h3>
+    <p>为确保实验记录完整，请确认您已经对此页面（包含您的编号）进行了截图。<br>截图将作为您完成实验的凭证。</p>
+    <div class="btn-group">
+      <button class="btn-confirm" onclick="confirmScreenshot()">✅ 我已截图</button>
+      <button class="btn-remind" onclick="remindScreenshot()">⚠️ 我还没有截图</button>
+    </div>
+  </div>
+</div>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-box">
+    <div class="spinner"></div>
+    <p id="loadingText">正在处理...</p>
+  </div>
+</div>
+
+<div class="footer-note">
+  © IRB Research Project — Interrogation Experiment System<br>
+  <small>如有问题请联系研究人员</small>
+</div>
+
+<script>
+// ====== STATE ======
+const APP = {
+  phone: '',
+  role: '',
+  participant: null,
+  completed: false,
+  attentionRetryUsed: false,
+  chatHistory: [],
+  avatarInteractionMode: 'live',
+  sg_started: false,
+  sg_completed: false,
+};
+
+const TRAINING_GROUP_LABELS = {
+  control: 'A',
+  theory_sue: 'B',
+  avatar_general: 'C',
+  avatar_specific: 'D',
+};
+
+function trainingGroupLabel(trainingType) {
+  return TRAINING_GROUP_LABELS[trainingType] || '';
+}
+
+const SECTION_NAMES = {
+  "0": "基本信息 Basic Demographics",
+  "1": "社会经济状况 Socioeconomic Status",
+  "2": "社交与人际关系 Social Relationships",
+  "3": "个人习惯与健康 Personal Habits & Health",
+  "4": "外观特征 Appearance",
+};
+
+const PROFILE_QUESTIONS = [
+  {id:"q1",section:"0",label:"年龄",type:"number",min:18,max:70,placeholder:"例如: 32"},
+  {id:"q2",section:"0",label:"性别",type:"radio",options:["男 Male","女 Female","其他 Other"]},
+  {id:"q3",section:"0",label:"户口类型",type:"radio",options:["城镇户口 Urban","农村户口 Rural"]},
+  {id:"q4",section:"1",label:"目前职业/具体职务",type:"text",placeholder:"例如：自由职业者、公司职员、快递员等"},
+  {id:"q5",section:"1",label:"平均月收入（元）",type:"radio",options:["3000以下","3000-5000","5000-10000","10000-20000","20000以上"]},
+  {id:"q6",section:"1",label:"每月固定支出占收入的比例",type:"radio",options:["30%以下","30%-60%","60%-90%","入不敷出"]},
+  {id:"q7",section:"1",label:"投资习惯（可多选）",type:"checkbox",options:["不投资/只存定期","低风险理财","股票/基金","加密货币/高风险投资"]},
+  {id:"q8",section:"1",label:"是否购买商业保险（如重疾险等）",type:"radio",options:["是","否"]},
+  {id:"q9",section:"1",label:"过去三年换工作次数",type:"radio",options:["0次","1-2次","3次及以上"]},
+  {id:"q10",section:"1",label:"是否有犯罪记录",type:"radio",options:["是","否"]},
+  {id:"q11",section:"1",label:"是否有行政处罚记录",type:"radio",options:["是","否"]},
+  {id:"q12",section:"2",label:"家庭结构（可多选）",type:"checkbox",options:["我的父母双全","我是单亲家庭或双亲已故","我是独生子女","我有兄弟姐妹","我有子女"]},
+  {id:"q13",section:"2",label:"日常活跃社交圈大小（每周至少联系一次的非工作关系人数）",type:"radio",options:["0-2人","3-5人","6-10人","10人以上"]},
+  {id:"q14",section:"2",label:"婚姻/恋爱状况",type:"radio",options:["单身","恋爱中","已婚","离异/丧偶"]},
+  {id:"q15",section:"2",label:"日均私人通话/语音时长",type:"radio",options:["很少（主要文字）","10分钟以下","10-30分钟","30分钟以上"]},
+  {id:"q16",section:"2",label:"目前居住情况",type:"radio",options:["独居","与伴侣/配偶同住","与父母/亲戚同住","与室友/朋友合租","宿舍/集体居住"]},
+  {id:"q17",section:"2",label:"身边最亲近的朋友会用哪一个词形容你的性格？",type:"radio",options:["冷静寡言","脾气急躁","不愿吃亏","随和实在"]},
+  {id:"q18",section:"3",label:"成瘾史（可多选）",type:"checkbox",options:["经常吸烟","频繁大量饮酒","槟榔等","无"]},
+  {id:"q19",section:"3",label:"业余时间常去场所（可多选）",type:"checkbox",options:["宅在家","酒吧/夜店","网吧/电竞酒店","棋牌室/麻将馆","咖啡馆/书店","健身房/公园"]},
+  {id:"q20",section:"3",label:"身心健康状况（可多选）",type:"checkbox",options:["非常健康","慢性病需长期服药","曾有/现有心理困扰（如抑郁/焦虑）"]},
+  {id:"q21",section:"3",label:"日常个人物品的颜色偏好",type:"radio",options:["非常鲜艳亮眼","浅色系","深色/低调色系","几乎全黑/极简"]},
+  {id:"q22",section:"4",label:"正式访谈时是否会戴眼镜",type:"radio",options:["是","否"]},
+  {id:"q23",section:"4",label:"正式访谈时长发还是短发",type:"radio",options:["长发","短发"]},
+];
+
+// ====== HELPERS ======
+const $ = id => document.getElementById(id);
+
+function startReadingTimer(btnId, seconds, defaultLabel) {
+  const btn = $(btnId);
+  if (!btn) return;
+  let remaining = seconds;
+  btn.disabled = true;
+  const label = defaultLabel || btn.textContent;
+  const tick = () => {
+    if (remaining > 0) {
+      btn.textContent = `${label}（请继续阅读 ${remaining} 秒）`;
+      remaining -= 1;
+      setTimeout(tick, 1000);
+    } else {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  };
+  tick();
+}
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+function openManagePanel() {
+  const pwd = prompt('请输入管理密码');
+  if (pwd === null) return;
+  if (pwd !== '77585211314') {
+    alert('密码错误');
+    return;
+  }
+  sessionStorage.setItem('admin_password', pwd);
+  window.location.href = '/manage';
+}
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function showLoading(text) { $('loadingText').textContent = text || '正在处理...'; $('loadingOverlay').classList.add('show'); }
+function hideLoading() { $('loadingOverlay').classList.remove('show'); }
+
+// ====== Interview sidebar & transcript popup ======
+APP.interviewCaseInfo = null;
+
+function getActiveInterviewTranscript() {
+  if (APP.trainingSession && Array.isArray(APP.trainingSession.transcript)) {
+    return APP.trainingSession.transcript;
+  }
+  return (APP.chatHistory || []).map(m => ({
+    role: m.role === 'user' ? 'user' : 'avatar',
+    text: m.content || '',
+  }));
+}
+
+function refreshInterviewTranscriptBody() {
+  const body = $('interviewTranscriptBody');
+  if (!body) return;
+  const lines = getActiveInterviewTranscript().filter(l => (l.text || '').trim());
+  if (!lines.length) {
+    body.innerHTML = '<div class="interview-transcript-empty">暂无对话记录</div>';
+    return;
+  }
+  let html = '';
+  lines.forEach(line => {
+    const isUser = line.role === 'user';
+    const cls = isUser ? 'user' : 'avatar';
+    const label = isUser ? '您' : '嫌疑人';
+    html += '<div class="interview-transcript-line ' + cls + '"><strong>' + label + '：</strong> ' + escapeHtml(line.text) + '</div>';
+  });
+  body.innerHTML = html;
+  body.scrollTop = body.scrollHeight;
+}
+
+function openInterviewTranscriptModal() {
+  refreshInterviewTranscriptBody();
+  const modal = $('interviewTranscriptModal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeInterviewTranscriptModal() {
+  const modal = $('interviewTranscriptModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function preloadInterviewCaseInfo() {
+  if (APP.interviewCaseInfo) return APP.interviewCaseInfo;
+  if (!APP.phone) return null;
+  try {
+    APP.interviewCaseInfo = await api('/api/case-info', { phone: APP.phone });
+  } catch (e) {
+    APP.interviewCaseInfo = { error: e.message };
+  }
+  return APP.interviewCaseInfo;
+}
+
+function renderInterviewCaseSidebar(data) {
+  const body = $('interviewCaseSidebarBody');
+  if (!body) return;
+  if (!data || data.error) {
+    body.innerHTML = '<p style="color:var(--accent);">' + escapeHtml((data && data.error) || '加载失败') + '</p>';
+    return;
+  }
+  let html = '<h4 style="margin:0 0 8px;color:var(--primary);">' + escapeHtml(data.case_title || '案件信息') + '</h4>';
+  html += '<h5 style="margin:12px 0 6px;">案件概述</h5>';
+  html += '<div class="context-box" style="font-size:12px;">' + escapeHtml(data.overview || '').replace(/\n/g, '<br>') + '</div>';
+  html += '<h5 style="margin:16px 0 6px;">证据材料</h5>';
+  (data.evidence || []).forEach(e => {
+    html += '<div style="border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:8px;font-size:12px;">';
+    html += '<strong style="color:var(--primary);">' + escapeHtml(e.id) + ': ' + escapeHtml(e.title) + '</strong>';
+    html += '<div style="margin-top:4px;">' + escapeHtml(e.detail) + '</div>';
+    html += '</div>';
+  });
+  if (data.efm_analysis) {
+    html += '<h5 style="margin:16px 0 6px;">EFM 分析建议</h5>';
+    html += '<div class="context-box" style="font-size:12px;">' + escapeHtml(data.efm_analysis).replace(/\n/g, '<br>') + '</div>';
+  }
+  body.innerHTML = html;
+}
+
+async function openInterviewCaseSidebar() {
+  const sidebar = $('interviewCaseSidebar');
+  const backdrop = $('interviewCaseBackdrop');
+  if (!sidebar) return;
+  $('interviewCaseSidebarBody').innerHTML = '<p style="color:var(--text-light);">加载中...</p>';
+  sidebar.classList.add('open');
+  sidebar.setAttribute('aria-hidden', 'false');
+  if (backdrop) backdrop.classList.remove('hidden');
+  const data = await preloadInterviewCaseInfo();
+  renderInterviewCaseSidebar(data);
+}
+
+function closeInterviewCaseSidebar() {
+  const sidebar = $('interviewCaseSidebar');
+  const backdrop = $('interviewCaseBackdrop');
+  if (sidebar) {
+    sidebar.classList.remove('open');
+    sidebar.setAttribute('aria-hidden', 'true');
+  }
+  if (backdrop) backdrop.classList.add('hidden');
+}
+
+const SCREEN_ROUTE_MAP = {
+  'screen-phone': '#/flow/phone',
+  'screen-dashboard': '#/flow/dashboard',
+  'screen-suspect-context': '#/flow/suspect-context',
+  'screen-attention': '#/flow/attention-check',
+  'screen-game': '#/flow/serious-game',
+  'screen-profile': '#/flow/profile',
+  'screen-interviewer': '#/flow/interviewer-training',
+  'screen-case-info': '#/flow/case-info',
+  'screen-avatar-training': '#/flow/avatar-training-list',
+  'screen-avatar-training-active': '#/flow/avatar-training-active',
+  'screen-booking': '#/flow/booking',
+  'screen-completion': '#/flow/completion',
+  'screen-error': '#/flow/error',
+};
+
+const ROUTE_SCREEN_MAP = Object.fromEntries(
+  Object.entries(SCREEN_ROUTE_MAP).map(([screenId, route]) => [route, screenId])
+);
+
+function syncRouteForScreen(screenId, replace) {
+  const route = SCREEN_ROUTE_MAP[screenId];
+  if (!route) return;
+  if (window.location.hash === route) return;
+  if (replace) {
+    history.replaceState(null, '', route);
+  } else {
+    history.pushState(null, '', route);
+  }
+}
+
+function hideAll() {
+  document.querySelectorAll('#app > .card').forEach(c => c.classList.add('hidden'));
+}
+function showScreen(id, options) {
+  if (window.DeviceCheck && DeviceCheck.isBlocked()) return;
+  const opts = options || {};
+  hideAll();
+  $(id).classList.remove('hidden');
+  if (opts.updateRoute !== false) {
+    syncRouteForScreen(id, !!opts.replaceRoute);
+  }
+}
+
+function applyRouteToScreen() {
+  if (window.DeviceCheck && DeviceCheck.isBlocked()) return;
+  const hash = window.location.hash || '';
+  const targetScreen = ROUTE_SCREEN_MAP[hash];
+  if (!targetScreen) return;
+  const el = $(targetScreen);
+  if (!el) return;
+  showScreen(targetScreen, { updateRoute: false });
+}
+
+window.addEventListener('hashchange', applyRouteToScreen);
+window.addEventListener('popstate', applyRouteToScreen);
+setTimeout(() => applyRouteToScreen(), 0);
+
+async function api(url, body) {
+  if (window.DeviceCheck && DeviceCheck.isBlocked()) {
+    throw new Error('请使用电脑（台式机或笔记本电脑）打开本实验系统。');
+  }
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  const text = await resp.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    throw new Error('服务器返回了无效响应，请刷新页面重试。');
+  }
+  if (!resp.ok) throw new Error(data.error || '请求失败');
+  return data;
+}
+
+// ====== REGISTRATION ======
+async function register() {
+  const phone = $('phoneInput').value.trim();
+  if (!phone || phone.length < 8) { alert('请输入有效的手机号（至少8位）'); return; }
+
+  APP.phone = phone;
+  showLoading('正在分配实验条件...');
+
+  try {
+    const result = await api('/api/register', { phone });
+    APP.participant = result;
+    APP.role = result.role;
+    hideLoading();
+    showConsent();
+  } catch (err) {
+    hideLoading();
+    // If already registered, try to resume
+    if (err.message && err.message.includes('已注册')) {
+      resumeParticipant(phone);
+      return;
+    }
+    showError(err.message);
+  }
+}
+
+// ====== CONSENT ======
+async function showConsent() {
+  showScreen('screen-consent');
+  $('consentContent').textContent = '正在加载知情同意书...';
+  
+  try {
+    const res = await fetch(`/api/consent/${APP.role}`);
+    const data = await res.json();
+    $('consentContent').textContent = data.text || '加载失败，请联系研究人员。';
+    startReadingTimer('btnAgree', 15, '我已阅读并同意参与实验');
+  } catch (err) {
+    $('consentContent').textContent = '加载失败，请联系研究人员。' + err.message;
+    startReadingTimer('btnAgree', 15, '我已阅读并同意参与实验');
+  }
+}
+
+function agreeConsent() {
+  if (APP.participant) {
+    showDashboard(APP.participant);
+  } else {
+    resumeParticipant(APP.phone);
+  }
+}
+
+// ====== DASHBOARD & RESUME ======
+
+function showDashboard(data) {
+  $('dashboardRole').textContent = data.role === 'S' ? '嫌疑人' : '审讯者';
+  $('dashboardId').textContent = data.full_id || '待分配';
+  $('dashboardGroup').textContent = data.group_name ? '第 ' + data.group_name + ' 组' : '待分配';
+
+  const trainingInfo = $('dashboardTrainingInfo');
+  trainingInfo.classList.add('hidden');
+
+  let steps = [];
+  if (data.role === 'S') {
+    steps = [
+      { label: '阅读案件背景', desc: '仔细阅读您的案件背景故事' },
+      { label: '通过注意力检测', desc: '回答关于案件背景的问题' },
+      { label: '完成模拟游戏', desc: '完成嵌入的模拟行动游戏' },
+      { label: '填写个人信息问卷', desc: '填写您的真实个人信息' },
+      { label: '预约正式访谈时间', desc: '选择您的可用时间段' },
+    ];
+  } else {
+    const tt = data.training_type;
+    if (tt === 'theory_sue') {
+      steps = [
+        { label: '阅读培训材料（文字）', desc: '阅读 SUE 相关文字材料' },
+        { label: '通过 EFM 注意力检测', desc: '完成证据框架矩阵分类练习' },
+        { label: '阅读案件信息与证据', desc: '了解您将审讯的案件背景' },
+        { label: '预约正式访谈时间', desc: '选择您和嫌疑人的可用时间段' },
+      ];
+    } else if (tt === 'avatar_specific' || tt === 'avatar_general') {
+      const g = trainingGroupLabel(tt);
+      steps = [
+        { label: `阅读 ${g} 组培训说明`, desc: '阅读文字培训说明材料' },
+        { label: '阅读 SUE 理论培训材料', desc: '阅读 SUE 相关文字材料' },
+        { label: '通过 EFM 注意力检测', desc: '完成证据框架矩阵分类练习' },
+        { label: '阅读案件信息与证据', desc: '了解您将审讯的案件背景' },
+        { label: '预约正式访谈时间', desc: '选择您和嫌疑人的可用时间段' },
+        { label: '完成 6 次虚拟审讯训练', desc: '按顺序完成 6 次虚拟嫌疑人审讯（每次 3–10 分钟），提交判断并获取反馈' },
+      ];
+    } else {
+      steps = [
+        { label: `阅读 ${trainingGroupLabel('control')} 组培训材料`, desc: '阅读文字培训材料' },
+        { label: '通过注意力检测', desc: '完成注意力检测题' },
+        { label: '阅读案件信息与证据', desc: '了解您将审讯的案件背景' },
+        { label: '预约正式访谈时间', desc: '选择您和嫌疑人的可用时间段' },
+      ];
+    }
+  }
+
+  let stepsHtml = '<div class="step-list">';
+  steps.forEach((s, i) => {
+    stepsHtml += `
+      <div class="step-item">
+        <div class="step-number">${i + 1}</div>
+        <div class="step-content">
+          <div class="step-label">${s.label}</div>
+          <div class="step-desc">${s.desc}</div>
+        </div>
+      </div>`;
+  });
+  stepsHtml += '</div>';
+
+  $('dashboardSteps').innerHTML = stepsHtml;
+  $('dashboardStartBtn').textContent = '开始第 1 步 →';
+
+  if (data.role === 'I' && data.training_type) {
+    let infoHtml = `<div class="info-row"><span class="label">实验条件</span><span class="value badge badge-blue">${trainingGroupLabel(data.training_type)} 组</span></div>`;
+    if (data.training_info && needsSixAvatarSessions(data.training_type)) {
+      if (!data.training_info.all_completed) {
+        infoHtml += `<div class="info-row"><span class="label">训练进度</span><span class="value" style="color:var(--accent);">已完成 ${data.training_info.completed_count}/${data.training_info.total_required} 次</span></div>`;
+      } else {
+        infoHtml += `<div class="info-row"><span class="label">训练进度</span><span class="value" style="color:var(--success);">✓ 全部完成</span></div>`;
+      }
+    }
+    trainingInfo.innerHTML = infoHtml;
+    trainingInfo.classList.remove('hidden');
+  } else {
+    trainingInfo.classList.add('hidden');
+    trainingInfo.innerHTML = '';
+  }
+
+  showScreen('screen-dashboard');
+}
+
+async function startFromDashboard() {
+  const data = APP.participant;
+  if (data.role === 'S') {
+    showSuspectFlow(data);
+    return;
+  }
+  if (needsSixAvatarSessions(data.training_type)) {
+    try {
+      const lookup = await api('/api/lookup', { phone: APP.phone });
+      const ti = lookup.participant && lookup.participant.training_info;
+      const hasBooking = lookup.appointment && lookup.appointment.time_slot;
+      if (ti && !ti.all_completed && hasBooking) {
+        showAvatarTrainingSessions();
+        return;
+      }
+    } catch (e) { /* fall through to normal flow */ }
+  }
+  showInterviewerFlow(data);
+}
+
+async function resumeParticipant(phone) {
+  showLoading('正在查找您的信息...');
+  try {
+    const lookup = await api('/api/lookup', { phone });
+    hideLoading();
+
+    if (lookup.found) {
+      APP.phone = phone;
+      APP.role = lookup.participant.role;
+
+      // Reconstruct participant data — pass through all fields
+      const p = lookup.participant;
+      APP.participant = { ...p, training_type: p.training_type || '' };
+
+      // Check training progress for avatar groups
+      if (p.training_info) {
+        APP.participant.training_info = p.training_info;
+      }
+
+      if (p.training_info) {
+        APP.participant.training_info = p.training_info;
+      }
+      showDashboard(APP.participant);
+    } else {
+      hideLoading();
+      showError('未找到该手机号的记录，请先注册。');
+    }
+  } catch (err) {
+    hideLoading();
+    showError(err.message || '查找失败，请重试。');
+  }
+}
+
+// Add re-entry button to phone screen
+function addResumeButton() {
+  const container = $('screen-phone');
+  if (!container) return;
+  // Only add once
+  if (document.getElementById('resumeBtn')) return;
+  const btn = document.createElement('button');
+  btn.id = 'resumeBtn';
+  btn.className = 'btn btn-outline';
+  btn.textContent = '已有账号？点击继续实验';
+  btn.style.cssText = 'margin-top:12px;width:100%;';
+  btn.onclick = function() {
+    const phone = $('phoneInput').value.trim();
+    if (!phone || phone.length < 8) {
+      alert('请先输入您的手机号');
+      return;
+    }
+    APP.phone = phone;
+    resumeParticipant(phone);
+  };
+  container.appendChild(btn);
+}
+
+// Call on page load
+document.addEventListener('DOMContentLoaded', function() {
+  if (window.DeviceCheck && DeviceCheck.isBlocked()) return;
+  addResumeButton();
+});
+
+// ====== PAGE UNLOAD: clean up incomplete participants ======
+window.addEventListener('beforeunload', function(e) {
+  // If serious game is in progress, warn before leaving
+  if (APP.sg_started && !APP.sg_completed) {
+    e.preventDefault();
+    e.returnValue = '模拟行动游戏尚未完成，确定要离开吗？';
+    return;
+  }
+
+  if (APP.phone && !APP.completed) {
+    const tt = APP.participant ? APP.participant.training_type : '';
+    if (tt === 'avatar_specific' || tt === 'avatar_general') {
+      const ti = APP.participant ? APP.participant.training_info : null;
+      if (ti && ti.all_completed && APP.participant.completed) {
+        APP.completed = true;
+        return;
+      }
+    }
+    navigator.sendBeacon('/api/abandon', JSON.stringify({ phone: APP.phone }));
+  }
+});
+
+// ====== SUSPECT FLOW ======
+function showSuspectFlow(data) {
+  $('suspectCase').textContent = data.case_label;
+  const groupName = data.display_id ? data.display_id.split('-')[0] : '';
+  $('suspectGroupLabel').textContent = groupName ? '第 ' + groupName + ' 组' : '待分配';
+
+  $('suspectContext').textContent = data.context;
+
+  // Store attention questions
+  APP.attentionQuestions = data.attention_questions;
+  APP.attentionRetryUsed = false;
+
+  showScreen('screen-suspect-context');
+}
+
+function showAttentionCheck() {
+  const questions = APP.attentionQuestions;
+  let html = '';
+  questions.forEach((q, i) => {
+    html += `<div class="attention-question" id="aq-${i}">`;
+    html += `<div class="q-title">问题 ${i + 1}: ${q.question}</div>`;
+    q.options.forEach((opt, j) => {
+      html += `<div style="margin:4px 0;">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 8px;">
+          <input type="radio" name="aq-${i}" value="${j}"> ${opt}
+        </label>
+      </div>`;
+    });
+    html += `<div class="feedback" id="fb-${i}"></div>`;
+    html += `</div>`;
+  });
+  $('attentionQuestions').innerHTML = html;
+  $('attentionFeedback').innerHTML = '';
+  $('attentionSubmitBtn').classList.remove('hidden');
+  $('attentionRetryBtn').classList.add('hidden');
+  showScreen('screen-attention');
+
+  // Show number reminder popup on this second step
+  showNumberReminder();
+}
+
+function showNumberReminder() {
+  $('numberReminderModal').classList.add('show');
+}
+
+function closeNumberReminder() {
+  $('numberReminderModal').classList.remove('show');
+}
+
+function showSgAiDisclaimer() {
+  $('sgAiDisclaimerModal').classList.add('show');
+}
+
+function confirmSgAiDisclaimer() {
+  $('sgAiDisclaimerModal').classList.remove('show');
+  startSeriousGame();
+}
+
+function goBackToSuspectContext() {
+  showScreen('screen-suspect-context');
+}
+
+async function submitAttention() {
+  const questions = APP.attentionQuestions;
+  const answers = [];
+  for (let i = 0; i < questions.length; i++) {
+    const el = document.querySelector(`input[name="aq-${i}"]:checked`);
+    answers.push(el ? parseInt(el.value) : -1);
+  }
+
+  if (answers.some(a => a === -1)) {
+    alert('请回答所有问题后再提交。');
+    return;
+  }
+
+  showLoading('正在验证答案...');
+  try {
+    const result = await api('/api/verify-attention', {
+      phone: APP.phone,
+      answers: answers,
+      retry: APP.attentionRetryUsed,
+    });
+
+    hideLoading();
+
+    // Show per-question feedback
+    result.results.forEach((r, i) => {
+      const aq = $(`aq-${i}`);
+      const fb = $(`fb-${i}`);
+      aq.classList.remove('correct', 'wrong');
+      if (r.correct) {
+        aq.classList.add('correct');
+        fb.innerHTML = '<span style="color:#27ae60;">✓ 正确</span>';
+      } else {
+        aq.classList.add('wrong');
+        fb.innerHTML = '<span style="color:#c0392b;">✗ 错误</span>';
+      }
+    });
+
+    if (result.all_correct) {
+      $('attentionSubmitBtn').classList.add('hidden');
+      $('attentionRetryBtn').classList.add('hidden');
+      $('attentionFeedback').innerHTML = '<div style="color:#27ae60;font-weight:600;">全部正确！正在进入下一环节...</div>';
+      setTimeout(() => showGameLink(), 800);
+    } else if (result.retry_allowed) {
+      APP.attentionRetryUsed = true;
+      $('attentionSubmitBtn').classList.add('hidden');
+      $('attentionRetryBtn').classList.remove('hidden');
+      $('attentionFeedback').innerHTML = '<div style="color:#c0392b;font-weight:600;">部分答案不正确，您有一次重新回答的机会。请修改错误答案后点击"重新回答"。</div>';
+    } else if (result.terminated) {
+      $('attentionTerminatedMsg').textContent = result.message || '两次回答均不正确，无法参与正式实验。您的手机号已被记录，无法再次参与。';
+      showScreen('screen-attention-terminated');
+    } else {
+      $('attentionSubmitBtn').classList.add('hidden');
+      $('attentionRetryBtn').classList.add('hidden');
+      $('attentionFeedback').innerHTML = '<div style="color:#c0392b;font-weight:600;">⚠️ 两次回答均不正确。请联系研究人员获取帮助。</div>';
+    }
+  } catch (err) {
+    hideLoading();
+    showError(err.message);
+  }
+}
+
+function retryAttention() {
+  const questions = APP.attentionQuestions;
+  // Reset selections for wrong answers
+  questions.forEach((q, i) => {
+    const fb = $(`fb-${i}`);
+    const aq = $(`aq-${i}`);
+    aq.classList.remove('correct', 'wrong');
+    fb.innerHTML = '';
+  });
+  $('attentionFeedback').innerHTML = '';
+  $('attentionSubmitBtn').classList.remove('hidden');
+  $('attentionRetryBtn').classList.add('hidden');
+}
+
+function showGameLink() {
+  showScreen('screen-game');
+  $('sg-intro').classList.remove('hidden');
+  $('sg-play').classList.add('hidden');
+  $('sg-completed').classList.add('hidden');
+  APP.sg_started = false;
+  clearSGPoll();
+  if (sgPlayer) { try { sgPlayer.destroy(); } catch(_) {} sgPlayer = null; }
+  if (window._sgHandler) { window.removeEventListener('message', window._sgHandler); window._sgHandler = null; }
+}
+
+// ====== Serious Game Functions ======
+
+let sgPlayer = null;
+let sgEndPollId = null;
+let sgChoiceFrozen = false;
+
+function startSeriousGame() {
+  showLoading('正在初始化游戏...');
+  api('/api/serious-game/start', { phone: APP.phone }).then(data => {
+    hideLoading();
+    APP.sg_started = true;
+    APP.sg_completed = false;
+    $('sg-intro').classList.add('hidden');
+    $('sg-play').classList.remove('hidden');
+    $('sg-step-total').textContent = data.total_steps;
+    loadSeriousGameStep();
+  }).catch(err => {
+    hideLoading();
+    showError(err.message || '启动游戏失败');
+  });
+}
+
+function loadSeriousGameStep() {
+  fetch('/api/serious-game/step?' + Date.now())
+    .then(r => r.json())
+    .then(data => {
+      if (data.done) {
+        completeSeriousGame();
+        return;
+      }
+      $('sg-step-num').textContent = (data.idx + 1);
+      $('sg-status-text').textContent = data.has_choice ? '请观看视频并做出选择' : '请观看视频';
+      setupSGYouTubePlayer(data.youtube_id, data.has_choice, data.question, data.a_label, data.b_label);
+    })
+    .catch(err => showError(err.message || '加载游戏步骤失败'));
+}
+
+function clearSGPoll() {
+  if (sgEndPollId != null) { clearInterval(sgEndPollId); sgEndPollId = null; }
+}
+
+function waitForYTAPI(cb) {
+  if (window.YT && window.YT.Player && window.YT.loaded) {
+    cb();
+    return;
+  }
+  const prev = window.onYouTubeIframeAPIReady;
+  window.onYouTubeIframeAPIReady = () => {
+    if (prev) prev();
+    cb();
+  };
+  if (!window.YT) {
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(tag);
+  }
+}
+
+function setupSGYouTubePlayer(videoId, hasChoice, question, aLabel, bLabel) {
+  sgChoiceFrozen = false;
+  clearSGPoll();
+  $('sg-choice-overlay').classList.add('hidden');
+
+  if (hasChoice) {
+    $('sg-question').textContent = question || '请选择：';
+    $('sg-choice-overlay').querySelector('[data-choice="A"]').textContent = aLabel || 'A';
+    $('sg-choice-overlay').querySelector('[data-choice="B"]').textContent = bLabel || 'B';
+  }
+
+  // Clean up previous YT player
+  if (sgPlayer) {
+    try { sgPlayer.destroy(); } catch(_) {}
+    sgPlayer = null;
+  }
+
+  // Clear container and create a fresh div for YT.Player to replace
+  const container = $('sg-player');
+  container.innerHTML = '';
+  const playerDiv = document.createElement('div');
+  playerDiv.id = 'sg-yt-player';
+  playerDiv.style.width = '100%';
+  playerDiv.style.height = '100%';
+  container.appendChild(playerDiv);
+
+  waitForYTAPI(() => {
+    sgPlayer = new YT.Player('sg-yt-player', {
+      width: '100%',
+      height: '100%',
+      videoId: videoId,
+      playerVars: {
+        autoplay: 1,
+        controls: 0,
+        disablekb: 1,
+        rel: 0,
+        modestbranding: 1,
+        playsinline: 1,
+        iv_load_policy: 3,
+      },
+      events: {
+        onReady: () => {
+          try {
+            const iframe = sgPlayer.getIframe();
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+            iframe.style.display = 'block';
+          } catch (_) {}
+          sgChoiceFrozen = false;
+          if (hasChoice) {
+            clearSGPoll();
+            sgEndPollId = setInterval(() => {
+              if (!sgPlayer || sgChoiceFrozen) return;
+              try {
+                const d = sgPlayer.getDuration();
+                const t = sgPlayer.getCurrentTime();
+                if (d > 0 && t >= d - 0.25) {
+                  sgChoiceFrozen = true;
+                  clearSGPoll();
+                  try { sgPlayer.pauseVideo(); } catch(_) {}
+                  try { sgPlayer.seekTo(Math.max(0, d - 0.05), true); } catch(_) {}
+                  setTimeout(() => showSGChoices(), 120);
+                }
+              } catch(_) {}
+            }, 150);
+          }
+        },
+        onStateChange: (event) => {
+          if (event.data === YT.PlayerState.ENDED) {
+            clearSGPoll();
+            if (hasChoice) {
+              if (!sgChoiceFrozen) showSGChoices();
+            } else {
+              sgAutoNext();
+            }
+          }
+        },
+      },
+    });
+  });
+}
+
+function showSGChoices() {
+  $('sg-choice-overlay').classList.remove('hidden');
+}
+
+function sgSubmitChoice(choice) {
+  if (!APP.sg_started || APP.sg_completed) return;
+  showLoading('处理中...');
+  api('/api/serious-game/choice', { phone: APP.phone, choice: choice }).then(data => {
+    hideLoading();
+    $('sg-choice-overlay').classList.add('hidden');
+    loadSeriousGameStep();
+  }).catch(err => {
+    hideLoading();
+    alert(err.message || '提交选择失败');
+  });
+}
+
+function sgAutoNext() {
+  fetch('/api/serious-game/next', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({}),
+  }).then(r => r.json()).then(data => {
+    loadSeriousGameStep();
+  }).catch(err => {
+    showError(err.message || '自动跳转失败');
+  });
+}
+
+function completeSeriousGame() {
+  APP.sg_completed = true;
+  $('sg-play').classList.add('hidden');
+  clearSGPoll();
+  if (sgPlayer) { try { sgPlayer.destroy(); } catch(_) {} sgPlayer = null; }
+  api('/api/serious-game/complete', { phone: APP.phone }).then(data => {
+    $('sg-completed').classList.remove('hidden');
+  }).catch(err => {
+    $('sg-completed').classList.remove('hidden');
+  });
+}
+
+function sgProceedToProfile() {
+  showProfile();
+}
+
+function showProfile() {
+  buildProfileForm();
+  showScreen('screen-profile');
+  updateProfileProgress();
+}
+
+function buildProfileForm() {
+  let html = '';
+  let currentSection = '';
+
+  PROFILE_QUESTIONS.forEach(q => {
+    if (q.section !== currentSection) {
+      currentSection = q.section;
+      html += `<div class="section-header">${q.section}. ${SECTION_NAMES[q.section] || ''}</div>`;
+    }
+
+    html += `<div class="form-group">`;
+    html += `<label>${q.label}</label>`;
+
+    if (q.type === 'text') {
+      html += `<input type="text" id="pf-${q.id}" placeholder="${q.placeholder || ''}">`;
+    } else if (q.type === 'number') {
+      html += `<input type="number" id="pf-${q.id}" min="${q.min || 0}" max="${q.max || 100}" placeholder="${q.placeholder || ''}">`;
+    } else if (q.type === 'radio') {
+      html += `<div class="radio-group">`;
+      q.options.forEach((opt, j) => {
+        html += `<label><input type="radio" name="pf-${q.id}" value="${opt}" onchange="updateProfileProgress()"><span>${opt}</span></label>`;
+      });
+      html += `</div>`;
+    } else if (q.type === 'checkbox') {
+      html += `<div class="checkbox-group">`;
+      q.options.forEach(opt => {
+        html += `<label><input type="checkbox" name="pf-${q.id}" value="${opt}" onchange="updateProfileProgress()"><span>${opt}</span></label>`;
+      });
+      html += `</div>`;
+    }
+    html += `</div>`;
+  });
+  $('profileForm').innerHTML = html;
+}
+
+function updateProfileProgress() {
+  let filled = 0;
+  const total = PROFILE_QUESTIONS.length;
+  PROFILE_QUESTIONS.forEach(q => {
+    if (q.type === 'checkbox') {
+      const checked = document.querySelectorAll(`input[name="pf-${q.id}"]:checked`).length;
+      if (checked > 0) filled++;
+    } else if (q.type === 'radio') {
+      const sel = document.querySelector(`input[name="pf-${q.id}"]:checked`);
+      if (sel) filled++;
+    } else {
+      const el = $(`pf-${q.id}`);
+      if (el && el.value.trim()) filled++;
+    }
+  });
+  $('profileProgress').style.width = Math.round((filled / total) * 100) + '%';
+}
+
+function collectProfile() {
+  const data = {};
+  PROFILE_QUESTIONS.forEach(q => {
+    if (q.type === 'checkbox') {
+      data[q.id] = [...document.querySelectorAll(`input[name="pf-${q.id}"]:checked`)].map(e => e.value);
+    } else if (q.type === 'radio') {
+      const sel = document.querySelector(`input[name="pf-${q.id}"]:checked`);
+      data[q.id] = sel ? sel.value : '';
+    } else {
+      data[q.id] = $(`pf-${q.id}`) ? $(`pf-${q.id}`).value.trim() : '';
+    }
+  });
+  return data;
+}
+
+async function submitProfile() {
+  const profile = collectProfile();
+
+  // Basic validation
+  const age = parseInt(profile.q1);
+  if (isNaN(age) || age < 18 || age > 70) {
+    if (!confirm('年龄未填写或不在合理范围（18-70岁），是否确认提交？')) return;
+  }
+
+  showLoading('正在提交...');
+  try {
+    const result = await api('/api/submit-profile', { phone: APP.phone, profile });
+    hideLoading();
+    // Suspects should enter booking right after profile submission.
+    if (APP.participant) {
+      APP.participant.full_id = result.full_id || APP.participant.full_id || '';
+      APP.participant.completed = 1;
+    }
+    APP.bookingReturnAction = 'after_profile';
+    showBookingSystem();
+  } catch (err) {
+    hideLoading();
+    showError(err.message);
+  }
+}
+
+// ====== INTERVIEWER FLOW ======
+async function showInterviewerFlow(data) {
+  $('interviewerGroup').textContent = data.group_name ? '第 ' + data.group_name + ' 组' : '待分配';
+
+  // Show number reminder for interviewer on this screen
+  showNumberReminder();
+
+  if (data.training_type === 'theory_sue') {
+    showSUEMaterial('theory_sue');
+  } else if (data.training_type === 'avatar_specific') {
+    showAvatarSpecificInstructions(data);
+  } else if (data.training_type === 'avatar_general') {
+    showAvatarGeneralInstructions(data);
+  } else {
+    showControlGroup(data);
+  }
+}
+
+// ====== SUE THEORY FLOW ======
+// source: 'theory_sue' | 'avatar_specific' | 'avatar_general'
+let sueSource = 'theory_sue';
+
+async function showSUEMaterial(source) {
+  sueSource = source || 'theory_sue';
+  const stepNum = (source === 'theory_sue') ? '第一步' : '第二步';
+  const stepTitle = `${stepNum}：阅读 SUE 理论培训材料`;
+
+  // Show loading state first
+  $('trainingContent').innerHTML = `
+    <h3>${stepTitle}</h3>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:12px;">正在加载培训材料...</p>
+    <div class="context-box" style="text-align:center;padding:40px;color:var(--text-light);">⏳ 加载中...</div>
+  `;
+  $('interviewerCompleteBtn').classList.add('hidden');
+  $('avatarChatArea').classList.add('hidden');
+  showScreen('screen-interviewer');
+
+  // Fetch SUE training text
+  let sueText = '';
+  try {
+    const resp = await fetch('/api/sue-training-text');
+    const result = await resp.json();
+    sueText = result.text || '';
+  } catch(e) {
+    sueText = '材料加载失败，请下载文件阅读。';
+  }
+
+  // Escape HTML but preserve <br> tags
+  const escapedText = sueText
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\n/g, '<br>');
+
+  // Fetch material files for download
+  let filesHtml = '';
+  try {
+    const matResp = await fetch('/api/training-material/theory_sue');
+    const matInfo = await matResp.json();
+    if (matInfo.files && matInfo.files.length > 0) {
+      filesHtml = '<div style="margin-top:16px;padding:12px;background:#f0f7ff;border-radius:6px;">';
+      filesHtml += '<div style="font-weight:600;font-size:13px;margin-bottom:8px;">📂 下载培训材料：</div>';
+      matInfo.files.forEach(f => {
+        filesHtml += `<a href="${f.url}" download style="display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;background:white;border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--primary);text-decoration:none;cursor:pointer;">📥 ${f.name}</a>`;
+      });
+      filesHtml += '</div>';
+    }
+  } catch(e) {}
+
+  const contentHtml = `
+    <h3>${stepTitle}</h3>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:12px;">
+      请仔细阅读以下 Strategic Use of Evidence (SUE) 理论培训材料。阅读完毕后请点击下方按钮进行注意力检测。
+    </p>
+    <div class="context-box" id="sueTextContent" style="font-size:13px;line-height:2;">
+      ${escapedText || '材料正在加载中...'}
+    </div>
+    ${filesHtml}
+    <button class="btn btn-outline" onclick="downloadInterviewerMaterials()" style="margin-top:12px;">📥 下载培训材料</button>
+    <button class="btn btn-primary" id="btnSueMaterialDone" onclick="showSueAttentionCheck()" style="margin-top:12px;">我已阅读完毕，进入测试</button>
+  `;
+
+  $('trainingContent').innerHTML = contentHtml;
+  startReadingTimer('btnSueMaterialDone', 30, '我已阅读完毕，进入测试');
+}
+
+let sueAttempt = 0;
+
+function showSueAttentionCheck() {
+  sueAttempt = 0;
+  renderSueEFMCheck();
+}
+
+function renderSueEFMCheck(feedbackResults) {
+  const categories = [
+    { id: 'low-low', label: '低来源低具体', desc: '不透露来源，不透露具体内容' },
+    { id: 'low-high', label: '低来源高具体', desc: '不透露来源，但透露具体内容' },
+    { id: 'high-high', label: '高来源高具体', desc: '既透露来源，也透露具体内容' },
+  ];
+
+  const statements = [
+    { text: '证据陈述 A："我们掌握了一些关于案发当天犯罪现场的信息"', idx: 0 },
+    { text: '证据陈述 B："我们从现场提取到了一枚指纹"', idx: 1 },
+    { text: '证据陈述 C："我们在案发当天中午被抢商铺的柜台上提取到了你的指纹"', idx: 2 },
+  ];
+
+  const efmStepNum = (sueSource === 'theory_sue') ? '第二步' : '第三步';
+  let html = `<h3>${efmStepNum}：EFM 证据框架分类检测</h3>`;
+  html += '<div class="context-box" style="font-size:13px;line-height:1.8;margin-bottom:16px;background:#fffdf0;border-left:3px solid #e6a817;">';
+  html += '<strong>场景：</strong>您已经在一家中午被抢劫的商铺的柜台上获取了指纹。这个证据表明您将要审讯的嫌疑人当日某时曾去过犯罪现场。<br><br>';
+  html += '<strong>问题：</strong>您将如何应用EFM（证据框架矩阵）、在审讯中使用这则证据以最大化嫌疑人陈述之间的不一致及陈述与证据之间的不一致？';
+  html += '</div>';
+  html += '<p style="font-size:13px;color:var(--text-light);margin-bottom:16px;">请为以下三条证据陈述分别选择正确的EFM分类（每条对应一个类别，不可重复）：</p>';
+
+  statements.forEach((stmt) => {
+    const prevResult = feedbackResults ? feedbackResults[stmt.idx] : null;
+    const prevAnswer = prevResult ? prevResult.user_answer : '';
+    html += `<div class="attention-question" id="sue-aq-${stmt.idx}">`;
+    html += `<div class="q-title">${stmt.text}</div>`;
+    categories.forEach((cat) => {
+      const checked = prevAnswer === cat.id ? 'checked' : '';
+      const disabled = prevResult && prevResult.correct ? 'disabled' : '';
+      html += `<div style="margin:4px 0;">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 8px;${disabled ? 'opacity:0.5;' : ''}">
+          <input type="radio" name="sue-aq-${stmt.idx}" value="${cat.id}" ${checked} ${disabled}> ${cat.label} <span style="font-size:11px;color:var(--text-light);">— ${cat.desc}</span>
+        </label>
+      </div>`;
+    });
+    html += `<div class="feedback" id="sue-fb-${stmt.idx}"></div>`;
+    html += '</div>';
+  });
+
+  if (feedbackResults) {
+    const allCorrect = feedbackResults.every(r => r.correct);
+    if (allCorrect) {
+      const nextHint = '🎉 全部正确！正在进入案件信息...';
+      html += '<div id="sueAttentionFeedback" style="color:#27ae60;font-weight:600;margin-bottom:12px;">' + nextHint + '</div>';
+    } else if (sueAttempt >= 2) {
+      html += '<div id="sueAttentionFeedback" style="color:#c0392b;font-weight:600;margin-bottom:12px;">❌ 两次机会已用完。您未能通过注意力检测，无法继续参与实验。</div>';
+    } else {
+      const wrongCount = feedbackResults.filter(r => !r.correct).length;
+      html += `<div id="sueAttentionFeedback" style="color:#c0392b;font-weight:600;margin-bottom:12px;">⚠️ 有 ${wrongCount} 条分类错误，请修改后重新提交（还剩 ${2 - sueAttempt} 次机会）。</div>`;
+      html += '<button class="btn btn-primary" id="sueAttentionSubmitBtn" onclick="submitSueAttention()">重新提交</button>';
+      html += `<button class="btn btn-outline" id="sueBackToMaterialBtn" onclick="showSUEMaterial('${sueSource}')">返回重新阅读材料</button>`;
+    }
+  } else {
+    html += '<div id="sueAttentionFeedback" style="margin-bottom:12px;"></div>';
+    html += '<button class="btn btn-primary" id="sueAttentionSubmitBtn" onclick="submitSueAttention()">提交答案</button>';
+    html += `<button class="btn btn-outline" id="sueBackToMaterialBtn" onclick="showSUEMaterial('${sueSource}')">返回重新阅读材料</button>`;
+  }
+
+  $('trainingContent').innerHTML = html;
+
+  // Auto-advance if all correct — go to case info first, avatar training later
+  if (feedbackResults && feedbackResults.every(r => r.correct)) {
+    setTimeout(() => showCaseInfo(), 800);
+  }
+}
+
+async function submitSueAttention() {
+  const answers = {};
+  let allAnswered = true;
+  [0, 1, 2].forEach(i => {
+    const el = document.querySelector(`input[name="sue-aq-${i}"]:checked`);
+    if (el) {
+      answers[i] = el.value;
+    } else {
+      allAnswered = false;
+    }
+  });
+
+  if (!allAnswered) {
+    alert('请为所有三条证据陈述选择对应的EFM分类。');
+    return;
+  }
+
+  sueAttempt++;
+  showLoading('正在验证答案...');
+  try {
+    const result = await api('/api/verify-sue-attention', {
+      phone: APP.phone,
+      answers: answers,
+      attempt: sueAttempt,
+    });
+
+    hideLoading();
+
+    if (result.terminated) {
+      showScreen('screen-attention-terminated');
+      return;
+    }
+
+    // Show per-statement feedback immediately
+    result.results.forEach((r) => {
+      const aq = document.getElementById(`sue-aq-${r.statement_index}`);
+      const fb = document.getElementById(`sue-fb-${r.statement_index}`);
+      const catLabels = { 'low-low': '低来源低具体', 'low-high': '低来源高具体', 'high-high': '高来源高具体' };
+      if (aq) {
+        aq.classList.remove('correct', 'wrong');
+        if (r.correct) {
+          aq.classList.add('correct');
+          if (fb) fb.innerHTML = '<span style="color:#27ae60;">✓ 正确</span>';
+        } else {
+          aq.classList.add('wrong');
+          if (fb) fb.innerHTML = `<span style="color:#c0392b;">✗ 错误（正确答案：${catLabels[r.correct_answer] || r.correct_answer}）</span>`;
+        }
+      }
+    });
+
+    // Re-render with feedback state after a short delay
+    setTimeout(() => renderSueEFMCheck(result.results), 1000);
+  } catch (err) {
+    hideLoading();
+    alert('验证失败: ' + err.message);
+  }
+}
+
+// ====== AVATAR TRAINING ======
+
+function needsSixAvatarSessions(trainingType) {
+  return trainingType === 'avatar_specific' || trainingType === 'avatar_general';
+}
+
+function getInterviewerTrainingType() {
+  return (APP.participant && APP.participant.training_type)
+    || (bookingState.trainingInfo && bookingState.trainingInfo.training_type)
+    || '';
+}
+
+async function ensureParticipantContext() {
+  const phone = APP.phone || bookingState.phone;
+  if (!phone) return;
+  APP.phone = phone;
+  if (APP.participant && APP.participant.training_type) return;
+  try {
+    const lookup = await api('/api/lookup', { phone });
+    if (lookup.found && lookup.participant) {
+      APP.participant = { ...lookup.participant };
+      if (lookup.participant.training_info) {
+        APP.participant.training_info = lookup.participant.training_info;
+      }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+async function openAvatarTrainingFromBooking() {
+  await ensureParticipantContext();
+  const tt = getInterviewerTrainingType();
+  if (!needsSixAvatarSessions(tt)) {
+    alert('当前账号不属于需要 6 次虚拟审讯训练的实验条件。');
+    return;
+  }
+  await showAvatarTrainingSessions();
+}
+
+async function showAvatarSpecificInstructions(data) {
+  // Show loading state first
+  $('trainingContent').innerHTML = `
+    <h3>第一步：阅读 ${trainingGroupLabel('avatar_specific')} 组培训说明</h3>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:12px;">正在加载培训材料...</p>
+    <div class="context-box" style="text-align:center;padding:40px;color:var(--text-light);">⏳ 加载中...</div>
+  `;
+  $('interviewerCompleteBtn').classList.add('hidden');
+  $('avatarChatArea').classList.add('hidden');
+  showScreen('screen-interviewer');
+
+  // Fetch avatar specific instructions text
+  let instructionsText = '';
+  try {
+    const resp = await fetch('/api/material-text/avatar_specific');
+    const result = await resp.json();
+    instructionsText = result.text || '';
+  } catch(e) {
+    instructionsText = '材料加载失败，请下载文件阅读。';
+  }
+
+  const escapedText = instructionsText
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\n/g, '<br>');
+
+  // Fetch material files for download
+  let filesHtml = '';
+  try {
+    const matResp = await fetch('/api/training-material/avatar_specific');
+    const matInfo = await matResp.json();
+    if (matInfo.files && matInfo.files.length > 0) {
+      filesHtml = '<div style="margin-top:16px;padding:12px;background:#f0f7ff;border-radius:6px;">';
+      filesHtml += '<div style="font-weight:600;font-size:13px;margin-bottom:8px;">📂 下载培训材料：</div>';
+      matInfo.files.forEach(f => {
+        filesHtml += `<a href="${f.url}" download style="display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;background:white;border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--primary);text-decoration:none;cursor:pointer;">📥 ${f.name}</a>`;
+      });
+      filesHtml += '</div>';
+    }
+  } catch(e) {}
+
+  const contentHtml = `
+    <h3>第一步：阅读 ${trainingGroupLabel('avatar_specific')} 组培训说明</h3>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:12px;">
+      请仔细阅读以下 ${trainingGroupLabel('avatar_specific')} 组培训说明（文字材料）。阅读完毕后进入 SUE 理论培训。
+    </p>
+    <div class="context-box" style="font-size:13px;line-height:2;">
+      ${escapedText || '材料正在加载中...'}
+    </div>
+    ${filesHtml}
+    <button class="btn btn-outline" onclick="downloadInterviewerMaterials()" style="margin-top:12px;">📥 下载培训材料</button>
+    <button class="btn btn-primary" id="btnAvatarSpecificDone" onclick="showSUEMaterial('avatar_specific')" style="margin-top:12px;">我已阅读完毕，进入 SUE 培训 →</button>
+  `;
+
+  $('trainingContent').innerHTML = contentHtml;
+  startReadingTimer('btnAvatarSpecificDone', 30, '我已阅读完毕，进入 SUE 培训 →');
+}
+
+async function showAvatarGeneralInstructions(data) {
+  // Show loading state first
+  $('trainingContent').innerHTML = `
+    <h3>第一步：阅读 ${trainingGroupLabel('avatar_general')} 组培训说明</h3>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:12px;">正在加载培训材料...</p>
+    <div class="context-box" style="text-align:center;padding:40px;color:var(--text-light);">⏳ 加载中...</div>
+  `;
+  $('interviewerCompleteBtn').classList.add('hidden');
+  $('avatarChatArea').classList.add('hidden');
+  showScreen('screen-interviewer');
+
+  // Fetch avatar general instructions text
+  let instructionsText = '';
+  try {
+    const resp = await fetch('/api/material-text/avatar_general');
+    const result = await resp.json();
+    instructionsText = result.text || '';
+  } catch(e) {
+    instructionsText = '材料加载失败，请下载文件阅读。';
+  }
+
+  const escapedText = instructionsText
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\n/g, '<br>');
+
+  // Fetch material files for download
+  let filesHtml = '';
+  try {
+    const matResp = await fetch('/api/training-material/avatar_general');
+    const matInfo = await matResp.json();
+    if (matInfo.files && matInfo.files.length > 0) {
+      filesHtml = '<div style="margin-top:16px;padding:12px;background:#f0f7ff;border-radius:6px;">';
+      filesHtml += '<div style="font-weight:600;font-size:13px;margin-bottom:8px;">📂 下载培训材料：</div>';
+      matInfo.files.forEach(f => {
+        filesHtml += `<a href="${f.url}" download style="display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;background:white;border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--primary);text-decoration:none;cursor:pointer;">📥 ${f.name}</a>`;
+      });
+      filesHtml += '</div>';
+    }
+  } catch(e) {}
+
+  const contentHtml = `
+    <h3>第一步：阅读 ${trainingGroupLabel('avatar_general')} 组培训说明</h3>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:12px;">
+      请仔细阅读以下 ${trainingGroupLabel('avatar_general')} 组培训说明（文字材料）。阅读完毕后进入 SUE 理论培训。
+    </p>
+    <div class="context-box" style="font-size:13px;line-height:2;">
+      ${escapedText || '材料正在加载中...'}
+    </div>
+    ${filesHtml}
+    <button class="btn btn-outline" onclick="downloadInterviewerMaterials()" style="margin-top:12px;">📥 下载培训材料</button>
+    <button class="btn btn-primary" id="btnAvatarGeneralDone" onclick="showSUEMaterial('avatar_general')" style="margin-top:12px;">我已阅读完毕，进入 SUE 培训 →</button>
+    <p style="font-size:12px;color:var(--text-light);margin-top:10px;">完成 SUE 培训、案件阅读与预约后，您将进行 <strong>6 次</strong> 虚拟审讯训练。</p>
+  `;
+
+  $('trainingContent').innerHTML = contentHtml;
+  startReadingTimer('btnAvatarGeneralDone', 30, '我已阅读完毕，进入 SUE 培训 →');
+}
+
+async function showAvatarTraining(data) {
+  const tt = (data && data.training_type) || getInterviewerTrainingType();
+  if (needsSixAvatarSessions(tt)) {
+    await showAvatarTrainingSessions();
+    return;
+  }
+  if (tt === 'theory_sue' || tt === 'control') {
+    goToCompletionFromCaseInfo();
+    return;
+  }
+  APP.chatHistory = [];
+  // Fetch material files for download
+  let filesHtml = '';
+  (async () => {
+    try {
+      const matResp = await fetch(`/api/training-material/${data.training_type}`);
+      const matInfo = await matResp.json();
+      if (matInfo.files && matInfo.files.length > 0) {
+        filesHtml = '<div style="margin-top:12px;padding:12px;background:#f0f7ff;border-radius:6px;">';
+        filesHtml += '<div style="font-weight:600;font-size:13px;margin-bottom:8px;">📂 可下载的材料：</div>';
+        matInfo.files.forEach(f => {
+          filesHtml += `<a href="${f.url}" download style="display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;background:white;border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--primary);text-decoration:none;cursor:pointer;">📥 ${f.name}</a>`;
+        });
+        filesHtml += '</div>';
+      }
+    } catch(e) {}
+    updateTrainingContentWithFiles(filesHtml);
+  })();
+
+  const contentHtml = `
+    <h3>Avatar 审讯训练</h3>
+    <p style="font-size:13px;margin-bottom:12px;">
+      您将面对一个由 AI 驱动的虚拟嫌疑人（LITE 模式，使用 DeepSeek LLM）。
+      嫌疑人拥有独特的人格设定和案件背景。请运用您的审讯技巧获取信息。
+    </p>
+    <p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">
+      提示：等待 Avatar 视频加载完成后，使用下方「开始录音 / 停止录音」进行语音提问；识别后的文字将发送给 AI，回复通过 Avatar 语音播放。完成后点击「结束训练」。
+    </p>
+    <div id="dynamicFilesArea"></div>
+  `;
+
+  $('trainingContent').innerHTML = contentHtml;
+  $('avatarChatArea').classList.remove('hidden');
+  $('interviewerCompleteBtn').classList.remove('hidden');
+  initLiveAvatar(data);
+  showScreen('screen-interviewer');
+}
+
+function updateTrainingContentWithFiles(filesHtml) {
+  const area = document.getElementById('dynamicFilesArea');
+  if (area) area.innerHTML = filesHtml;
+}
+
+// ====== CONTROL GROUP ======
+let controlAttentionRetryUsed = false;
+
+async function showControlGroup(data) {
+  $('trainingContent').innerHTML = `
+    <h3>${trainingGroupLabel('control')} 组培训材料</h3>
+    <p style="font-size:13px;">您被分配到 ${trainingGroupLabel('control')} 组。请先阅读下方文字材料，然后完成注意力检测。</p>
+    <div class="context-box" id="controlDocxContent" style="text-align:center;padding:40px;color:var(--text-light);">⏳ 加载材料中...</div>
+    <div id="dynamicFilesArea"></div>
+    <div id="controlActionArea"></div>
+  `;
+  $('interviewerCompleteBtn').classList.add('hidden');
+  $('avatarChatArea').classList.add('hidden');
+  showScreen('screen-interviewer');
+
+  // Fetch control group docx text
+  let docxText = '';
+  try {
+    const resp = await fetch('/api/material-text/control');
+    const result = await resp.json();
+    docxText = result.text || '';
+  } catch(e) {
+    docxText = '材料加载失败，请下载文件阅读。';
+  }
+
+  const escapedText = docxText
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\n/g, '<br>');
+
+  const contentEl = document.getElementById('controlDocxContent');
+  if (contentEl) {
+    contentEl.innerHTML = escapedText || '暂无材料内容';
+    contentEl.style.textAlign = 'left';
+    contentEl.style.padding = '16px 20px';
+  }
+
+  // Show attention check button below material
+  const actionArea = document.getElementById('controlActionArea');
+  if (actionArea) {
+    actionArea.innerHTML = `
+      <button class="btn btn-primary" id="btnControlMaterialDone" onclick="showControlAttentionCheck()" style="margin-top:16px;">我已阅读完毕，进入测试</button>
+      <button class="btn btn-outline" onclick="downloadInterviewerMaterials()" style="margin-top:8px;">📥 下载培训材料</button>
+    `;
+    startReadingTimer('btnControlMaterialDone', 30, '我已阅读完毕，进入测试');
+  }
+
+  // Fetch material files for download
+  try {
+    const matResp = await fetch('/api/training-material/control');
+    const matInfo = await matResp.json();
+    if (matInfo.files && matInfo.files.length > 0) {
+      let filesHtml = '<div style="margin-top:12px;padding:12px;background:#f0f7ff;border-radius:6px;">';
+      filesHtml += '<div style="font-weight:600;font-size:13px;margin-bottom:8px;">📂 下载材料：</div>';
+      matInfo.files.forEach(f => {
+        filesHtml += `<a href="${f.url}" download style="display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;background:white;border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--primary);text-decoration:none;cursor:pointer;">📥 ${f.name}</a>`;
+      });
+      filesHtml += '</div>';
+      const area = document.getElementById('dynamicFilesArea');
+      if (area) area.innerHTML = filesHtml;
+    }
+  } catch(e) {}
+}
+
+function showControlAttentionCheck() {
+  const questions = [
+    {
+      question: '根据培训手册，访谈开始时与嫌疑人进行日常对话（如询问基本信息）的主要目的是什么？',
+      options: ['A. 为了让嫌疑人放松警惕，以便后续出示证据。', 'B. 为了观察嫌疑人在无压力状态下的正常反应，从而建立"行为基线"。', 'C. 为了向嫌疑人展示访谈员的专业性。', 'D. 为了拖延时间，等待同事核实案情。'],
+    },
+    {
+      question: '根据手册中"识别欺骗信号"的指导，以下哪项行为在嫌疑人回答核心问题时，最有可能被视为试图隐瞒真相的可疑信号？',
+      options: ['A. 语速平稳，直视访谈员并迅速给出具体细节。', 'B. 在回答前重复访谈员的问题，并频繁使用"我尽量回忆"等模糊词汇。', 'C. 对访谈员的提问表现出合理的愤怒，并强烈要求联系律师。', 'D. 身体姿态保持放松，双手平放在桌面上。'],
+    },
+    {
+      question: '为了确保您的设备能够正常显示文本内容，并且您正在认真阅读本页的指引，请忽略下方列出的所有专业术语，直接选择"苹果"作为您的答案。',
+      options: ['A. 逻辑矛盾排查', 'B. 行为基线', 'C. 苹果', 'D. 认知负荷管理'],
+    },
+  ];
+
+  let html = '<h3>注意力检测</h3>';
+  html += '<p style="font-size:13px;color:var(--text-light);margin-bottom:16px;">请根据刚才阅读的材料回答以下问题。必须全部答对才能继续。</p>';
+
+  questions.forEach((q, i) => {
+    html += `<div class="attention-question" id="caq-${i}">`;
+    html += `<div class="q-title">题目 ${i + 1}: ${q.question}</div>`;
+    q.options.forEach((opt, j) => {
+      html += `<div style="margin:4px 0;">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 8px;">
+          <input type="radio" name="caq-${i}" value="${j}"> ${opt}
+        </label>
+      </div>`;
+    });
+    html += `<div class="feedback" id="caf-${i}"></div>`;
+    html += `</div>`;
+  });
+
+  html += `<div id="controlAttentionFeedback" style="margin-bottom:12px;"></div>`;
+  html += `<div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-prev" onclick="showControlGroup(APP.participant)">← 返回材料</button>
+    <button class="btn btn-primary" id="controlAttentionSubmitBtn" onclick="submitControlAttention()" style="flex:1;">提交答案</button>
+    <button class="btn btn-outline hidden" id="controlAttentionRetryBtn" onclick="retryControlAttention()">重新回答</button>
+  </div>`;
+
+  const actionArea = document.getElementById('controlActionArea');
+  if (actionArea) actionArea.innerHTML = html;
+  controlAttentionRetryUsed = false;
+}
+
+async function submitControlAttention() {
+  const answers = [];
+  for (let i = 0; i < 3; i++) {
+    const el = document.querySelector(`input[name="caq-${i}"]:checked`);
+    answers.push(el ? parseInt(el.value) : -1);
+  }
+
+  if (answers.some(a => a === -1)) {
+    alert('请回答所有问题后再提交。');
+    return;
+  }
+
+  showLoading('正在验证答案...');
+  try {
+    const result = await api('/api/verify-control-attention', {
+      phone: APP.phone,
+      answers: answers,
+      retry: controlAttentionRetryUsed,
+    });
+    hideLoading();
+
+    if (result.terminated) {
+      showScreen('screen-attention-terminated');
+      return;
+    }
+
+    result.results.forEach((r, i) => {
+      const aq = document.getElementById(`caq-${i}`);
+      const fb = document.getElementById(`caf-${i}`);
+      if (aq) {
+        aq.classList.remove('correct', 'wrong');
+        if (r.correct) {
+          aq.classList.add('correct');
+          if (fb) fb.innerHTML = '<span style="color:#27ae60;">✓ 正确</span>';
+        } else {
+          aq.classList.add('wrong');
+          if (fb) fb.innerHTML = '<span style="color:#c0392b;">✗ 错误</span>';
+        }
+      }
+    });
+
+    if (result.all_correct) {
+      document.getElementById('controlAttentionSubmitBtn').classList.add('hidden');
+      const retryBtn = document.getElementById('controlAttentionRetryBtn');
+      if (retryBtn) retryBtn.classList.add('hidden');
+      const feedback = document.getElementById('controlAttentionFeedback');
+      if (feedback) feedback.innerHTML = '<div style="color:#27ae60;font-weight:600;">全部正确！正在进入案件信息...</div>';
+
+      setTimeout(() => showCaseInfo(), 800);
+    } else if (result.retry_allowed) {
+      controlAttentionRetryUsed = true;
+      document.getElementById('controlAttentionSubmitBtn').classList.add('hidden');
+      const retryBtn = document.getElementById('controlAttentionRetryBtn');
+      if (retryBtn) retryBtn.classList.remove('hidden');
+      const feedback = document.getElementById('controlAttentionFeedback');
+      if (feedback) feedback.innerHTML = '<div style="color:#c0392b;font-weight:600;">部分答案不正确，请回顾材料后点击"重新回答"。</div>';
+    } else {
+      document.getElementById('controlAttentionSubmitBtn').classList.add('hidden');
+      const retryBtn = document.getElementById('controlAttentionRetryBtn');
+      if (retryBtn) retryBtn.classList.add('hidden');
+      const feedback = document.getElementById('controlAttentionFeedback');
+      if (feedback) feedback.innerHTML = '<div style="color:#c0392b;font-weight:600;">❌ 两次均未通过，无法继续参与实验。</div>';
+    }
+  } catch (err) {
+    hideLoading();
+    showError(err.message);
+  }
+}
+
+function retryControlAttention() {
+  for (let i = 0; i < 3; i++) {
+    const aq = document.getElementById(`caq-${i}`);
+    const fb = document.getElementById(`caf-${i}`);
+    if (aq) aq.classList.remove('correct', 'wrong');
+    if (fb) fb.innerHTML = '';
+  }
+  const feedback = document.getElementById('controlAttentionFeedback');
+  if (feedback) feedback.innerHTML = '';
+  document.getElementById('controlAttentionSubmitBtn').classList.remove('hidden');
+  const retryBtn = document.getElementById('controlAttentionRetryBtn');
+  if (retryBtn) retryBtn.classList.add('hidden');
+}
+
+function downloadInterviewerMaterials() {
+  const links = document.querySelectorAll('#trainingContent a[download]');
+  links.forEach(link => { link.click(); });
+}
+
+function buildChatInterface() {
+  $('avatarChatArea').innerHTML = `
+    <div class="chat-container" style="margin-top:12px;">
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-msg ai">
+          <div class="sender">🧑 嫌疑人</div>
+          <div id="chatInitMsg">你有什么要问的？</div>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <textarea id="chatInput" placeholder="输入您的讯问问题..." rows="1"></textarea>
+        <button id="chatSendBtn" onclick="sendChat()">发送</button>
+      </div>
+    </div>
+    <button class="btn btn-outline" onclick="downloadChatHistory()" style="margin-top:8px;width:100%;">📥 下载对话记录</button>
+  `;
+
+  // Enter to send
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey && document.activeElement === $('chatInput')) {
+      e.preventDefault();
+      sendChat();
+    }
+  });
+}
+
+async function processFallbackChatMessage(text) {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return;
+
+  appendChatMsg('user', trimmed);
+  appendTyping();
+
+  try {
+    APP.chatHistory.push({ role: 'user', content: trimmed });
+    const result = await api('/api/chat', {
+      phone: APP.phone,
+      message: trimmed,
+      history: APP.chatHistory.slice(0, -1),
+    });
+
+    removeTyping();
+    appendChatMsg('ai', result.reply);
+    APP.chatHistory.push({ role: 'assistant', content: result.reply });
+    await persistAvatarPracticeTranscript();
+  } catch (err) {
+    removeTyping();
+    appendChatMsg('ai', '（系统错误，请重试）');
+    APP.chatHistory.pop();
+  }
+}
+
+async function sendChat() {
+  const input = $('chatInput');
+  if (input) {
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    await processFallbackChatMessage(text);
+    return;
+  }
+  alert('请使用录音按钮进行语音输入');
+}
+
+function appendChatMsg(role, content) {
+  const container = $('chatMessages');
+  if (!container) return;
+  const div = document.createElement('div');
+  div.className = `chat-msg ${role}`;
+  if (role === 'ai') {
+    div.innerHTML = `<div class="sender">🧑 嫌疑人</div>${content}`;
+  } else {
+    div.innerHTML = `<div class="sender">👮 您</div>${content}`;
+  }
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function appendTyping() {
+  const container = $('chatMessages');
+  if (!container) return;
+  const div = document.createElement('div');
+  div.className = 'typing-indicator';
+  div.id = 'typingIndicator';
+  div.textContent = '嫌疑人正在输入...';
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function removeTyping() {
+  const el = document.getElementById('typingIndicator');
+  if (el) el.remove();
+}
+
+// ====== LIVEAVATAR INTEGRATION (LITE MODE) ======
+// LITE mode: the app uses its own DeepSeek LLM for suspect responses.
+// ElevenLabs TTS converts text → PCM 24kHz audio, sent to avatar via WebSocket.
+let liveKitRoom = null;
+let liveAvatarWS = null;
+let liveAvatarSessionToken = null;
+let liveAvatarSession = null;  // connection info (livekit_url, ws_url, etc.)
+let liveAvatarConfig = null;   // avatar config (elevenlabs_voice_id, etc.)
+let liveAvatarRetryCount = 0;
+let isAvatarSpeaking = false;
+let liveAvatarVideoConnected = false;
+const MAX_LIVEAVATAR_RETRIES = 2;
+
+APP.livePracticeRecorder = null;
+APP.livePracticeChunks = [];
+APP.livePracticeRecording = false;
+
+function updateAvatarStatus(msg, isError) {
+  const el = $('avatarStatus');
+  if (el) {
+    el.textContent = msg;
+    el.style.color = isError ? '#ff6b6b' : '#aaa';
+  }
+}
+
+function updateAvatarLoadingMsg(msg) {
+  const el = $('avatarLoadingMsg');
+  if (el) el.textContent = msg;
+}
+
+async function initLiveAvatar(data) {
+  APP.avatarInteractionMode = 'live';
+  $('avatarChatArea').innerHTML = `
+    <div style="background:#1a1a2e;border-radius:8px;overflow:hidden;position:relative;margin-top:12px;">
+      <div id="liveAvatarVideoContainer" style="width:100%;max-width:640px;margin:0 auto;background:#000;min-height:360px;position:relative;display:flex;align-items:center;justify-content:center;">
+        <div id="avatarPlaceholder" style="color:#666;font-size:16px;text-align:center;padding:20px;width:100%;">
+          <div style="font-size:40px;margin-bottom:12px;">🎭</div>
+          <div id="avatarLoadingMsg">LiveAvatar 加载中...</div>
+          <div id="avatarSteps" style="margin-top:16px;text-align:left;display:inline-block;font-size:12px;color:#888;">
+            <div id="ast-0" style="padding:4px 0;">⏳ 步骤 1/4: 获取 Avatar 配置...</div>
+            <div id="ast-1" style="padding:4px 0;">⏳ 步骤 2/4: 创建 LITE 会话...</div>
+            <div id="ast-2" style="padding:4px 0;">⏳ 步骤 3/4: 连接视频...</div>
+            <div id="ast-3" style="padding:4px 0;">⏳ 步骤 4/4: 连接 WebSocket...</div>
+          </div>
+        </div>
+      </div>
+      <div id="avatarStatus" style="padding:8px 16px;color:#aaa;font-size:12px;text-align:center;background:#16213e;">
+        🔄 正在连接 LiveAvatar 服务...
+      </div>
+      <div id="avatarChatInput" style="background:#16213e;border-top:1px solid #2a2a4a;padding:12px 16px;">
+        <p style="font-size:12px;color:#9ca3af;margin:0 0 10px 0;line-height:1.5;">语音讯问：点击「开始录音」说话，再次点击「停止录音」将自动转写并发送。</p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button type="button" class="btn btn-primary" id="livePracticeRecordBtn" onclick="toggleLivePracticeRecording()" style="flex:1;min-width:140px;">🎙️ 开始录音</button>
+          <span id="livePracticeRecordStatus" style="font-size:12px;color:#9ca3af;">待录音</span>
+        </div>
+      </div>
+      <div id="avatarActions" style="padding:8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;background:#16213e;">
+        <button class="btn btn-outline" onclick="openInterviewCaseSidebar()" style="font-size:11px;padding:4px 12px;">📋 案件背景</button>
+        <button class="btn btn-outline" onclick="openInterviewTranscriptModal()" style="font-size:11px;padding:4px 12px;">💬 文字记录</button>
+        <button class="btn btn-outline" id="avatarInterruptBtn" onclick="interruptAvatar()" style="font-size:11px;padding:4px 12px;display:none;">⏹️ 打断</button>
+        <button class="btn btn-outline" onclick="downloadChatHistory()" style="font-size:11px;padding:4px 12px;">📥 下载对话记录</button>
+        <button class="btn btn-outline" id="avatarRetryBtn" onclick="retryLiveAvatar()" style="font-size:11px;padding:4px 12px;display:none;color:#ff9800;border-color:#ff9800;">🔄 重试连接</button>
+      </div>
+    </div>
+  `;
+
+  liveAvatarRetryCount = 0;
+  await connectLiveAvatar();
+}
+
+function markStep(idx, status, msg) {
+  const prefixes = { 'done': '✅', 'fail': '❌', 'active': '⏳', 'skip': '⏭️' };
+  const p = prefixes[status] || '⏳';
+  const el = document.getElementById(`ast-${idx}`);
+  if (el) {
+    el.innerHTML = `${p} ${msg}`;
+    if (status === 'done') el.style.color = '#4caf50';
+    else if (status === 'fail') el.style.color = '#ff6b6b';
+    else el.style.color = '#888';
+  }
+}
+
+async function connectLiveAvatar() {
+  let lastError = '';
+  liveAvatarVideoConnected = false;
+
+  // Step 1: Get avatar config
+  try {
+    updateAvatarStatus('🔄 正在获取 Avatar 配置...');
+    updateAvatarLoadingMsg('正在获取配置...');
+    markStep(0, 'active', '步骤 1/4: 获取 Avatar 配置...');
+    const configResp = await api('/api/avatar/config', { phone: APP.phone });
+    liveAvatarConfig = configResp;
+    if (!configResp.avatar_id) {
+      throw new Error('Avatar 配置中缺少 avatar_id');
+    }
+    markStep(0, 'done', '步骤 1/4: 已获取 Avatar 配置');
+  } catch (err) {
+    if (needsSixAvatarSessions(getInterviewerTrainingType())) {
+      await showAvatarTrainingSessions();
+      return;
+    }
+    lastError = '获取配置失败: ' + err.message;
+    markStep(0, 'fail', '步骤 1/4: ' + lastError);
+    updateAvatarStatus('❌ ' + lastError, true);
+    showAvatarRetryBtn();
+    return;
+  }
+
+  // Step 2: Create LITE session via backend
+  try {
+    updateAvatarStatus('🔄 正在创建 LITE 会话...');
+    updateAvatarLoadingMsg('正在创建会话...');
+    markStep(1, 'active', '步骤 2/4: 创建 LITE 会话...');
+    liveAvatarSession = await api('/api/avatar/session', { phone: APP.phone });
+    liveAvatarSessionToken = liveAvatarSession.session_token;
+    if (!liveAvatarSession.livekit_url || !liveAvatarSession.livekit_token) {
+      throw new Error('未返回 LiveKit 凭证');
+    }
+    markStep(1, 'done', '步骤 2/4: LITE 会话已创建');
+    updateAvatarStatus('✅ 会话已创建，正在加载视频...');
+  } catch (err) {
+    lastError = '创建会话失败: ' + err.message;
+    markStep(1, 'fail', '步骤 2/4: ' + lastError);
+    updateAvatarStatus('❌ ' + lastError, true);
+    showAvatarRetryBtn();
+    return;
+  }
+
+  // Step 3: Load LiveKit SDK and connect for video
+  try {
+    updateAvatarStatus('🔄 正在加载 LiveKit SDK...');
+    updateAvatarLoadingMsg('正在加载视频 SDK...');
+    markStep(2, 'active', '步骤 3/4: 加载 LiveKit SDK...');
+    await loadLiveKitSDK();
+
+    updateAvatarStatus('🔄 正在连接视频房间...');
+    updateAvatarLoadingMsg('正在连接视频...');
+    const room = new LivekitClient.Room({
+      adaptiveStream: true,
+      dynacast: true,
+    });
+    liveKitRoom = room;
+
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
+      if (track.kind === 'video') {
+        const videoEl = track.attach();
+        videoEl.style.width = '100%';
+        videoEl.style.display = 'block';
+        videoEl.style.background = '#000';
+        videoEl.style.minHeight = '360px';
+        videoEl.style.objectFit = 'contain';
+        const container = $('liveAvatarVideoContainer');
+        if (container) {
+          container.innerHTML = '';
+          container.appendChild(videoEl);
+        }
+        updateAvatarStatus('✅ 视频已连接');
+        markStep(2, 'done', '步骤 3/4: 视频已连接');
+        updateAvatarLoadingMsg('LiveAvatar 已就绪');
+        liveAvatarVideoConnected = true;
+      }
+      if (track.kind === 'audio') {
+        track.attach();
+      }
+    });
+
+    room.on(LivekitClient.RoomEvent.Disconnected, () => {
+      updateAvatarStatus('⚠️ 视频会话已断开');
+    });
+
+    room.on(LivekitClient.RoomEvent.ConnectionStateChanged, (state) => {
+      if (state === 'reconnecting') updateAvatarStatus('🔄 正在重连视频...');
+      if (state === 'connected') updateAvatarStatus('✅ 视频已连接');
+    });
+
+    await room.connect(liveAvatarSession.livekit_url, liveAvatarSession.livekit_token);
+    room.remoteParticipants.forEach((p) => {
+      p.trackPublications.forEach((pub) => {
+        if (pub.track && pub.track.kind === 'video') {
+          const videoEl = pub.track.attach();
+          videoEl.style.width = '100%';
+          videoEl.style.display = 'block';
+          videoEl.style.background = '#000';
+          videoEl.style.minHeight = '360px';
+          videoEl.style.objectFit = 'contain';
+          const container = $('liveAvatarVideoContainer');
+          if (container) {
+            container.innerHTML = '';
+            container.appendChild(videoEl);
+            liveAvatarVideoConnected = true;
+            updateAvatarStatus('✅ 视频已连接');
+            markStep(2, 'done', '步骤 3/4: 视频已连接');
+            updateAvatarLoadingMsg('LiveAvatar 已就绪');
+          }
+        }
+      });
+    });
+    updateAvatarStatus('✅ 已连接到 LiveKit，正在配置 WebSocket...');
+  } catch (err) {
+    lastError = '视频连接失败: ' + err.message;
+    markStep(2, 'fail', '步骤 3/4: ' + lastError);
+    updateAvatarStatus('❌ ' + lastError, true);
+    await cleanupLiveAvatar();
+    showAvatarRetryBtn();
+    return;
+  }
+
+  // Step 4: Connect WebSocket for LITE mode commands
+  try {
+    updateAvatarStatus('🔄 正在连接命令通道...');
+    markStep(3, 'active', '步骤 4/4: 连接 WebSocket 命令通道...');
+    if (liveAvatarSession.ws_url) {
+      await connectLiveAvatarWebSocket(liveAvatarSession.ws_url);
+      markStep(3, 'done', '步骤 4/4: WebSocket 已连接');
+    } else {
+      // No WebSocket URL — use LiveKit data channel as fallback
+      markStep(3, 'skip', '步骤 4/4: 使用 LiveKit 数据通道（无 WS）');
+    }
+    if (liveAvatarVideoConnected) {
+      updateAvatarStatus('🎤 LITE 模式已就绪 — 使用下方录音按钮开始语音讯问');
+      updateAvatarLoadingMsg('');
+    } else {
+      updateAvatarStatus('⚠️ 命令通道已就绪，但视频流未到达（可重试连接）', true);
+      updateAvatarLoadingMsg('等待视频流...');
+      showAvatarRetryBtn();
+    }
+
+    // Keep-alive every 2.5 minutes
+    APP._keepAliveInterval = setInterval(() => {
+      api('/api/avatar/keep-alive', { session_token: liveAvatarSessionToken }).catch(() => {});
+    }, 150000);
+
+  } catch (err) {
+    lastError = 'WebSocket 连接失败: ' + err.message;
+    markStep(3, 'fail', '步骤 4/4: ' + lastError);
+    updateAvatarStatus('⚠️ 视频已就绪，但语音命令通道不可用', true);
+    // Still functional — can fallback to text-mode chat
+    initFallbackChat();
+  }
+}
+
+function connectLiveAvatarWebSocket(wsUrl) {
+  return new Promise((resolve, reject) => {
+    try {
+      const ws = new WebSocket(wsUrl);
+      liveAvatarWS = ws;
+
+      ws.onopen = () => {
+        console.log('[LiveAvatar] WebSocket connected');
+        resolve();
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          // Handle agent events
+          if (msg.type === 'agent.speak_started') {
+            isAvatarSpeaking = true;
+            showInterruptBtn(true);
+          } else if (msg.type === 'agent.speak_ended') {
+            isAvatarSpeaking = false;
+            showInterruptBtn(false);
+          }
+        } catch (e) {
+          console.warn('[LiveAvatar] WS message parse error:', e);
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.error('[LiveAvatar] WebSocket error:', err);
+      };
+
+      ws.onclose = (event) => {
+        console.warn('[LiveAvatar] WebSocket closed:', event.code, event.reason);
+        liveAvatarWS = null;
+        isAvatarSpeaking = false;
+        showInterruptBtn(false);
+      };
+
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        if (ws.readyState !== WebSocket.OPEN) {
+          reject(new Error('WebSocket connection timeout'));
+        }
+      }, 10000);
+
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+function showInterruptBtn(show) {
+  const btn = document.getElementById('avatarInterruptBtn');
+  if (btn) btn.style.display = show ? 'inline-block' : 'none';
+}
+
+function interruptAvatar() {
+  if (liveAvatarWS && liveAvatarWS.readyState === WebSocket.OPEN) {
+    const eventId = generateUUID();
+    liveAvatarWS.send(JSON.stringify({
+      type: 'agent.interrupt',
+      event_id: eventId,
+    }));
+    isAvatarSpeaking = false;
+    showInterruptBtn(false);
+    updateAvatarStatus('⏹️ 已打断');
+  }
+}
+
+function sendWSCommand(type, payload) {
+  const eventId = generateUUID();
+  // Try WebSocket first, then LiveKit data channel
+  if (liveAvatarWS && liveAvatarWS.readyState === WebSocket.OPEN) {
+    liveAvatarWS.send(JSON.stringify({ type, event_id: eventId, ...payload }));
+    return eventId;
+  }
+  // Fallback: LiveKit data channel
+  if (liveKitRoom && liveKitRoom.state === 'connected') {
+    const data = new TextEncoder().encode(JSON.stringify({
+      event_type: type.replace('agent.', 'avatar.'),
+      event_id: eventId,
+      ...payload,
+    }));
+    liveKitRoom.localParticipant.publishData(data, { reliable: true });
+    return eventId;
+  }
+  console.warn('[LiveAvatar] No active channel for command:', type);
+  return null;
+}
+
+function generateUUID() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+/**
+ * Split PCM 24kHz base64 audio into chunks for WebSocket transmission.
+ * First chunk = 400ms (19200 bytes), subsequent = 1s (48000 bytes).
+ * Matches the official LiveAvatar SDK's splitPcm24kStringToChunks behavior.
+ */
+function splitPcmToChunks(audioBase64) {
+  const firstChunkBytes = 24000 * 0.4 * 2;   // 19200
+  const subsequentChunkBytes = 24000 * 1.0 * 2; // 48000
+  const chunks = [];
+  if (!audioBase64 || audioBase64.length === 0) return chunks;
+  chunks.push(audioBase64.slice(0, firstChunkBytes));
+  for (let i = firstChunkBytes; i < audioBase64.length; i += subsequentChunkBytes) {
+    chunks.push(audioBase64.slice(i, i + subsequentChunkBytes));
+  }
+  return chunks;
+}
+
+async function persistAvatarPracticeTranscript() {}
+
+async function processAvatarChatMessage(text) {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return;
+
+  APP.chatHistory.push({ role: 'user', content: trimmed });
+
+  updateAvatarStatus('💬 DeepSeek 正在生成回答...');
+
+  try {
+    const chatResp = await api('/api/chat', {
+      phone: APP.phone,
+      message: trimmed,
+      history: APP.chatHistory.slice(0, -1),
+    });
+    const reply = chatResp.reply;
+
+    APP.chatHistory.push({ role: 'assistant', content: reply });
+    updateAvatarStatus('🔊 正在转换为语音...');
+
+    const ttsResp = await api('/api/tts', {
+      text: reply,
+      elevenlabs_voice_id: liveAvatarConfig ? liveAvatarConfig.elevenlabs_voice_id : '',
+    });
+    const audioBase64 = ttsResp.audio;
+
+    if (!audioBase64) {
+      updateAvatarStatus('⚠️ TTS 未返回音频，请重试', true);
+      APP.chatHistory.pop();
+      APP.chatHistory.pop();
+      return;
+    }
+
+    const chunks = splitPcmToChunks(audioBase64);
+    updateAvatarStatus('🔊 正在播放 Avatar 语音回复...');
+
+    const eventId = generateUUID();
+    if (liveAvatarWS && liveAvatarWS.readyState === WebSocket.OPEN) {
+      for (const chunk of chunks) {
+        liveAvatarWS.send(JSON.stringify({
+          type: 'agent.speak',
+          event_id: eventId,
+          audio: chunk,
+        }));
+      }
+      liveAvatarWS.send(JSON.stringify({
+        type: 'agent.speak_end',
+        event_id: eventId,
+      }));
+      updateAvatarStatus('✅ 语音已发送');
+    } else {
+      updateAvatarStatus('⚠️ WebSocket 未连接，无法播放语音。回复: ' + reply, true);
+    }
+
+    await persistAvatarPracticeTranscript();
+    refreshInterviewTranscriptBody();
+  } catch (err) {
+    updateAvatarStatus('❌ 对话失败: ' + err.message, true);
+    APP.chatHistory.pop();
+  }
+}
+
+async function toggleLivePracticeRecording() {
+  if (APP.livePracticeRecording) {
+    stopLivePracticeRecording();
+    return;
+  }
+  await startLivePracticeRecording();
+}
+
+async function startLivePracticeRecording() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('当前浏览器不支持录音功能');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    APP.livePracticeChunks = [];
+    try {
+      APP.livePracticeRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    } catch (_) {
+      APP.livePracticeRecorder = new MediaRecorder(stream);
+    }
+    APP.livePracticeRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) APP.livePracticeChunks.push(e.data);
+    };
+    APP.livePracticeRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      APP.livePracticeRecording = false;
+      const btn = $('livePracticeRecordBtn');
+      const st = $('livePracticeRecordStatus');
+      if (btn) btn.textContent = '🎙️ 开始录音';
+      if (st) st.textContent = '正在识别语音...';
+
+      const audioBlob = new Blob(APP.livePracticeChunks, { type: 'audio/webm' });
+      APP.livePracticeChunks = [];
+      if (!audioBlob.size) {
+        if (st) st.textContent = '录音为空，请重试';
+        return;
+      }
+      try {
+        const recognized = await transcribeInterviewAudio(audioBlob);
+        if (!recognized) {
+          if (st) st.textContent = '未识别到语音，请重试';
+          return;
+        }
+        if (st) st.textContent = '识别完成，正在发送...';
+        if (APP.avatarInteractionMode === 'fallback') {
+          await processFallbackChatMessage(recognized);
+        } else {
+          await processAvatarChatMessage(recognized);
+        }
+        if (st) st.textContent = '待录音';
+      } catch (err) {
+        if (st) st.textContent = '语音识别失败';
+        updateAvatarStatus('语音识别失败：' + err.message, true);
+      }
+    };
+    APP.livePracticeRecorder.start();
+    APP.livePracticeRecording = true;
+    const btn = $('livePracticeRecordBtn');
+    const st = $('livePracticeRecordStatus');
+    if (btn) btn.textContent = '⏹️ 停止录音';
+    if (st) st.textContent = '录音中…再次点击停止';
+  } catch (err) {
+    alert('无法启动录音：' + err.message);
+  }
+}
+
+function stopLivePracticeRecording() {
+  if (APP.livePracticeRecorder && APP.livePracticeRecorder.state === 'recording') {
+    APP.livePracticeRecorder.stop();
+  }
+}
+
+async function sendAvatarChat() {
+  const input = $('chatInput');
+  if (input) {
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    await processAvatarChatMessage(text);
+    return;
+  }
+  alert('请使用录音按钮进行语音输入');
+}
+
+function showAvatarRetryBtn() {
+  const btn = document.getElementById('avatarRetryBtn');
+  if (btn) btn.style.display = 'inline-block';
+}
+
+async function retryLiveAvatar() {
+  liveAvatarRetryCount++;
+  if (liveAvatarRetryCount > MAX_LIVEAVATAR_RETRIES) {
+    updateAvatarStatus('⚠️ 多次连接失败，切换到备用语音模式', true);
+    await cleanupLiveAvatar();
+    initFallbackChat();
+    return;
+  }
+  const btn = document.getElementById('avatarRetryBtn');
+  if (btn) btn.style.display = 'none';
+  // Reset steps display
+  for (let i = 0; i < 4; i++) {
+    const el = document.getElementById(`ast-${i}`);
+    if (el) {
+      el.style.color = '#888';
+      el.innerHTML = '⏳ ' + el.textContent.replace(/^[✅❌⏳⏭️]\s*/, '');
+    }
+  }
+  updateAvatarStatus('🔄 正在重试连接...（第 ' + liveAvatarRetryCount + '/' + MAX_LIVEAVATAR_RETRIES + ' 次）');
+  await cleanupLiveAvatar();
+  await connectLiveAvatar();
+}
+
+async function cleanupLiveAvatar() {
+  try {
+    if (APP.livePracticeRecorder && APP.livePracticeRecorder.state === 'recording') {
+      APP.livePracticeRecorder.onstop = null;
+      APP.livePracticeRecorder.stop();
+    }
+  } catch (e) {}
+  APP.livePracticeRecorder = null;
+  APP.livePracticeChunks = [];
+  APP.livePracticeRecording = false;
+
+  if (APP._keepAliveInterval) {
+    clearInterval(APP._keepAliveInterval);
+    APP._keepAliveInterval = null;
+  }
+  // Close WebSocket
+  if (liveAvatarWS) {
+    try {
+      liveAvatarWS.close();
+    } catch(e) {}
+    liveAvatarWS = null;
+  }
+  // Disconnect LiveKit
+  if (liveKitRoom) {
+    try {
+      liveKitRoom.disconnect();
+    } catch(e) {}
+    liveKitRoom = null;
+  }
+  // Stop server session
+  if (liveAvatarSessionToken) {
+    try {
+      await api('/api/avatar/stop', { session_token: liveAvatarSessionToken });
+    } catch(e) {}
+    liveAvatarSessionToken = null;
+  }
+  isAvatarSpeaking = false;
+  showInterruptBtn(false);
+}
+
+function loadLiveKitSDK() {
+  return new Promise((resolve, reject) => {
+    if (window.LivekitClient) { resolve(); return; }
+
+    const cdnSources = [
+      'https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js',
+      'https://unpkg.com/livekit-client@2/dist/livekit-client.umd.min.js',
+      'https://cdn.jsdelivr.net/npm/@livekit/client-sdk@2/dist/livekit-client.umd.min.js',
+    ];
+
+    let triedCount = 0;
+
+    function tryNext() {
+      if (triedCount >= cdnSources.length) {
+        reject(new Error('LiveKit SDK 加载失败：所有CDN源均不可用'));
+        return;
+      }
+      const src = cdnSources[triedCount];
+      triedCount++;
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = () => {
+        if (window.LivekitClient) { resolve(); }
+        else { tryNext(); }
+      };
+      script.onerror = () => {
+        console.warn('LiveKit CDN failed:', src);
+        tryNext();
+      };
+      document.head.appendChild(script);
+    }
+    tryNext();
+  });
+}
+
+function initFallbackChat() {
+  APP.avatarInteractionMode = 'fallback';
+  $('avatarChatArea').innerHTML = `
+    <div class="chat-container" style="margin-top:12px;">
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-msg ai">
+          <div class="sender">🧑 嫌疑人（备用模式）</div>
+          <div id="chatInitMsg">LiveAvatar 暂不可用。请使用下方录音按钮进行语音讯问；转写后将与 AI 对话。你有什么要问的？</div>
+        </div>
+      </div>
+      <div style="padding:12px;background:#f7f9fc;border-top:1px solid var(--border);">
+        <p style="font-size:12px;color:var(--text-light);margin:0 0 10px 0;">点击「开始录音」说话，再次点击停止并自动识别、发送。</p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button type="button" class="btn btn-primary" id="livePracticeRecordBtn" onclick="toggleLivePracticeRecording()" style="flex:1;min-width:140px;">🎙️ 开始录音</button>
+          <span id="livePracticeRecordStatus" style="font-size:12px;color:var(--text-light);">待录音</span>
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-outline" onclick="downloadChatHistory()" style="margin-top:8px;width:100%;">📥 下载对话记录</button>
+  `;
+}
+
+async function completeInterviewer() {
+  const tt = getInterviewerTrainingType();
+  if (needsSixAvatarSessions(tt)) {
+    await showAvatarTrainingSessions();
+    return;
+  }
+  await cleanupLiveAvatar();
+  goToCompletionFromCaseInfo();
+}
+
+// ====== CASE INFO SCREEN ======
+
+async function showCaseInfo() {
+  showLoading('正在加载案件信息...');
+  try {
+    const result = await api('/api/case-info', { phone: APP.phone });
+    hideLoading();
+
+    $('caseInfoTitle').textContent = result.case_title;
+    $('caseInfoGroup').textContent = (APP.participant && APP.participant.group_name)
+      ? '第 ' + APP.participant.group_name + ' 组'
+      : '待分配';
+
+    let html = '';
+    // Overview
+    html += '<h3>案件概述</h3>';
+    html += '<div class="context-box">' + escapeHtml(result.overview).replace(/\n/g, '<br>') + '</div>';
+
+    // Evidence list
+    html += '<h3 style="margin-top:16px;">证据材料</h3>';
+    (result.evidence || []).forEach(e => {
+      html += '<div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;">';
+      html += '<div style="font-weight:600;color:var(--primary);">' + e.id + ': ' + escapeHtml(e.title) + '</div>';
+      html += '<div style="font-size:12px;color:var(--text);margin-top:6px;">' + escapeHtml(e.detail) + '</div>';
+      html += '</div>';
+    });
+
+    $('caseInfoContent').innerHTML = html;
+
+    // All interviewer groups go to scheduling after case info
+    $('caseInfoNextBtn').textContent = '我已阅读完毕，进入时间预约 →';
+    $('caseInfoNextBtn').onclick = showBookingFromCaseInfo;
+
+    showScreen('screen-case-info');
+  } catch (err) {
+    hideLoading();
+    showError(err.message);
+  }
+}
+
+function goToNextAfterCaseInfo() {
+  showBookingFromCaseInfo();
+}
+
+// ---- Interviewer scheduling step (between case info and avatar training) ----
+function showBookingFromCaseInfo() {
+  APP.bookingReturnAction = 'after_case_info';
+  showScreen('screen-booking');
+  $('bookingPhoneInput').classList.add('hidden');
+  $('myBookingInfo').classList.add('hidden');
+  $('bookingSlotList').classList.add('hidden');
+  $('bookingResult').classList.add('hidden');
+  $('bookingPhone').value = APP.phone || '';
+  if (APP.phone) {
+    loadBookingSlotsForInterviewer();
+  }
+}
+
+async function loadBookingSlotsForInterviewer() {
+  const phone = APP.phone;
+  if (!phone || phone.length < 8) { alert('请输入有效的手机号'); return; }
+
+  showLoading('正在加载预约信息...');
+  try {
+    const slotResp = await fetch('/api/appointments/slots?_=' + Date.now());
+    if (!slotResp.ok) {
+      const text = await slotResp.text();
+      throw new Error('加载时间段失败: ' + (text.startsWith('{') ? JSON.parse(text).error : '服务器错误'));
+    }
+    const slotData = await slotResp.json();
+
+    const lookupResp = await fetch('/api/lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone }),
+    });
+    if (!lookupResp.ok) {
+      const text = await lookupResp.text();
+      if (text.startsWith('{')) {
+        const err = JSON.parse(text);
+        throw new Error(err.error || '未找到参与者记录');
+      }
+      throw new Error('服务器返回错误，请稍后重试');
+    }
+    const lookupData = await lookupResp.json();
+
+    if (!lookupData.found) {
+      hideLoading();
+      alert('未找到该手机号的参与者记录');
+      return;
+    }
+
+    const participant = lookupData.participant;
+    bookingState.phone = phone;
+    bookingState.role = participant.role;
+    bookingState.fullId = participant.full_id || '';
+    bookingState.allSlots = slotData.all_slots || [];
+    bookingState.slotInfo = slotData.slot_info || {};
+
+    // Get my booking
+    const myResp = await fetch('/api/appointments/my', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone }),
+    });
+    bookingState.myBooking = null;
+    if (myResp.ok) {
+      const myData = await myResp.json();
+      bookingState.myBooking = myData.appointment || null;
+    }
+    bookingState.trainingInfo = participant.training_info || null;
+    APP.phone = phone;
+    APP.participant = { ...participant };
+    if (participant.training_info) {
+      APP.participant.training_info = participant.training_info;
+    }
+
+    hideLoading();
+    renderBookingSlotsForInterviewer();
+  } catch (err) {
+    hideLoading();
+    alert('加载失败: ' + err.message);
+  }
+}
+
+function renderBookingSlotsForInterviewer() {
+  $('bookingPhoneInput').classList.add('hidden');
+  const actionArea = document.getElementById('bookingActionArea');
+
+  // Show current booking info
+  if (bookingState.myBooking) {
+    let matchStatusHtml = '';
+    if (bookingState.myBooking.is_matched) {
+      matchStatusHtml = `
+        <div style="margin-top:8px;padding:8px;background:#e8f5e9;border-radius:4px;color:#2e7d32;font-size:13px;font-weight:600;">
+          🎉 匹配成功！<br>
+          腾讯会议号: 123 456 7890
+        </div>`;
+    } else {
+      matchStatusHtml = `
+        <div style="margin-top:8px;padding:8px;background:#fff3cd;border-radius:4px;color:#856404;font-size:13px;">
+          ⏳ 目前该时间段只有您预约。<br>
+          请联系研究人员，并报上您的编号：<strong>${bookingState.myBooking.participant_id || bookingState.fullId || '暂无'}</strong>
+        </div>`;
+    }
+
+    $('myBookingInfo').innerHTML = `
+      <div style="padding:12px;background:#f0fdf4;border-radius:8px;margin-bottom:12px;border:1px solid var(--success);">
+        <span style="font-weight:600;color:var(--success);">✓ 您已预约</span>
+        <span style="margin-left:8px;">${bookingState.myBooking.time_slot}</span>
+        ${matchStatusHtml}
+        <div style="font-size:12px;color:var(--text-light);margin-top:8px;">预约已确认，请继续下一步。</div>
+      </div>
+    `;
+    $('myBookingInfo').classList.remove('hidden');
+    $('bookingSlotList').classList.add('hidden');
+    $('bookingResult').classList.add('hidden');
+
+    // Show "proceed" button
+    if (actionArea) {
+      const tt = APP.participant ? APP.participant.training_type : '';
+      let nextLabel = '完成实验 →';
+      if (needsSixAvatarSessions(tt)) {
+        nextLabel = '进入虚拟审讯训练（6次） →';
+      }
+      actionArea.innerHTML = `
+        <button class="btn btn-primary" onclick="proceedAfterBooking()" style="width:100%;margin-top:12px;">${nextLabel}</button>
+      `;
+    }
+    return;
+  }
+
+  if (actionArea) actionArea.innerHTML = '';
+  $('myBookingInfo').classList.add('hidden');
+
+  // Build slot list HTML
+  const { allSlots, slotInfo, role } = bookingState;
+  const roleLabel = role === 'S' ? '嫌疑人' : '审讯者';
+
+  let html = '<h3>请选择一个时间段预约</h3>';
+  html += `<p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">您的角色：<strong>${roleLabel}</strong></p>`;
+
+  const slotGroups = {};
+  allSlots.forEach(s => {
+    const dayKey = s.substring(0, 10);
+    if (!slotGroups[dayKey]) slotGroups[dayKey] = [];
+    slotGroups[dayKey].push(s);
+  });
+
+  Object.entries(slotGroups).forEach(([dayKey, slots]) => {
+    const d = new Date(dayKey + 'T00:00:00');
+    const dayName = WEEKDAY_NAMES[d.getDay()];
+    html += `<div style="font-weight:600;font-size:13px;margin-top:12px;margin-bottom:6px;">${dayKey} ${dayName}</div>`;
+    html += '<div style="display:grid;grid-template-columns: repeat(3, 1fr);gap:6px;">';
+
+    slots.forEach(s => {
+      const info = slotInfo[s] || {};
+      const rolesBooked = info.roles_booked || [];
+      const suspectBooked = rolesBooked.includes('S');
+      const interviewerBooked = rolesBooked.includes('I');
+      const myRoleBooked = role === 'S' ? suspectBooked : interviewerBooked;
+      const otherRoleBooked = role === 'S' ? interviewerBooked : suspectBooked;
+
+      let statusClass = 'avail';
+      let statusLabel = '可预约';
+      let onclick = `bookSlotForInterviewer('${s}')`;
+      let disabled = '';
+
+      if (myRoleBooked) {
+        statusClass = 'taken';
+        statusLabel = '已被预约';
+        onclick = '';
+        disabled = 'disabled';
+      } else if (otherRoleBooked) {
+        statusClass = 'other-avail';
+        statusLabel = '对方已约';
+      }
+
+      html += `<button class="slot-btn ${statusClass}" onclick="${onclick}" ${disabled} style="font-size:11px;padding:6px 4px;text-align:center;border-radius:6px;border:2px solid ${
+        otherRoleBooked && !myRoleBooked ? '#e65100' : 'var(--border)'
+      };cursor:${disabled ? 'not-allowed' : 'pointer'};background:${
+        myRoleBooked ? '#fde8e8' : otherRoleBooked ? '#fff8e1' : '#f0fdf4'
+      };">
+        ${s.substring(11, 16)}
+        <br><span style="font-size:10px;color:var(--text-light);">${statusLabel}</span>
+      </button>`;
+    });
+
+    html += '</div>';
+  });
+
+  $('bookingSlotList').innerHTML = html;
+  $('bookingSlotList').classList.remove('hidden');
+  $('bookingResult').classList.add('hidden');
+}
+
+async function bookSlotForInterviewer(slot) {
+  const { phone } = bookingState;
+  if (!phone) { alert('请先输入手机号'); return; }
+
+  if (!confirm(`确认预约 ${slot}？预约后将无法更改时间。`)) return;
+
+  showLoading('正在预约...');
+  try {
+    const result = await api('/api/appointments/book', { phone, time_slot: slot });
+    hideLoading();
+    bookingState.myBooking = { 
+      time_slot: slot, 
+      is_matched: result.is_matched, 
+      participant_id: result.participant_id 
+    };
+    renderBookingSlotsForInterviewer();
+  } catch (err) {
+    hideLoading();
+    alert('预约失败: ' + err.message);
+  }
+}
+
+async function proceedAfterBooking() {
+  await ensureParticipantContext();
+  const tt = getInterviewerTrainingType();
+  if (needsSixAvatarSessions(tt)) {
+    await showAvatarTrainingSessions();
+  } else {
+    goToCompletionFromCaseInfo();
+  }
+}
+
+async function goToCompletionFromCaseInfo() {
+  showLoading('正在完成...');
+  try {
+    const result = await api('/api/complete-interviewer', { phone: APP.phone });
+    hideLoading();
+    showCompletion(result);
+  } catch (err) {
+    hideLoading();
+    showError(err.message);
+  }
+}
+
+function downloadCaseInfo() {
+  const title = $('caseInfoTitle').textContent;
+  const content = $('caseInfoContent').innerText;
+  const blob = new Blob([title + '\n\n' + content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '案件信息.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ====== AVATAR TRAINING SESSIONS (6-session requirement) ======
+
+APP.trainingSession = null; // Current active training session state
+
+async function showAvatarTrainingSessions() {
+  await ensureParticipantContext();
+  const phone = APP.phone || bookingState.phone;
+  if (!phone) {
+    showError('请先输入手机号并注册');
+    return;
+  }
+  APP.phone = phone;
+  const tt = getInterviewerTrainingType();
+  if (!needsSixAvatarSessions(tt)) {
+    showError('当前实验条件不需要 6 次虚拟审讯训练');
+    return;
+  }
+  showLoading('正在加载训练状态...');
+  try {
+    const status = await api('/api/avatar-training/status', { phone: APP.phone });
+    hideLoading();
+
+    let html = '<div style="margin-bottom:12px;">';
+    html += '<div style="font-size:14px;font-weight:600;margin-bottom:4px;">';
+    html += '已完成: <span style="color:' + (status.all_completed ? 'var(--success)' : 'var(--accent)') + ';">' + status.completed_count + '</span> / ' + status.total_required;
+    html += '</div>';
+    html += '<div class="progress-bar" style="margin-bottom:12px;"><div class="progress-fill" style="width:' + (status.completed_count / status.total_required * 100) + '%;"></div></div>';
+    html += '</div>';
+
+    const hintEl = $('trainingTypeHint');
+    if (hintEl) {
+      if (status.training_type === 'avatar_specific') {
+        hintEl.innerHTML = `
+          <div><strong>${trainingGroupLabel('avatar_specific')} 组说明：</strong></div>
+          <div>6 次训练的回应风格与案件信息，与您配对案件中的嫌疑人设定一致。</div>
+          <div style="margin-top:4px;color:var(--accent);font-weight:600;">
+            ⚠️ 必须完成全部 6 次训练并提交判断，才算报名成功并获得实验编号。
+          </div>
+        `;
+      } else if (status.training_type === 'avatar_general') {
+        hintEl.innerHTML = `
+          <div><strong>${trainingGroupLabel('avatar_general')} 组说明：</strong></div>
+          <div>共 <strong>6</strong> 次训练，对应六种人格设定组合；案件背景为独立情境（与 ${trainingGroupLabel('avatar_specific')} 组不同）。</div>
+          <div style="margin-top:4px;color:var(--accent);font-weight:600;">
+            ⚠️ 请<strong>按顺序</strong>完成；每次须用语音讯问并在结束时提交有罪/无罪判断。全部完成后才算报名成功并获得实验编号。
+          </div>
+        `;
+      } else {
+        hintEl.innerHTML = `
+          <div>请按顺序完成 6 次训练会话。</div>
+          <div style="margin-top:4px;color:var(--accent);font-weight:600;">
+            ⚠️ 必须完成全部 6 次训练并提交判断，才算报名成功并获得实验编号。
+          </div>
+        `;
+      }
+    }
+
+    const nextNum = status.next_session_num;
+    html += '<div style="display:grid;grid-template-columns: repeat(3, 1fr);gap:8px;">';
+    status.sessions.forEach(s => {
+      const done = s.completed;
+      const canStart = !done && nextNum && Number(s.session_num) === Number(nextNum);
+      html += '<div style="border:1px solid ' + (done ? 'var(--success)' : 'var(--border)') + ';border-radius:8px;padding:10px;text-align:center;' + (done ? 'background:#f0fdf4;' : '') + '">';
+      html += '<div style="font-weight:600;font-size:13px;">训练 #' + s.session_num + '</div>';
+      if (status.training_type !== 'avatar_general') {
+        html += '<div style="font-size:11px;color:var(--text-light);margin-top:4px;line-height:1.35;">' + escapeHtml(s.avatar_label || '') + '</div>';
+      }
+      if (done) {
+        html += '<div style="color:var(--success);font-size:12px;margin-top:4px;">✓ 已完成</div>';
+        html += '<div style="font-size:11px;margin-top:2px;">判断: ' + (s.judgment === 'guilty' ? '有罪' : '无罪') + '</div>';
+        if (s.feedback) {
+          html += '<button class="btn btn-outline" style="font-size:10px;padding:2px 8px;margin-top:4px;" onclick="showTrainingFeedback(\'' + escapeHtml(s.feedback) + '\', ' + s.session_num + ', \'' + escapeHtml(s.avatar_guilt_label || '') + '\')">查看反馈</button>';
+        }
+      } else if (canStart) {
+        html += '<button class="btn btn-primary" style="font-size:11px;padding:4px 12px;margin-top:6px;" onclick="startAvatarTrainingSession(' + s.session_num + ')">开始训练</button>';
+      } else {
+        html += '<div style="font-size:11px;color:var(--text-light);margin-top:8px;padding:4px;">请先完成前序训练</div>';
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+
+    if (status.all_completed) {
+      html += '<div style="margin-top:12px;padding:12px;background:#f0fdf4;border-radius:8px;color:var(--success);font-weight:600;text-align:center;">';
+      html += '✓ 全部 6 次训练已完成！您可以完成实验获取编号了。';
+      html += '</div>';
+    } else {
+      html += '<div style="margin-top:12px;padding:8px 12px;background:#fff3cd;border-radius:6px;font-size:12px;color:#856404;">';
+      html += '⚠️ 请完成全部 6 次训练。您不需要一次性完成，可以随时回来继续。但只有完成全部训练后，才算报名成功并获得实验编号。';
+      html += '</div>';
+    }
+
+    $('trainingSessionList').innerHTML = html;
+    $('trainingSessionActions').innerHTML = status.all_completed
+      ? '<button class="btn btn-primary" onclick="goToCompletionAfterTraining()" style="flex:1;">完成训练，获取实验编号</button>'
+      : '';
+
+    $('interviewerCompleteBtn').classList.add('hidden');
+    $('avatarChatArea').classList.add('hidden');
+    $('avatarChatArea').innerHTML = '';
+    showScreen('screen-avatar-training');
+  } catch (err) {
+    hideLoading();
+    showError(err.message);
+  }
+}
+
+async function goToCompletionAfterTraining() {
+  showLoading('正在完成...');
+  try {
+    const result = await api('/api/complete-interviewer', { phone: APP.phone });
+    hideLoading();
+    showCompletion(result);
+  } catch (err) {
+    hideLoading();
+    showError(err.message);
+  }
+}
+
+function goToBookingFromTraining() {
+  showBookingSystem();
+}
+
+async function startAvatarTrainingSession(sessionNum) {
+  showLoading('正在启动训练会话...');
+  try {
+    const sessionData = await api('/api/avatar-training/start', { phone: APP.phone, session_num: sessionNum });
+    hideLoading();
+
+    APP.trainingSession = {
+      sessionNum: sessionData.session_num,
+      avatarSetting: sessionData.avatar_setting,
+      avatarGuilt: sessionData.avatar_guilt,
+      trainingType: sessionData.training_type || '',
+      systemPrompt: sessionData.system_prompt || '',
+      avatarLabel: sessionData.avatar_label || '',
+      chatHistory: [],
+      transcript: [],
+    };
+
+    $('activeSessionTitle').textContent = '训练 #' + sessionData.session_num;
+    const label = sessionData.avatar_label || '';
+    $('activeSessionSetting').textContent = sessionData.training_type === 'avatar_specific'
+      ? (trainingGroupLabel('avatar_specific') + ' 组 · ' + label)
+      : (trainingGroupLabel('avatar_general') + ' 组 · ' + label);
+    $('trainingChatMessages').innerHTML = '';
+    $('trainingChatPlaceholder').classList.remove('hidden');
+    $('trainingJudgmentForm').classList.add('hidden');
+    $('trainingFeedbackArea').classList.add('hidden');
+    $('submitTrainingJudgmentBtn').classList.add('hidden');
+    if ($('trainingRecordBtn')) $('trainingRecordBtn').disabled = false;
+    if ($('trainingRecordStatus')) $('trainingRecordStatus').textContent = '待录音';
+    if ($('trainingVideoPlaceholder')) $('trainingVideoPlaceholder').classList.remove('hidden');
+
+    // Initialize LiveAvatar for training
+    closeInterviewTranscriptModal();
+    closeInterviewCaseSidebar();
+    preloadInterviewCaseInfo();
+
+    initTrainingAvatar(sessionData);
+
+    showScreen('screen-avatar-training-active');
+  } catch (err) {
+    hideLoading();
+    if (err.message && err.message.includes('全部')) {
+      showAvatarTrainingSessions();
+    } else {
+      showError(err.message);
+    }
+  }
+}
+
+// ====== TRAINING AVATAR LIVEKIT INTEGRATION ======
+
+APP.trainingLiveAvatar = null;
+APP.trainingRecorder = null;
+APP.trainingRecordChunks = [];
+APP.trainingIsRecording = false;
+
+async function initTrainingAvatar(sessionData) {
+  await cleanupTrainingAvatar();
+
+  let wsUrl, livekitUrl, livekitToken;
+
+  try {
+    const sessionNum = sessionData.session_num || (APP.trainingSession && APP.trainingSession.sessionNum);
+    // Step 1: Create token
+    updateTrainingStatus('创建会话令牌...');
+    const tokenResp = await api('/api/avatar/token', { phone: APP.phone, session_num: sessionNum });
+    const sessionToken = tokenResp.session_token;
+    updateTrainingStatus('会话已创建，正在启动...');
+
+    // Step 2: Start session
+    const sessionResp = await api('/api/avatar/session', { phone: APP.phone, session_num: sessionNum });
+    wsUrl = sessionResp.ws_url;
+    livekitUrl = sessionResp.livekit_url;
+    livekitToken = sessionResp.livekit_token;
+    updateTrainingStatus('正在加载 LiveKit SDK...');
+
+    // Step 3: Load LiveKit SDK and connect
+    await loadLiveKitSDK();
+    await connectTrainingLiveKit(livekitUrl, livekitToken);
+    updateTrainingStatus('正在连接 WebSocket...');
+
+    // Step 4: Connect WebSocket
+    connectTrainingWebSocket(wsUrl);
+    updateTrainingStatus('');
+
+    $('trainingChatPlaceholder').classList.remove('hidden');
+    $('trainingChatPlaceholder').innerHTML = 'Avatar 已就绪，请开始您的访谈。';
+  } catch (err) {
+    updateTrainingStatus('');
+    showError('启动训练 Avatar 失败: ' + err.message);
+  }
+}
+
+function updateTrainingStatus(msg) {
+  const el = $('trainingChatPlaceholder');
+  if (el) {
+    if (msg) {
+      el.classList.remove('hidden');
+      el.innerHTML = '⏳ ' + msg;
+    } else {
+      el.classList.add('hidden');
+    }
+  }
+}
+
+async function connectTrainingLiveKit(url, token) {
+  return new Promise((resolve, reject) => {
+    const roomDiv = document.createElement('div');
+    roomDiv.id = 'training-livekit-room';
+    roomDiv.style.display = 'none';
+    document.body.appendChild(roomDiv);
+
+    if (typeof LivekitClient === 'undefined') {
+      reject(new Error('LiveKit SDK 未加载'));
+      return;
+    }
+
+    const room = new LivekitClient.Room();
+    APP.trainingLiveAvatar = { room: room, connected: false, videoAttached: false };
+
+    const attachTrack = (track) => {
+      try {
+        if (track.kind === 'video') {
+          const container = $('trainingLiveVideoContainer');
+          if (!container) return;
+          const videoEl = track.attach();
+          videoEl.style.width = '100%';
+          videoEl.style.height = '100%';
+          videoEl.style.minHeight = '280px';
+          videoEl.style.display = 'block';
+          videoEl.style.objectFit = 'contain';
+          container.innerHTML = '';
+          container.appendChild(videoEl);
+          APP.trainingLiveAvatar.videoAttached = true;
+          $('trainingChatPlaceholder').classList.remove('hidden');
+          $('trainingChatPlaceholder').innerHTML = 'Avatar 已就绪，请开始语音访谈。';
+        } else if (track.kind === 'audio') {
+          track.attach();
+        }
+      } catch (e) {}
+    };
+
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
+      attachTrack(track);
+    });
+
+    room.connect(url, token).then(() => {
+      APP.trainingLiveAvatar.connected = true;
+      room.remoteParticipants.forEach((p) => {
+        p.trackPublications.forEach((pub) => {
+          if (pub.track) attachTrack(pub.track);
+        });
+      });
+      resolve();
+    }).catch(err => {
+      reject(new Error('LiveKit 连接失败: ' + err.message));
+    });
+  });
+}
+
+function connectTrainingWebSocket(wsUrl) {
+  const ws = new WebSocket(wsUrl);
+  APP.trainingLiveAvatar = APP.trainingLiveAvatar || {};
+  APP.trainingLiveAvatar.ws = ws;
+
+  ws.onopen = () => {
+    APP.trainingLiveAvatar.wsReady = true;
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      handleTrainingWSMessage(msg);
+    } catch(e) {}
+  };
+
+  ws.onclose = () => {
+    APP.trainingLiveAvatar.wsReady = false;
+  };
+
+  ws.onerror = () => {};
+}
+
+function handleTrainingWSMessage(msg) {
+  if (msg.event_type === 'avatar.transcription') {
+    const text = msg.text || '';
+    if (text) {
+      const last = APP.trainingSession.transcript[APP.trainingSession.transcript.length - 1];
+      const isLikelyDuplicate = last && last.role === 'avatar' && (last.text || '').trim() === text.trim();
+      if (!isLikelyDuplicate) {
+        APP.trainingSession.transcript.push({ role: 'avatar', text: text });
+        appendTrainingChatMessage('avatar', text);
+      }
+    }
+  }
+  if (msg.event_type === 'session.stopped') {
+    APP.trainingLiveAvatar.wsReady = false;
+  }
+}
+
+function appendTrainingChatMessage(role, text) {
+  refreshInterviewTranscriptBody();
+}
+
+function sendTrainingWSCommand(cmd) {
+  if (APP.trainingLiveAvatar && APP.trainingLiveAvatar.ws && APP.trainingLiveAvatar.wsReady) {
+    const eventId = cmd.event_id || generateUUID();
+    const payload = { ...cmd };
+    // Training uses WebSocket channel directly; command field must be `type`.
+    if (payload.event_type && !payload.type) {
+      payload.type = payload.event_type;
+      delete payload.event_type;
+    }
+    if (!payload.event_id) payload.event_id = eventId;
+    APP.trainingLiveAvatar.ws.send(JSON.stringify(payload));
+  }
+}
+
+async function sendTrainingMessage() {
+  const input = $('trainingChatInput');
+  const message = input ? input.value.trim() : '';
+  if (!message) return;
+  if (input) input.value = '';
+
+  await processTrainingUserMessage(message);
+}
+
+async function processTrainingUserMessage(message) {
+  if (!message) return;
+
+  appendTrainingChatMessage('user', message);
+  APP.trainingSession.transcript.push({ role: 'user', text: message });
+  APP.trainingSession.chatHistory.push({ role: 'user', content: message });
+
+  // Interrupt current speech first
+  await interruptTrainingAvatar();
+
+  try {
+    // Get DeepSeek response
+    const chatResp = await api('/api/avatar-training/chat', {
+      phone: APP.phone,
+      session_num: APP.trainingSession.sessionNum,
+      message: message,
+      history: APP.trainingSession.chatHistory.slice(0, -1),
+    });
+
+    const reply = chatResp.reply;
+    APP.trainingSession.chatHistory.push({ role: 'assistant', content: reply });
+    appendTrainingChatMessage('avatar', reply);
+    APP.trainingSession.transcript.push({ role: 'avatar', text: reply });
+
+    // Get TTS
+    const ttsResp = await api('/api/avatar-training/tts', {
+      phone: APP.phone,
+      text: reply,
+    });
+
+    // Send audio chunks via WebSocket
+    if (APP.trainingLiveAvatar && APP.trainingLiveAvatar.wsReady && ttsResp.audio) {
+      const chunks = splitPcmToChunks(ttsResp.audio);
+
+      const speakEventId = generateUUID();
+
+      // Send first chunk with response command
+      sendTrainingWSCommand({
+        event_id: speakEventId,
+        event_type: 'agent.speak',
+        first_frame_latency: 400,
+        audio: chunks[0],
+      });
+
+      // Send remaining chunks
+      for (let i = 1; i < chunks.length; i++) {
+        await sleep(50);
+        sendTrainingWSCommand({
+          event_id: speakEventId,
+          event_type: 'agent.speak',
+          audio: chunks[i],
+        });
+      }
+
+      // Send speak end
+      await sleep(50);
+      sendTrainingWSCommand({
+        event_id: speakEventId,
+        event_type: 'agent.speak_end',
+      });
+    }
+
+    try {
+      await api('/api/avatar-training/save-transcript', {
+        phone: APP.phone,
+        session_num: APP.trainingSession.sessionNum,
+        transcript: APP.trainingSession.transcript,
+      });
+    } catch (e) {
+      console.warn('save-transcript', e);
+    }
+  } catch (err) {
+    appendTrainingChatMessage('system', '错误: ' + err.message);
+  }
+}
+
+async function toggleTrainingRecording() {
+  if (APP.trainingIsRecording) {
+    stopTrainingRecording();
+    return;
+  }
+  await startTrainingRecording();
+}
+
+async function startTrainingRecording() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('当前浏览器不支持录音功能');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    APP.trainingRecordChunks = [];
+    try {
+      APP.trainingRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    } catch (_) {
+      APP.trainingRecorder = new MediaRecorder(stream);
+    }
+    APP.trainingRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) APP.trainingRecordChunks.push(e.data);
+    };
+    APP.trainingRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      APP.trainingIsRecording = false;
+      if ($('trainingRecordBtn')) $('trainingRecordBtn').textContent = '🎙️ 开始录音';
+      if ($('trainingRecordStatus')) $('trainingRecordStatus').textContent = '正在识别语音...';
+
+      const audioBlob = new Blob(APP.trainingRecordChunks, { type: 'audio/webm' });
+      if (!audioBlob.size) {
+        $('trainingRecordStatus').textContent = '录音为空，请重试';
+        return;
+      }
+      try {
+        const text = await transcribeInterviewAudio(audioBlob);
+        if (!text) {
+          $('trainingRecordStatus').textContent = '未识别到语音，请重试';
+          return;
+        }
+        $('trainingRecordStatus').textContent = '识别完成，正在发送...';
+        await processTrainingUserMessage(text);
+        $('trainingRecordStatus').textContent = '待录音';
+      } catch (err) {
+        $('trainingRecordStatus').textContent = '语音识别失败';
+        appendTrainingChatMessage('system', '语音识别失败：' + err.message);
+      }
+    };
+    APP.trainingRecorder.start();
+    APP.trainingIsRecording = true;
+    if ($('trainingRecordBtn')) $('trainingRecordBtn').textContent = '⏹️ 停止录音';
+    if ($('trainingRecordStatus')) $('trainingRecordStatus').textContent = '录音中...再次点击可停止';
+  } catch (err) {
+    alert('无法启动录音：' + err.message);
+  }
+}
+
+function stopTrainingRecording() {
+  if (APP.trainingRecorder && APP.trainingRecorder.state === 'recording') {
+    APP.trainingRecorder.stop();
+  }
+}
+
+async function transcribeInterviewAudio(audioBlob) {
+  const formData = new FormData();
+  formData.append('phone', APP.phone || '');
+  formData.append('audio', audioBlob, 'interview_audio.webm');
+  const resp = await fetch('/api/avatar-training/stt', {
+    method: 'POST',
+    body: formData,
+  });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error || '转写失败');
+  return (data.text || '').trim();
+}
+
+async function interruptTrainingAvatar() {
+  if (APP.trainingLiveAvatar && APP.trainingLiveAvatar.ws && APP.trainingLiveAvatar.wsReady) {
+    sendTrainingWSCommand({ event_type: 'agent.interrupt' });
+    await sleep(100);
+  }
+}
+
+async function endTrainingSession() {
+  if (!APP.trainingSession) return;
+
+  if (APP.trainingIsRecording) stopTrainingRecording();
+  if ($('trainingRecordBtn')) $('trainingRecordBtn').disabled = true;
+  if ($('trainingRecordStatus')) $('trainingRecordStatus').textContent = '会话已结束';
+  $('submitTrainingJudgmentBtn').classList.remove('hidden');
+
+  if (confirm('确定结束本次访谈吗？结束后将无法继续与当前 Avatar 对话。')) {
+    await cleanupTrainingAvatar();
+  }
+}
+
+function showTrainingJudgmentForm() {
+  const sessionNum = APP.trainingSession.sessionNum;
+  let html = '<h3 style="border:none;margin-bottom:8px;">提交判断</h3>';
+  html += '<p style="font-size:13px;color:var(--text-light);margin-bottom:12px;">';
+  html += '请根据本次访谈，判断该嫌疑人是有罪还是无罪：';
+  html += '</p>';
+  html += '<div style="display:flex;gap:12px;margin-bottom:12px;">';
+  html += '<label style="cursor:pointer;display:flex;align-items:center;gap:6px;">';
+  html += '<input type="radio" name="trainingJudgment" value="guilty"> <strong>有罪</strong></label>';
+  html += '<label style="cursor:pointer;display:flex;align-items:center;gap:6px;">';
+  html += '<input type="radio" name="trainingJudgment" value="innocent"> <strong>无罪</strong></label>';
+  html += '</div>';
+  html += '<button class="btn btn-primary" onclick="submitTrainingJudgment()">提交判断并获取反馈</button>';
+
+  $('trainingJudgmentForm').innerHTML = html;
+  $('trainingJudgmentForm').classList.remove('hidden');
+}
+
+async function submitTrainingJudgment() {
+  const judgmentEl = document.querySelector('input[name="trainingJudgment"]:checked');
+  if (!judgmentEl) {
+    alert('请选择有罪或无罪');
+    return;
+  }
+
+  const judgment = judgmentEl.value;
+  const transcript = JSON.stringify(APP.trainingSession.transcript);
+
+  showLoading('正在提交判断并生成反馈...');
+  try {
+    const result = await api('/api/avatar-training/submit', {
+      phone: APP.phone,
+      session_num: APP.trainingSession.sessionNum,
+      judgment: judgment,
+      transcript: transcript,
+    });
+    hideLoading();
+
+    showTrainingFeedback(result.feedback, APP.trainingSession.sessionNum, result.avatar_guilt_label);
+
+    $('trainingJudgmentForm').classList.add('hidden');
+    $('submitTrainingJudgmentBtn').classList.add('hidden');
+  } catch (err) {
+    hideLoading();
+    showError(err.message);
+  }
+}
+
+function showTrainingFeedback(feedback, sessionNum, avatarGuiltLabel) {
+  let html = '<h3 style="border:none;margin-bottom:8px;">反馈 — 训练 #' + sessionNum + '</h3>';
+  if (avatarGuiltLabel) {
+    html += '<div style="margin-bottom:10px;padding:10px 12px;background:#fff8e1;border:1px solid #ffc107;border-radius:6px;font-size:13px;">';
+    html += '<strong>该 Avatar 的真实罪责状态：</strong>' + escapeHtml(avatarGuiltLabel);
+    html += '</div>';
+  }
+  html += '<div style="font-size:13px;line-height:1.8;white-space:pre-wrap;">' + escapeHtml(feedback) + '</div>';
+  html += '<button class="btn btn-primary" onclick="showAvatarTrainingSessions()" style="margin-top:12px;">返回训练列表</button>';
+
+  $('trainingFeedbackArea').innerHTML = html;
+  $('trainingFeedbackArea').classList.remove('hidden');
+}
+
+async function cleanupTrainingAvatar() {
+  try {
+    if (APP.trainingIsRecording) stopTrainingRecording();
+  } catch(e) {}
+  try {
+    if (APP.trainingLiveAvatar && APP.trainingLiveAvatar.ws) {
+      APP.trainingLiveAvatar.ws.close();
+    }
+  } catch(e) {}
+  try {
+    if (APP.trainingLiveAvatar && APP.trainingLiveAvatar.room) {
+      APP.trainingLiveAvatar.room.disconnect();
+    }
+  } catch(e) {}
+  APP.trainingLiveAvatar = null;
+  APP.trainingRecorder = null;
+  APP.trainingRecordChunks = [];
+  APP.trainingIsRecording = false;
+  const roomDiv = document.getElementById('training-livekit-room');
+  if (roomDiv) roomDiv.remove();
+  const videoContainer = $('trainingLiveVideoContainer');
+  if (videoContainer) {
+    videoContainer.innerHTML = '<div id="trainingVideoPlaceholder" style="color:#9ca3af;font-size:14px;text-align:center;padding:16px;">等待视频连接...</div>';
+  }
+}
+
+// ====== DOWNLOAD HELPERS ======
+function downloadSuspectContext() {
+  const context = $('suspectContext').textContent;
+  const title = $('suspectCase').textContent;
+  const blob = new Blob([`案件背景 - ${title}\n\n${context}`], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '案件背景.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadProfile() {
+  const profile = collectProfile();
+  let text = '个人信息问卷\n\n';
+  PROFILE_QUESTIONS.forEach(q => {
+    let val = profile[q.id] || '';
+    if (Array.isArray(val)) val = val.join(', ');
+    text += `${q.label}: ${val}\n`;
+  });
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '个人信息问卷.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function downloadAllMaterials() {
+  showLoading('正在生成材料...');
+  try {
+    const resp = await fetch('/api/generate-results-docx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: APP.phone }),
+    });
+    if (!resp.ok) throw new Error('生成失败');
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const disposition = resp.headers.get('Content-Disposition') || '';
+    const fnameMatch = disposition.match(/filename="?(.+?)"?$/);
+    a.download = fnameMatch ? fnameMatch[1] : '实验记录.docx';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('下载失败: ' + err.message);
+  }
+  hideLoading();
+}
+
+function downloadChatHistory() {
+  let text = 'Avatar审讯对话记录\n\n';
+  APP.chatHistory.forEach(msg => {
+    const role = msg.role === 'user' ? '审讯者' : '嫌疑人';
+    text += `${role}: ${msg.content}\n\n`;
+  });
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '审讯对话记录.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+let screenshotConfirmed = false;
+
+function showScreenshotModal() {
+  if (screenshotConfirmed) return true;
+  $('screenshotModal').classList.add('show');
+  return false;
+}
+
+function confirmScreenshot() {
+  screenshotConfirmed = true;
+  $('screenshotModal').classList.remove('show');
+}
+
+function remindScreenshot() {
+  $('screenshotModal').classList.remove('show');
+  setTimeout(() => {
+    alert('请截图此页面（包含您的编号），然后您可以继续操作。完成后请点击"我已截图"。');
+    $('screenshotModal').classList.add('show');
+  }, 300);
+}
+
+// ====== COMPLETION ======
+function showCompletion(data) {
+  APP.completed = true;
+  $('completionMsg').textContent = data.message || '';
+  showScreen('screen-completion');
+  document.querySelector('.completion-box').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ====== ERROR ======
+function showError(msg) {
+  $('errorMsg').textContent = msg;
+  showScreen('screen-error');
+}
+
+// ====== NEW BOOKING SYSTEM (dual-role) ======
+let bookingState = {
+  phone: '',
+  role: '',
+  fullId: '',
+  allSlots: [],
+  slotInfo: {},
+  myBooking: null,
+};
+
+const WEEKDAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+function showPhoneScreen() {
+  showScreen('screen-phone');
+}
+
+async function showBookingSystem() {
+  showScreen('screen-booking');
+  $('bookingPhoneInput').classList.remove('hidden');
+  $('myBookingInfo').classList.add('hidden');
+  $('bookingSlotList').classList.add('hidden');
+  $('bookingResult').classList.add('hidden');
+  $('bookingPhone').value = APP.phone || '';
+  if (APP.phone) {
+    loadBookingSlots();
+  }
+}
+
+function showBookingFromHome() {
+  showScreen('screen-booking');
+  $('bookingPhoneInput').classList.remove('hidden');
+  $('myBookingInfo').classList.add('hidden');
+  $('bookingSlotList').classList.add('hidden');
+  $('bookingResult').classList.add('hidden');
+  $('bookingPhone').value = '';
+}
+
+function goBackFromBooking() {
+  showScreen('screen-phone');
+}
+
+async function loadBookingSlots() {
+  const phone = $('bookingPhone').value.trim();
+  if (!phone || phone.length < 8) { alert('请输入有效的手机号'); return; }
+
+  showLoading('正在加载预约信息...');
+  try {
+    // Get slots info (cache-busting via timestamp to ensure fresh data)
+    const slotResp = await fetch('/api/appointments/slots?_=' + Date.now());
+    if (!slotResp.ok) {
+      const text = await slotResp.text();
+      throw new Error('加载时间段失败: ' + (text.startsWith('{') ? JSON.parse(text).error : '服务器错误'));
+    }
+    const slotData = await slotResp.json();
+
+    // Look up participant
+    const lookupResp = await fetch('/api/lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone }),
+    });
+    if (!lookupResp.ok) {
+      const text = await lookupResp.text();
+      if (text.startsWith('{')) {
+        const err = JSON.parse(text);
+        throw new Error(err.error || '未找到参与者记录');
+      }
+      throw new Error('服务器返回错误，请稍后重试');
+    }
+    const lookupData = await lookupResp.json();
+
+    if (!lookupData.found) {
+      hideLoading();
+      alert('未找到该手机号的参与者记录');
+      return;
+    }
+
+    const participant = lookupData.participant;
+    const myBooking = lookupData.appointment;
+    const myRole = participant.role;
+
+    bookingState.phone = phone;
+    bookingState.role = myRole;
+    bookingState.fullId = participant.full_id || '';
+    bookingState.trainingInfo = participant.training_info || null;
+    bookingState.allSlots = slotData.all_slots || [];
+    bookingState.slotInfo = slotData.slot_info || {};
+    bookingState.myBooking = myBooking;
+    APP.phone = phone;
+    APP.participant = { ...participant };
+    if (participant.training_info) {
+      APP.participant.training_info = participant.training_info;
+    }
+
+    hideLoading();
+    renderBookingUI();
+  } catch (err) {
+    hideLoading();
+    alert('加载失败: ' + err.message);
+  }
+}
+
+function renderBookingUI() {
+  const { role, fullId, allSlots, slotInfo, myBooking, trainingInfo } = bookingState;
+  const roleLabel = role === 'S' ? '嫌疑人' : '审讯者';
+  const roleIcon = role === 'S' ? '🔵' : '🟢';
+  const complementaryRoleLabel = role === 'S' ? '审讯者' : '嫌疑人';
+  const complementaryRole = role === 'S' ? 'I' : 'S';
+
+  $('bookingPhoneInput').classList.add('hidden');
+
+  // Show training status for avatar groups
+  let trainingHtml = '';
+  if (trainingInfo && trainingInfo.training_type && role === 'I') {
+    if (!trainingInfo.all_completed) {
+      trainingHtml = `
+        <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;margin-bottom:12px;">
+          <div style="font-weight:700;font-size:13px;color:#856404;">⚠️ 虚拟审讯训练未完成</div>
+          <div style="font-size:12px;color:#856404;margin-top:4px;">
+            您已完成 ${trainingInfo.completed_count}/${trainingInfo.total_required} 次训练。必须完成全部 6 次训练后才能获取实验编号。
+          </div>
+          <a href="#" onclick="openAvatarTrainingFromBooking();return false;" style="font-size:12px;color:var(--primary);font-weight:600;display:inline-block;margin-top:6px;">→ 前往训练页面</a>
+        </div>`;
+    } else {
+      trainingHtml = `
+        <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px 16px;margin-bottom:12px;">
+          <div style="font-weight:700;font-size:13px;color:var(--success);">✓ 虚拟审讯训练已完成 (6/6)</div>
+        </div>`;
+    }
+  }
+
+  // Show my booking info if exists
+  let myBookingHtml = '';
+  if (myBooking) {
+    const slotDt = new Date(myBooking.time_slot);
+    const time = myBooking.time_slot.slice(11, 16);
+    const dateLabel = formatDateLabel(myBooking.time_slot);
+
+    let matchStatusHtml = '';
+    if (myBooking.is_matched) {
+      matchStatusHtml = `
+        <div style="margin-top:8px;padding:8px;background:#e8f5e9;border-radius:4px;color:#2e7d32;font-size:13px;font-weight:600;">
+          🎉 匹配成功！<br>
+          腾讯会议号: 123 456 7890
+        </div>`;
+    } else {
+      matchStatusHtml = `
+        <div style="margin-top:8px;padding:8px;background:#fff3cd;border-radius:4px;color:#856404;font-size:13px;">
+          ⏳ 目前该时间段只有您预约。<br>
+          请联系研究人员，并报上您的编号：<strong>${myBooking.participant_id || fullId || '暂无'}</strong>
+        </div>`;
+    }
+
+    myBookingHtml = `
+      <div class="my-booking-card">
+        <div style="font-size:12px;color:var(--text-light);">📌 我的预约</div>
+        <div style="font-size:16px;font-weight:600;margin:4px 0;">${dateLabel} ${time}</div>
+        <div style="font-size:13px;color:var(--text-light);">
+          角色：${roleLabel}
+        </div>
+        ${matchStatusHtml}
+        <button class="btn btn-outline" onclick="cancelMyBooking()" style="margin-top:12px;color:var(--accent);border-color:var(--accent);">取消预约</button>
+      </div>`;
+  }
+
+  // Count how many slots have complementary role waiting
+  let waitingSlots = 0;
+  allSlots.forEach(s => {
+    const info = slotInfo[s] || {};
+    const rolesBooked = info.roles_booked || [];
+    if (rolesBooked.includes(complementaryRole) && !rolesBooked.includes(role)) {
+      waitingSlots++;
+    }
+  });
+
+  // Group slots by date
+  const groups = {};
+  allSlots.forEach(s => {
+    const dk = s.slice(0, 10);
+    if (!groups[dk]) groups[dk] = [];
+    groups[dk].push(s);
+  });
+
+  let slotsHtml = '';
+  const dateKeys = Object.keys(groups).sort();
+
+  if (dateKeys.length === 0) {
+    slotsHtml = '<p style="text-align:center;color:var(--text-light);padding:40px;">暂无可用时间段</p>';
+  } else {
+    // Show pairing hint if there are slots waiting for complementary role
+    if (waitingSlots > 0 && !myBooking) {
+      slotsHtml += `
+        <div style="background:#fff8e1;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
+          <span style="font-size:24px;">🔥</span>
+          <div>
+            <div style="font-weight:700;font-size:13px;color:#e65100;">建议优先选择已有${complementaryRoleLabel}预约的时间段</div>
+            <div style="font-size:12px;color:#856404;">目前有 <strong>${waitingSlots}</strong> 个时间段已有${complementaryRoleLabel}预约，选择这些时间段可以尽快完成配对，开展正式访谈。</div>
+          </div>
+        </div>`;
+    }
+
+    dateKeys.forEach(dateKey => {
+      const d = new Date(dateKey + 'T12:00:00');
+      const todayStr = new Date().toISOString().split('T')[0];
+      const isToday = dateKey === todayStr;
+      const month = d.getMonth() + 1;
+      const dom = d.getDate();
+      const weekDay = WEEKDAY_NAMES[d.getDay()];
+      const dateLabel = isToday ? '今天' : `${month}月${dom}日`;
+
+      slotsHtml += `<div class="booking-date-group">`;
+      slotsHtml += `<div class="booking-date-header">
+        <span>${dateLabel} ${weekDay}</span>
+        <span class="day-badge${isToday ? ' today' : ''}">${dateKey}</span>
+      </div>`;
+      slotsHtml += `<div class="booking-grid">`;
+
+      groups[dateKey].sort().forEach(slot => {
+        const time = slot.slice(11, 16);
+        const info = slotInfo[slot] || { roles_booked: [], fully_booked: false };
+        const rolesBooked = info.roles_booked || [];
+        const suspectBooked = rolesBooked.includes('S');
+        const interviewerBooked = rolesBooked.includes('I');
+        const fullyBooked = suspectBooked && interviewerBooked;
+        const isMySlot = myBooking && myBooking.time_slot === slot;
+        const hasComplementary = rolesBooked.includes(complementaryRole);
+        const isRecommended = hasComplementary && !rolesBooked.includes(role) && !isMySlot;
+
+        let suspectClass = suspectBooked ? 'taken' : 'open';
+        let interviewerClass = interviewerBooked ? 'taken' : 'open';
+        if (isMySlot) {
+          if (role === 'S') suspectClass = 'mine';
+          else interviewerClass = 'mine';
+        }
+
+        let cardExtraClass = '';
+        if (fullyBooked && !isMySlot) cardExtraClass = ' booked-full';
+        else if (isRecommended) cardExtraClass = ' recommended';
+
+        let actionBtn = '';
+        if (fullyBooked && !isMySlot) {
+          actionBtn = `<button class="book-btn" disabled>已满</button>`;
+        } else if (isMySlot) {
+          actionBtn = `<button class="book-btn cancel-btn" onclick="cancelMyBooking()">取消</button>`;
+        } else {
+          const sameRoleBooked = role === 'S' ? suspectBooked : interviewerBooked;
+          if (sameRoleBooked) {
+            actionBtn = `<button class="book-btn" disabled>已有${roleLabel}</button>`;
+          } else if (isRecommended) {
+            actionBtn = `<button class="book-btn book-btn-recommend" onclick="bookSlot('${slot}')">🔥 预约配对</button>`;
+          } else {
+            actionBtn = `<button class="book-btn" onclick="bookSlot('${slot}')">预约</button>`;
+          }
+        }
+
+        slotsHtml += `<div class="slot-card${cardExtraClass}">
+          <div class="time-display">
+            ${time}
+            ${isRecommended ? '<br><small style="color:#e65100;font-weight:600;">⭐ 已有' + complementaryRoleLabel + '预约</small>' : ''}
+            ${isMySlot ? '<br><small style="color:var(--primary);">✅ 我的预约</small>' : ''}
+          </div>
+          <div class="role-spots">
+            <span class="role-spot ${suspectClass}">🔵 ${suspectBooked ? '嫌疑人已约' : '嫌疑人'}</span>
+            <span class="role-spot ${interviewerClass}">🟢 ${interviewerBooked ? '审讯者已约' : '审讯者'}</span>
+          </div>
+          ${actionBtn}
+        </div>`;
+      });
+
+      slotsHtml += `</div></div>`;
+    });
+  }
+
+  // My info (no longer shows number - only after booking)
+  const myInfoHtml = `
+    <div class="appt-detail-box" style="margin-bottom:16px;">
+      <div class="row"><span class="lbl">角色</span><span class="val">${roleIcon} ${roleLabel}</span></div>
+      <div class="row"><span class="lbl">状态</span><span class="val">${myBooking ? '<span style="color:var(--success);">已预约</span>' : '<span style="color:var(--warning);">未预约 — 请选择一个时间段</span>'}</span></div>
+      ${!myBooking && waitingSlots > 0 ? `<div class="row"><span class="lbl">💡 提示</span><span class="val" style="color:#e65100;">建议优先选择标注"已有${complementaryRoleLabel}预约"的时间段</span></div>` : ''}
+    </div>
+  `;
+
+  $('myBookingInfo').innerHTML = trainingHtml + myInfoHtml + myBookingHtml;
+  $('myBookingInfo').classList.remove('hidden');
+  $('bookingSlotList').innerHTML = slotsHtml;
+  $('bookingSlotList').classList.remove('hidden');
+
+  const actionArea = document.getElementById('bookingActionArea');
+  if (actionArea && role === 'I' && myBooking && needsSixAvatarSessions(trainingInfo && trainingInfo.training_type)) {
+    if (!trainingInfo.all_completed) {
+      actionArea.innerHTML = `
+        <button class="btn btn-primary" onclick="proceedAfterBooking()" style="width:100%;margin-top:12px;">
+          进入虚拟审讯训练（6次） →
+        </button>`;
+    } else {
+      actionArea.innerHTML = `
+        <button class="btn btn-primary" onclick="goToCompletionAfterTraining()" style="width:100%;margin-top:12px;">
+          完成实验，获取实验编号 →
+        </button>`;
+    }
+  } else if (actionArea) {
+    actionArea.innerHTML = '';
+  }
+}
+
+function formatDateLabel(slotStr) {
+  const d = new Date(slotStr);
+  const todayStr = new Date().toISOString().split('T')[0];
+  const slotDate = slotStr.slice(0, 10);
+  if (slotDate === todayStr) return '今天';
+  const month = d.getMonth() + 1;
+  const dom = d.getDate();
+  return `${month}月${dom}日`;
+}
+
+async function bookSlot(slot) {
+  const { phone } = bookingState;
+  if (!phone) { alert('请先输入手机号'); return; }
+
+  if (!confirm(`确认预约 ${slot}？\n\n预约后将无法更改时间。您确定要预约吗？`)) return;
+
+  showLoading('正在预约...');
+  try {
+    const result = await api('/api/appointments/book', { phone, time_slot: slot });
+    hideLoading();
+
+    // Show booking success with ID and screenshot reminder
+    const fullId = bookingState.fullId;
+    const groupNum = fullId ? fullId.split('-')[0] : '';
+    const roleLabel = bookingState.role === 'S' ? '嫌疑人' : '审讯者';
+
+    let matchStatusHtml = '';
+    if (result.is_matched) {
+      matchStatusHtml = `
+        <div style="margin-top:12px;padding:12px;background:#e8f5e9;border-radius:6px;color:#2e7d32;font-size:14px;font-weight:600;border:1px solid #4caf50;">
+          🎉 匹配成功！<br>
+          您和另一位参与者都已预约此时间。<br>
+          腾讯会议号: 123 456 7890
+        </div>`;
+    } else {
+      matchStatusHtml = `
+        <div style="margin-top:12px;padding:12px;background:#fff3cd;border-radius:6px;color:#856404;font-size:14px;border:1px solid #ffc107;">
+          ⏳ 目前该时间段只有您预约。<br>
+          请联系研究人员，并报上您的编号：<strong>${result.participant_id || fullId || '暂无'}</strong>
+        </div>`;
+    }
+
+    const tt = (bookingState.trainingInfo && bookingState.trainingInfo.training_type) || getInterviewerTrainingType();
+    const needsSix = bookingState.role === 'I' && needsSixAvatarSessions(tt);
+    const trainingDone = !bookingState.trainingInfo || bookingState.trainingInfo.all_completed;
+
+    bookingState.myBooking = {
+      time_slot: slot,
+      is_matched: result.is_matched,
+      participant_id: result.participant_id,
+    };
+
+    if (needsSix && !trainingDone) {
+      $('bookingResult').innerHTML = `
+        <div style="margin-top:16px;padding:16px;background:#fff8e1;border:1px solid #ffc107;border-radius:8px;">
+          <h3 style="border:none;margin:0 0 8px;color:#856404;">预约成功</h3>
+          <p style="font-size:14px;">预约时间：<strong>${slot}</strong>（角色：${roleLabel}）</p>
+          ${matchStatusHtml}
+          <p style="font-size:13px;color:#856404;margin-top:12px;line-height:1.6;">
+            接下来请完成 <strong>6 次</strong> 虚拟审讯训练（中性/回避/敌意 × 有罪/无罪）。
+          </p>
+          <button class="btn btn-primary" onclick="proceedAfterBooking()" style="width:100%;margin-top:12px;">进入虚拟审讯训练（6次） →</button>
+        </div>`;
+      $('bookingResult').classList.remove('hidden');
+      $('bookingSlotList').classList.add('hidden');
+      renderBookingUI();
+      $('bookingResult').scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+
+    $('bookingResult').innerHTML = `
+      <div class="completion-box" style="margin-top:16px;">
+        <div style="font-size:48px;">✅</div>
+        <h2 style="color:var(--success);border:none;margin-top:8px;">预约成功！${needsSix && trainingDone ? '所有环节已完成' : '请继续后续步骤'}</h2>
+        <p style="font-size:14px;">预约时间：<strong>${slot}</strong>（角色：${roleLabel}）</p>
+        ${matchStatusHtml}
+        <div style="margin-top:16px;padding:16px;background:white;border-radius:10px;border:2px dashed var(--primary);">
+          <div style="font-size:12px;color:var(--text-light);margin-bottom:6px;">您的实验研究编号：</div>
+          <div class="id-display" style="margin:8px 0;">${fullId}</div>
+          <div style="font-size:12px;color:var(--text-light);line-height:1.6;margin-top:8px;">
+            📌 <strong>编号说明：</strong>第一段数字 <strong>${groupNum}</strong> 代表您的<strong>实验分组</strong>。<br>
+            相同分组编号的参与者属于同一实验组，将配对进行正式访谈。
+          </div>
+        </div>
+        <div class="screenshot-note" style="margin-top:16px;">
+          ⚠️ <strong>重要：请立即截图此页面（包含上方编号）！</strong>
+          <br><small>截图将作为您完成实验的凭证，请发送给研究人员确认。未截图将视为未完成实验。</small>
+        </div>
+        <button class="btn btn-primary" onclick="confirmBookingScreenshot()" style="margin-top:12px;width:100%;">确定，我已截图</button>
+      </div>
+    `;
+    $('bookingResult').classList.remove('hidden');
+    $('bookingSlotList').classList.add('hidden');
+    $('myBookingInfo').classList.add('hidden');
+
+    // Suspect screenshot confirmation should happen after booking is done.
+    if (bookingState.role === 'S') {
+      setTimeout(() => showScreenshotModal(), 300);
+    }
+
+    // Scroll to result
+    $('bookingResult').scrollIntoView({ behavior: 'smooth' });
+
+    // bookingState.myBooking updated above
+  } catch (err) {
+    hideLoading();
+    alert('预约失败: ' + err.message);
+  }
+}
+
+function confirmBookingScreenshot() {
+  // After confirming screenshot, refresh the booking view
+  alert('感谢您的确认！请确保已截图保存。');
+  $('bookingResult').classList.add('hidden');
+  loadBookingSlots();
+}
+
+async function cancelMyBooking() {
+  if (!confirm('确定要取消您的预约吗？取消后需要重新选择时间段。')) return;
+
+  showLoading('正在取消...');
+  try {
+    await api('/api/appointments/cancel', { phone: bookingState.phone });
+    hideLoading();
+    bookingState.myBooking = null;
+    loadBookingSlots();
+  } catch (err) {
+    hideLoading();
+    alert('取消失败: ' + err.message);
+  }
+}
+</script>
+</body>
+</html>

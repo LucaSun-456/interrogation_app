@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>正式访谈问卷</title>
+<style>
+  :root {
+    --primary: #1a3a5c;
+    --accent: #c0392b;
+    --bg: #f0f2f5;
+    --card-bg: #fff;
+    --text: #2c3e50;
+    --text-light: #7f8c8d;
+    --border: #dce1e8;
+    --success: #27ae60;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .header {
+    background: linear-gradient(135deg, #0f2440, var(--primary));
+    color: #fff;
+    padding: 14px 20px;
+    text-align: center;
+  }
+  .header a {
+    color: #eaf2ff;
+    text-decoration: none;
+    font-size: 12px;
+    margin: 0 8px;
+  }
+  .container {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 16px;
+  }
+  .card {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    padding: 18px;
+    margin-bottom: 12px;
+  }
+  .card h2 {
+    margin: 0 0 12px;
+    color: var(--primary);
+    font-size: 18px;
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 10px;
+  }
+  .row { margin-bottom: 12px; }
+  label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
+  input[type="text"], textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  textarea { min-height: 90px; resize: vertical; }
+  .scale-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .scale-group label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-weight: 500;
+    margin-bottom: 0;
+    cursor: pointer;
+  }
+  .btn {
+    border: none;
+    border-radius: 6px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-outline { border: 1px solid var(--primary); color: var(--primary); background: transparent; }
+  .hint { color: var(--text-light); font-size: 12px; }
+  .msg-ok { color: var(--success); font-weight: 600; }
+  .msg-err { color: var(--accent); font-weight: 600; }
+  .hidden { display: none !important; }
+  .device-block-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: var(--bg);
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+  .device-block-overlay:not(.hidden) { display: flex; }
+  .device-block-card {
+    max-width: 480px;
+    background: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    padding: 36px 28px;
+    text-align: center;
+  }
+  .device-block-card .icon { font-size: 56px; margin-bottom: 16px; }
+  .device-block-card h2 { font-size: 20px; color: var(--primary); margin-bottom: 12px; }
+  .device-block-card p { font-size: 14px; line-height: 1.8; color: var(--text-light); }
+  .device-block-hint {
+    margin-top: 20px;
+    padding: 12px 16px;
+    background: #fff8e1;
+    border: 1px solid #ffc107;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #856404;
+    text-align: left;
+    line-height: 1.7;
+  }
+  html.device-blocked .header,
+  html.device-blocked .container { display: none !important; }
+</style>
+<script src="/static/device-check.js" defer></script>
+</head>
+<body>
+
+<div id="device-block-overlay" class="device-block-overlay hidden" role="alert">
+  <div class="device-block-card">
+    <div class="icon">💻</div>
+    <h2>请使用电脑打开</h2>
+    <p>问卷需在<strong>台式机或笔记本电脑</strong>的浏览器中填写。</p>
+    <p>检测到您当前可能正在使用手机或平板访问，暂不支持继续操作。</p>
+    <div class="device-block-hint">
+      <strong>操作建议：</strong><br>
+      请在电脑浏览器中打开研究人员提供的问卷链接后重试。
+    </div>
+  </div>
+</div>
+
+  <div class="header">
+    <div style="font-size:18px;font-weight:700;">正式访谈问卷</div>
+    <div style="margin-top:4px;">
+      <a href="/">实验主流程</a>
+      <a href="/questionnaire/pre">访谈前问卷</a>
+      <a href="/questionnaire/post">访谈后问卷</a>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="card">
+      <h2 id="phaseTitle"></h2>
+      <div class="row">
+        <label>手机号</label>
+        <input type="text" id="phoneInput" placeholder="请输入报名时的手机号" maxlength="15">
+      </div>
+      <button class="btn btn-primary" onclick="loadQuestionnaire()">查询并填写</button>
+      <div id="statusMsg" class="hint" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card hidden" id="questionCard">
+      <h2>问卷内容</h2>
+      <div id="metaInfo" class="hint" style="margin-bottom:10px;"></div>
+      <form id="questionForm"></form>
+      <button class="btn btn-primary" onclick="submitQuestionnaire()">提交问卷</button>
+    </div>
+  </div>
+
+<script>
+const PHASE = {{ phase|tojson }};
+let QUESTION_LIST = [];
+let CURRENT_PHONE = '';
+
+function setStatus(msg, ok=false) {
+  const el = document.getElementById('statusMsg');
+  el.textContent = msg || '';
+  el.className = ok ? 'msg-ok' : 'msg-err';
+}
+
+function setPhaseTitle() {
+  document.getElementById('phaseTitle').textContent = PHASE === 'pre' ? '访谈前问卷' : '访谈后问卷';
+}
+
+function renderQuestions(role, questions) {
+  const form = document.getElementById('questionForm');
+  QUESTION_LIST = questions || [];
+  if (!QUESTION_LIST.length) {
+    form.innerHTML = '<div class="msg-err">暂无可用问卷题目，请联系管理员。</div>';
+    return;
+  }
+  let html = '';
+  QUESTION_LIST.forEach(q => {
+    html += '<div class="row">';
+    html += '<label>' + q.label + (q.optional ? ' <span class="hint">(选填)</span>' : '') + '</label>';
+    if (q.type === 'scale') {
+      html += '<div class="scale-group">';
+      if (q.min_label) {
+        html += '<span class="hint" style="width:100%;margin-bottom:4px;">' + q.min + ' = ' + q.min_label + '，' + q.max + ' = ' + q.max_label + '</span>';
+      }
+      for (let i = q.min; i <= q.max; i++) {
+        html += '<label><input type="radio" name="' + q.id + '" value="' + i + '"><span>' + i + '</span></label>';
+      }
+      html += '</div>';
+    } else if (q.type === 'radio') {
+      html += '<div class="scale-group" style="flex-direction:column;align-items:flex-start;">';
+      (q.options || []).forEach((opt, idx) => {
+        html += '<label style="border-radius:6px;"><input type="radio" name="' + q.id + '" value="' + idx + '"><span>' + opt + '</span></label>';
+      });
+      html += '</div>';
+    } else if (q.type === 'number') {
+      html += '<input type="number" name="' + q.id + '" min="' + (q.min != null ? q.min : '') + '" max="' + (q.max != null ? q.max : '') + '" placeholder="' + (q.min != null && q.max != null ? q.min + '–' + q.max : '请输入') + '">';
+    } else {
+      html += '<textarea name="' + q.id + '" placeholder="请输入"></textarea>';
+    }
+    html += '</div>';
+  });
+  form.innerHTML = html;
+}
+
+async function loadQuestionnaire() {
+  if (window.DeviceCheck && DeviceCheck.isBlocked()) {
+    setStatus('请使用电脑（台式机或笔记本电脑）打开本问卷。');
+    return;
+  }
+  const phone = document.getElementById('phoneInput').value.trim();
+  if (!phone || phone.length < 8) {
+    setStatus('请输入有效手机号');
+    return;
+  }
+  CURRENT_PHONE = phone;
+  setStatus('正在检查问卷开放状态...', true);
+  document.getElementById('questionCard').classList.add('hidden');
+
+  try {
+    const stResp = await fetch('/api/questionnaire/status', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ phone, phase: PHASE }),
+    });
+    const st = await stResp.json();
+    if (!stResp.ok) {
+      setStatus(st.error || '加载失败');
+      return;
+    }
+    if (!st.ok) {
+      setStatus((st.error || '当前不可填写') + '（开放时间：' + (st.open_time || '-') + '）');
+      return;
+    }
+
+    const qResp = await fetch('/api/questionnaire/questions', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ phone, phase: PHASE }),
+    });
+    const qData = await qResp.json();
+    if (!qResp.ok) {
+      setStatus(qData.error || '加载题目失败');
+      return;
+    }
+
+    document.getElementById('metaInfo').textContent =
+      '角色：' + (qData.role === 'S' ? '嫌疑人' : '审讯者') +
+      ' | 预约时间：' + (st.appointment_slot || '-') +
+      (st.manual_override ? ' | 管理员已手动开放' : '');
+
+    renderQuestions(qData.role, qData.questions || []);
+    document.getElementById('questionCard').classList.remove('hidden');
+    setStatus(st.submitted ? '您已提交过该阶段问卷，重新提交将覆盖原记录。' : '问卷已开放，请填写并提交。', true);
+  } catch (e) {
+    setStatus('加载失败：' + e.message);
+  }
+}
+
+function collectAnswers() {
+  const data = {};
+  QUESTION_LIST.forEach(q => {
+    if (q.type === 'scale' || q.type === 'radio') {
+      const selected = document.querySelector('input[name="' + q.id + '"]:checked');
+      if (selected) {
+        data[q.id] = q.type === 'radio' && q.options
+          ? (q.options[parseInt(selected.value, 10)] || selected.value)
+          : selected.value;
+      } else {
+        data[q.id] = '';
+      }
+    } else if (q.type === 'number') {
+      const el = document.querySelector('input[name="' + q.id + '"]');
+      data[q.id] = el ? (el.value || '').trim() : '';
+    } else {
+      const el = document.querySelector('textarea[name="' + q.id + '"]');
+      data[q.id] = el ? (el.value || '').trim() : '';
+    }
+  });
+  return data;
+}
+
+async function submitQuestionnaire() {
+  if (window.DeviceCheck && DeviceCheck.isBlocked()) {
+    setStatus('请使用电脑（台式机或笔记本电脑）打开本问卷。');
+    return;
+  }
+  if (!CURRENT_PHONE) {
+    setStatus('请先输入手机号并加载问卷');
+    return;
+  }
+  const answers = collectAnswers();
+  const emptyCount = Object.values(answers).filter(v => !v).length;
+  if (emptyCount > 0 && !confirm('仍有未填写题目，确认提交？')) return;
+
+  setStatus('正在提交...', true);
+  try {
+    const resp = await fetch('/api/questionnaire/submit', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        phone: CURRENT_PHONE,
+        phase: PHASE,
+        answers,
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      setStatus(data.error || '提交失败');
+      return;
+    }
+    setStatus('提交成功，感谢您的填写。', true);
+  } catch (e) {
+    setStatus('提交失败：' + e.message);
+  }
+}
+
+setPhaseTitle();
+</script>
+</body>
+</html>

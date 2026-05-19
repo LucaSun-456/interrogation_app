@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+
+# Secrets & local config
+.env
+.env.*
+!.env.example
+.github-remote.txt
+.git-author.txt
+
+# Logs & runtime data
+*.log
+app.log
+data/
+*.xlsx
+training_feedback/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Node (if any)
+node_modules/
+
+# Build / cache
+*.egg-info/
+dist/
+build/
+.pytest_cache/
