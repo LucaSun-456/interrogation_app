@@ -1,0 +1,26 @@
+# Ubuntu + user spe_avatar, app in /home/spe_avatar/interrogation-app
+#
+#   sudo cp scripts/interrogation-app.service.example /etc/systemd/system/interrogation-app.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now interrogation-app
+
+[Unit]
+Description=Interrogation experiment app (Gunicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=spe_avatar
+Group=spe_avatar
+WorkingDirectory=/home/spe_avatar/interrogation-app
+EnvironmentFile=/home/spe_avatar/interrogation-app/.env
+Environment=LOG_DIR=/home/spe_avatar/interrogation-app/logs
+Environment=DATA_DIR=/home/spe_avatar/interrogation-app/data
+Environment=EXCEL_FILE=/home/spe_avatar/interrogation-app/data/experiment_data.xlsx
+Environment=GUNICORN_WORKERS=1
+ExecStart=/home/spe_avatar/interrogation-app/.venv/bin/gunicorn -c gunicorn_config.py --bind 127.0.0.1:8000 wsgi:app
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
