@@ -22,7 +22,11 @@ app.log
 logs/
 data/
 *.xlsx
+results_serious_game.xlsx
 training_feedback/
+materials/_legacy_sources/
+materials/combined_materials.md
+materials/combined_materials.docx
 
 # IDE / OS
 .idea/

@@ -8,8 +8,8 @@ services:
     volumes:
       - ./experiment_data.xlsx:/app/experiment_data.xlsx
       - ./logs:/app/logs
-      - ./training_feedback:/app/training_feedback
       - ./data:/app/data
+      - ./materials:/app/materials
       - ./materials:/app/materials:ro
     env_file:
       - .env

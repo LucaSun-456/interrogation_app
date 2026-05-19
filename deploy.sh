@@ -40,7 +40,7 @@ fi
 chmod 600 .env
 
 # ---- Writable dirs & data file ----
-mkdir -p logs training_feedback data
+mkdir -p logs data materials materials/prompts
 if [ ! -f experiment_data.xlsx ]; then
     echo "[INFO] experiment_data.xlsx will be created on first run."
 fi

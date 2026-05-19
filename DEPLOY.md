@@ -61,12 +61,16 @@ bash deploy.sh
 
 ## 五、HTTPS 证书
 
+首次部署 **只启用 HTTP**（`app.conf`），避免尚未申请证书时 Nginx 因缺少 `fullchain.pem` 无法启动。证书就绪后：
+
 ```bash
 bash certbot-setup.sh spe-avatar.com 你的邮箱@example.com
-docker compose exec nginx nginx -s reload
+# 脚本会复制 app-ssl.conf.example → app-ssl.conf 并 reload
 ```
 
 访问：https://spe-avatar.com
+
+若 `app` 容器一直 Restarting，先查日志：`docker compose logs app --tail 30`（常见原因：`.env` 缺少 `SECRET_KEY` / `ADMIN_PASSWORD` 等）。
 
 ## 六、更新版本
 
@@ -87,4 +91,5 @@ docker compose restart app
 
 - 每次 Avatar 访谈 **最长 10 分钟**，到时自动断开并提示提交判断（训练）或结束会话（练习）。
 - 日志目录：`./logs/app.log`
-- 实验数据：`experiment_data.xlsx`（请定期备份）
+- 实验数据：仅 **`experiment_data.xlsx`** 一个文件（含参与者、问卷、培训、严肃游戏等所有工作表；请定期备份）
+- 培训材料：`materials/combined_materials.docx`（由启动时或 `python scripts/build_combined_materials.py` 从 Word/PDF 合并生成）

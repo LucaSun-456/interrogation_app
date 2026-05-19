@@ -1,7 +1,7 @@
 """
 Interrogation Experiment Web App
 Flask backend for suspect/interviewer assignment and training management.
-Data stored in Excel (.xlsx) format.
+All experiment statistics stored in a single Excel file (experiment_data.xlsx).
 """
 import json
 import logging
@@ -134,8 +134,15 @@ def csrf_protect():
                 return jsonify({"error": "CSRF validation failed"}), 403
 
 MATERIALS_DIR = os.path.join(BASE_DIR, "materials")
+MATERIALS_PROMPTS_DIR = os.path.join(MATERIALS_DIR, "prompts")
+COMBINED_MATERIALS_MD = os.path.join(MATERIALS_DIR, "combined_materials.md")
+COMBINED_MATERIALS_DOCX = os.path.join(MATERIALS_DIR, "combined_materials.docx")
+COMBINED_DOWNLOAD_NAME = "培训材料合集.docx"
+FEEDBACK_PROMPT_MD = os.path.join(MATERIALS_PROMPTS_DIR, "avatar_feedback.md")
+LEGACY_FEEDBACK_DOCX = os.path.join(BASE_DIR, "Feedback prompts.docx")
 TRAINING_SRC_DIR = os.path.join(os.path.dirname(os.path.dirname(BASE_DIR)), "IRB materials", "Training materials")
-AVATARS_FILE = os.path.join(BASE_DIR, "avatars.json")
+LEGACY_SERIOUS_GAME_XLSX = os.path.join(BASE_DIR, "results_serious_game.xlsx")
+LEGACY_TRAINING_FEEDBACK_DIR = os.path.join(BASE_DIR, "training_feedback")
 
 ARSON_GUILTY_CONTEXT = """你是当地社区体育俱乐部的一名资深成员。昨天（周五）晚上，你参加了俱乐部的月度例会。然而，在会议上，委员会不仅公开且毫无理由地否决了你花费六个月准备的提案，还用一个荒谬的借口暂停了你的核心会员资格。走出会议室时，你感受到前所未有的羞辱与愤怒。你为俱乐部付出了这么多，却只换来背叛。你决定让他们付出代价——那座标志性的体育馆是委员会最引以为傲的资产，而你打算将其摧毁。
 
@@ -394,22 +401,26 @@ Avatar 人格设定：{avatar_setting_label}
 
 请用中文回复。"""
 
-TRAINING_FEEDBACK_DIR = os.path.join(BASE_DIR, "training_feedback")
-FEEDBACK_PROMPT_DOCX = os.path.join(BASE_DIR, "Feedback prompts.docx")
-
-
 def _load_avatar_feedback_system_prompt():
-    """Load EFM feedback tutor prompt from Feedback prompts.docx."""
-    if not os.path.isfile(FEEDBACK_PROMPT_DOCX):
-        return DEEPSEEK_FEEDBACK_PROMPT_PLACEHOLDER
-    try:
-        from docx import Document
-        doc = Document(FEEDBACK_PROMPT_DOCX)
-        paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-        text = "\n".join(paragraphs)
-        return text if text.strip() else DEEPSEEK_FEEDBACK_PROMPT_PLACEHOLDER
-    except Exception:
-        return DEEPSEEK_FEEDBACK_PROMPT_PLACEHOLDER
+    """Load EFM feedback tutor prompt from materials/prompts/avatar_feedback.md (or legacy docx)."""
+    if os.path.isfile(FEEDBACK_PROMPT_MD):
+        try:
+            with open(FEEDBACK_PROMPT_MD, "r", encoding="utf-8") as f:
+                text = f.read().strip()
+            if text:
+                return text
+        except Exception:
+            pass
+    if os.path.isfile(LEGACY_FEEDBACK_DOCX):
+        try:
+            from docx import Document
+            doc = Document(LEGACY_FEEDBACK_DOCX)
+            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+            text = "\n".join(paragraphs)
+            return text if text.strip() else DEEPSEEK_FEEDBACK_PROMPT_PLACEHOLDER
+        except Exception:
+            pass
+    return DEEPSEEK_FEEDBACK_PROMPT_PLACEHOLDER
 
 
 AVATAR_FEEDBACK_SYSTEM_PROMPT = _load_avatar_feedback_system_prompt()
@@ -420,34 +431,6 @@ def avatar_setting_label_public(full_label: str, training_type: str) -> str:
     if training_type in ("avatar_specific", "avatar_general") and " · " in (full_label or ""):
         return full_label.split(" · ", 1)[0].strip()
     return full_label or ""
-
-
-def _save_training_session_files(phone, session_num, judgment, transcript, feedback, avatar_setting, avatar_guilt):
-    """Persist training transcript and LLM feedback to disk."""
-    os.makedirs(TRAINING_FEEDBACK_DIR, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_phone = re.sub(r"[^\w\-+]", "_", phone or "unknown")
-    prefix = f"{safe_phone}_session{session_num}_{ts}"
-    guilt_label = "guilty" if avatar_guilt == "guilty" else "innocent"
-    meta = {
-        "phone": phone,
-        "session_num": session_num,
-        "judgment": judgment,
-        "avatar_setting": avatar_setting,
-        "avatar_guilt": avatar_guilt,
-        "saved_at": datetime.now().isoformat(),
-    }
-    with open(os.path.join(TRAINING_FEEDBACK_DIR, f"{prefix}_meta.json"), "w", encoding="utf-8") as f:
-        json.dump(meta, f, ensure_ascii=False, indent=2)
-    with open(os.path.join(TRAINING_FEEDBACK_DIR, f"{prefix}_transcript.txt"), "w", encoding="utf-8") as f:
-        f.write(transcript)
-    with open(os.path.join(TRAINING_FEEDBACK_DIR, f"{prefix}_feedback.txt"), "w", encoding="utf-8") as f:
-        f.write(feedback or "")
-    with open(os.path.join(TRAINING_FEEDBACK_DIR, f"{prefix}_bundle.txt"), "w", encoding="utf-8") as f:
-        f.write(
-            f"Phone: {phone}\nSession: {session_num}\nSetting: {avatar_setting} / {guilt_label}\n"
-            f"Judgment: {judgment}\n\n--- Transcript ---\n{transcript}\n\n--- Feedback ---\n{feedback or ''}"
-        )
 
 
 PROFILE_QUESTIONS = [
@@ -492,6 +475,7 @@ SHEET_APPOINTMENTS = "appointments"
 SHEET_TRAINING_SESSIONS = "training_sessions"
 SHEET_INTERVIEW_QUESTIONNAIRES = "interview_questionnaires"
 SHEET_QUESTIONNAIRE_OVERRIDES = "questionnaire_overrides"
+SHEET_SERIOUS_GAME = "serious_game_choices"
 SHEET_META = "meta"
 
 SHEET_COLUMNS = {
@@ -503,6 +487,10 @@ SHEET_COLUMNS = {
     SHEET_TRAINING_SESSIONS: ["id", "interviewer_id", "phone", "session_num", "avatar_setting", "avatar_guilt", "judgment", "transcript", "feedback", "started_at", "completed_at"],
     SHEET_INTERVIEW_QUESTIONNAIRES: ["id", "phone", "role", "phase", "appointment_slot", "answers_json", "submitted_at"],
     SHEET_QUESTIONNAIRE_OVERRIDES: ["id", "phone", "phase", "is_open", "updated_at"],
+    SHEET_SERIOUS_GAME: [
+        "timestamp", "phone", "participant_id", "case", "condition",
+        "step_index", "video", "choice",
+    ],
     SHEET_META: ["key", "value"],
 }
 
@@ -1426,6 +1414,30 @@ class ExcelStore:
             finally:
                 self._close(wb)
 
+    # ---- Serious game choices (formerly results_serious_game.xlsx) ----
+
+    def log_serious_game_choice(
+        self, phone, participant_id, case, condition, step_index, video, choice,
+    ):
+        with _excel_lock:
+            wb = self._load()
+            try:
+                rows = self._read_all(wb, SHEET_SERIOUS_GAME)
+                rows.append({
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "phone": phone,
+                    "participant_id": participant_id,
+                    "case": case,
+                    "condition": condition,
+                    "step_index": step_index,
+                    "video": video,
+                    "choice": choice,
+                })
+                self._write_all(wb, SHEET_SERIOUS_GAME, rows)
+                self._save(wb)
+            finally:
+                self._close(wb)
+
 
 store = ExcelStore()
 
@@ -1514,50 +1526,294 @@ def migrate_old_data():
             print(f"  [WARN] 从 results.json 迁移失败: {e}")
 
 
-# ====== Material & Training File Helpers ======
+def migrate_legacy_exports():
+    """Import legacy results_serious_game.xlsx and training_feedback/ into experiment_data.xlsx."""
+    ensure_sheets()
 
-def setup_materials_dir():
-    """Copy training materials to local materials/ dir and convert PDF to DOCX."""
-    os.makedirs(MATERIALS_DIR, exist_ok=True)
+    if os.path.isfile(LEGACY_SERIOUS_GAME_XLSX):
+        try:
+            wb_old = load_workbook(LEGACY_SERIOUS_GAME_XLSX, read_only=True)
+            ws = wb_old.active
+            header_row = next(ws.iter_rows(min_row=1, max_row=1))
+            headers = [c.value for c in header_row]
+            with _excel_lock:
+                wb = store._load()
+                try:
+                    rows = store._read_all(wb, SHEET_SERIOUS_GAME)
+                    existing = {
+                        (
+                            str(r.get("phone") or ""),
+                            str(r.get("step_index") or ""),
+                            str(r.get("video") or ""),
+                            str(r.get("choice") or ""),
+                        )
+                        for r in rows
+                    }
+                    added = 0
+                    for row in ws.iter_rows(min_row=2, values_only=True):
+                        if not any(row):
+                            continue
+                        rec = dict(zip(headers, row))
+                        phone = rec.get("Phone") or rec.get("phone") or ""
+                        step_index = rec.get("StepIndex") or rec.get("step_index") or ""
+                        video = rec.get("Video") or rec.get("video") or ""
+                        choice = rec.get("Choice") or rec.get("choice") or ""
+                        key = (str(phone), str(step_index), str(video), str(choice))
+                        if key in existing:
+                            continue
+                        rows.append({
+                            "timestamp": rec.get("Timestamp") or rec.get("timestamp") or "",
+                            "phone": phone,
+                            "participant_id": rec.get("ParticipantID") or rec.get("participant_id") or "",
+                            "case": rec.get("Case") or rec.get("case") or "",
+                            "condition": rec.get("Condition") or rec.get("condition") or "",
+                            "step_index": step_index,
+                            "video": video,
+                            "choice": choice,
+                        })
+                        existing.add(key)
+                        added += 1
+                    if added:
+                        store._write_all(wb, SHEET_SERIOUS_GAME, rows)
+                        store._save(wb)
+                        print(f"  [OK] 已从 results_serious_game.xlsx 合并 {added} 条到 experiment_data.xlsx")
+                finally:
+                    store._close(wb)
+            wb_old.close()
+        except Exception as e:
+            print(f"  [WARN] 合并 results_serious_game.xlsx 失败: {e}")
 
-    if not os.path.isdir(TRAINING_SRC_DIR):
+    if not os.path.isdir(LEGACY_TRAINING_FEEDBACK_DIR):
         return
 
-    for fname in os.listdir(TRAINING_SRC_DIR):
-        src = os.path.join(TRAINING_SRC_DIR, fname)
-        dst = os.path.join(MATERIALS_DIR, fname)
-        if os.path.isfile(src) and not os.path.exists(dst):
-            shutil.copy2(src, dst)
+    try:
+        imported = 0
+        for fname in os.listdir(LEGACY_TRAINING_FEEDBACK_DIR):
+            if not fname.endswith("_meta.json"):
+                continue
+            prefix = fname[: -len("_meta.json")]
+            meta_path = os.path.join(LEGACY_TRAINING_FEEDBACK_DIR, fname)
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            phone = meta.get("phone")
+            session_num = meta.get("session_num")
+            if not phone or session_num is None:
+                continue
+            existing_sessions = store.get_training_sessions(phone)
+            if any(
+                str(s.get("session_num")) == str(session_num) and s.get("feedback")
+                for s in existing_sessions
+            ):
+                continue
+            transcript_path = os.path.join(LEGACY_TRAINING_FEEDBACK_DIR, f"{prefix}_transcript.txt")
+            feedback_path = os.path.join(LEGACY_TRAINING_FEEDBACK_DIR, f"{prefix}_feedback.txt")
+            transcript = ""
+            feedback = ""
+            if os.path.isfile(transcript_path):
+                with open(transcript_path, "r", encoding="utf-8") as f:
+                    transcript = f.read()
+            if os.path.isfile(feedback_path):
+                with open(feedback_path, "r", encoding="utf-8") as f:
+                    feedback = f.read()
+            p = store.get_participant(phone)
+            interviewer_id = p["id"] if p else ""
+            store.start_training_session(
+                phone, interviewer_id, session_num,
+                meta.get("avatar_setting", ""), meta.get("avatar_guilt", ""),
+            )
+            store.submit_training_session(
+                phone, session_num, meta.get("judgment", ""), transcript, feedback,
+            )
+            imported += 1
+        if imported:
+            print(f"  [OK] 已从 training_feedback/ 导入 {imported} 条培训记录到 experiment_data.xlsx")
+    except Exception as e:
+        print(f"  [WARN] 合并 training_feedback/ 失败: {e}")
 
-    pdf_path = os.path.join(TRAINING_SRC_DIR, "SUE theoretical training group.pdf")
-    docx_path = os.path.join(MATERIALS_DIR, "SUE theoretical training group.docx")
-    if os.path.isfile(pdf_path) and not os.path.exists(docx_path):
+
+# ====== Material & Training File Helpers ======
+
+MATERIAL_SECTION_SPECS = [
+    ("consent_suspect", "知情同意书（嫌疑人）", [
+        "Consent Form - Suspect (Clean).docx",
+    ], [BASE_DIR, MATERIALS_DIR]),
+    ("consent_interviewer", "知情同意书（访谈员）", [
+        "Consent Form - Interviewer (Clean).docx",
+    ], [BASE_DIR, MATERIALS_DIR]),
+    ("theory_sue", "B组 SUE 理论培训", [
+        "SUE theoretical training group.docx",
+        "SUE theoretical training group.pdf",
+    ], [MATERIALS_DIR]),
+    ("avatar_specific", "D组 特定 Avatar 培训说明", [
+        "Specific avatar training group_instructions.docx",
+    ], [MATERIALS_DIR]),
+    ("avatar_general", "C组 通用 Avatar 培训说明", [
+        "General avatar training group_instructions.docx",
+    ], [MATERIALS_DIR]),
+    ("control", "A组 对照组培训", [
+        "Control group.docx",
+    ], [MATERIALS_DIR]),
+    ("interviewer_bg", "访谈员背景材料", [
+        "Interviewer_Bg.docx",
+    ], [MATERIALS_DIR]),
+    ("avatar_persona_settings", "D组 Avatar 人格设定", [
+        "Specific avatar training group_avatar persona settings.docx",
+    ], [MATERIALS_DIR]),
+    ("avatar_demo", "D组 Avatar 演示说明", [
+        "Specific avatar training group_demo.docx",
+    ], [MATERIALS_DIR]),
+    ("background_info", "案件背景信息", [
+        "(CN) Background Information.pdf",
+    ], [BASE_DIR, MATERIALS_DIR]),
+]
+
+TRAINING_TYPE_SECTION = {
+    "theory_sue": "theory_sue",
+    "avatar_specific": "avatar_specific",
+    "avatar_general": "avatar_general",
+    "control": "control",
+}
+
+
+def _extract_text_from_file(path):
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".docx":
+        from docx import Document
+        doc = Document(path)
+        return "\n\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    if ext == ".pdf":
+        import pdfplumber
+        parts = []
+        with pdfplumber.open(path) as pdf:
+            for page in pdf.pages:
+                t = page.extract_text()
+                if t:
+                    parts.append(t)
+        return "\n\n".join(parts)
+    if ext in (".md", ".txt"):
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    return ""
+
+
+def _find_legacy_material_file(filenames, search_dirs):
+    for d in search_dirs:
+        for fname in filenames:
+            path = os.path.join(d, fname)
+            if os.path.isfile(path):
+                return path
+    return None
+
+
+def _get_material_section(section_id):
+    if not os.path.isfile(COMBINED_MATERIALS_MD):
+        return ""
+    try:
+        with open(COMBINED_MATERIALS_MD, "r", encoding="utf-8") as f:
+            content = f.read()
+    except Exception:
+        return ""
+    marker = f"<!-- section:{section_id} -->"
+    if marker not in content:
+        return ""
+    parts = content.split(marker, 1)[1]
+    next_marker = re.search(r"\n<!-- section:", parts)
+    if next_marker:
+        parts = parts[: next_marker.start()]
+    return parts.strip().lstrip("-").strip()
+
+
+def _build_combined_materials_md():
+    sections = []
+    for section_id, title, filenames, search_dirs in MATERIAL_SECTION_SPECS:
+        path = _find_legacy_material_file(filenames, search_dirs)
+        if not path:
+            continue
         try:
-            convert_pdf_to_docx(pdf_path, docx_path)
-        except Exception:
-            pass
+            text = _extract_text_from_file(path)
+        except Exception as e:
+            logger.warning("Failed to read %s: %s", path, e)
+            continue
+        if not text.strip():
+            continue
+        sections.append(f"<!-- section:{section_id} -->\n\n# {title}\n\n{text.strip()}\n")
+    if not sections:
+        return False
+    os.makedirs(MATERIALS_DIR, exist_ok=True)
+    with open(COMBINED_MATERIALS_MD, "w", encoding="utf-8") as f:
+        f.write("\n\n---\n\n".join(sections))
+    return True
 
 
-def convert_pdf_to_docx(pdf_path, docx_path):
-    """Extract text from PDF and write to a .docx file."""
-    import pdfplumber
-    from docx import Document
-
-    doc = Document()
-    doc.styles["Normal"].font.size = None
-
-    with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            text = page.extract_text()
-            if text:
-                for line in text.split("\n"):
+def _build_combined_materials_docx():
+    if not os.path.isfile(COMBINED_MATERIALS_MD):
+        return
+    try:
+        from docx import Document
+        doc = Document()
+        with open(COMBINED_MATERIALS_MD, "r", encoding="utf-8") as f:
+            content = f.read()
+        for block in re.split(r"<!-- section:\w+ -->\s*", content):
+            block = block.strip().lstrip("-").strip()
+            if not block:
+                continue
+            for line in block.split("\n"):
+                line = line.rstrip()
+                if line.startswith("# "):
+                    doc.add_heading(line[2:].strip(), level=1)
+                elif line:
                     doc.add_paragraph(line)
+            doc.add_page_break()
+        if doc.paragraphs and doc.paragraphs[-1].text == "":
+            pass
+        doc.save(COMBINED_MATERIALS_DOCX)
+    except Exception as e:
+        logger.warning("Failed to build combined_materials.docx: %s", e)
 
-    doc.save(docx_path)
+
+def _export_feedback_prompt_md():
+    if os.path.isfile(FEEDBACK_PROMPT_MD):
+        return
+    if not os.path.isfile(LEGACY_FEEDBACK_DOCX):
+        return
+    try:
+        text = _extract_text_from_file(LEGACY_FEEDBACK_DOCX)
+        if text.strip():
+            os.makedirs(MATERIALS_PROMPTS_DIR, exist_ok=True)
+            with open(FEEDBACK_PROMPT_MD, "w", encoding="utf-8") as f:
+                f.write(text.strip() + "\n")
+    except Exception as e:
+        logger.warning("Failed to export feedback prompt: %s", e)
+
+
+def setup_materials_dir():
+    """Organize materials/: merge legacy Word/PDF into combined_materials.md/.docx."""
+    os.makedirs(MATERIALS_DIR, exist_ok=True)
+    os.makedirs(MATERIALS_PROMPTS_DIR, exist_ok=True)
+
+    if os.path.isdir(TRAINING_SRC_DIR):
+        archive_dir = os.path.join(MATERIALS_DIR, "_legacy_sources")
+        os.makedirs(archive_dir, exist_ok=True)
+        for fname in os.listdir(TRAINING_SRC_DIR):
+            src = os.path.join(TRAINING_SRC_DIR, fname)
+            dst = os.path.join(archive_dir, fname)
+            if os.path.isfile(src) and not os.path.exists(dst):
+                shutil.copy2(src, dst)
+
+    if not os.path.isfile(COMBINED_MATERIALS_MD):
+        _build_combined_materials_md()
+    if os.path.isfile(COMBINED_MATERIALS_MD) and not os.path.isfile(COMBINED_MATERIALS_DOCX):
+        _build_combined_materials_docx()
+
+    _export_feedback_prompt_md()
 
 
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(BASE_DIR, "data"))
 os.makedirs(DATA_DIR, exist_ok=True)
+AVATARS_FILE = os.path.join(DATA_DIR, "avatars.json")
+LEGACY_AVATARS_FILE = os.path.join(BASE_DIR, "avatars.json")
+if not os.path.isfile(AVATARS_FILE) and os.path.isfile(LEGACY_AVATARS_FILE):
+    shutil.copy2(LEGACY_AVATARS_FILE, AVATARS_FILE)
 LIVEAVATAR_VOICES_FILE = os.path.join(DATA_DIR, "liveavatar_voices.json")
 _liveavatar_voice_map = {}
 
@@ -2091,20 +2347,9 @@ def youtube_id_for_sg(video_name: str) -> str | None:
     return vid or None
 
 
-SERIOUS_GAME_EXCEL = os.path.join(BASE_DIR, "results_serious_game.xlsx")
-
 def log_serious_game_choice(phone: str, pid: str, case: str, condition: str, step_index: int, video: str, choice: str):
     try:
-        if not os.path.exists(SERIOUS_GAME_EXCEL):
-            wb = Workbook()
-            ws = wb.active
-            ws.append(["Timestamp", "Phone", "ParticipantID", "Case", "Condition", "StepIndex", "Video", "Choice"])
-        else:
-            wb = load_workbook(SERIOUS_GAME_EXCEL)
-            ws = wb.active
-        ws.append([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), phone, pid, case, condition, step_index, video, choice])
-        wb.save(SERIOUS_GAME_EXCEL)
-        wb.close()
+        store.log_serious_game_choice(phone, pid, case, condition, step_index, video, choice)
     except Exception as e:
         logger.warning(f"Failed to log serious game choice: {e}")
 
@@ -2367,23 +2612,17 @@ def submit_profile():
 
 @app.route("/api/training-material/<training_type>")
 def training_material(training_type):
-    file_map = {
-        "theory_sue": ["SUE theoretical training group.pdf", "SUE theoretical training group.docx"],
-        "avatar_specific": [
-            "Specific avatar training group_instructions.docx",
-        ],
-        "avatar_general": [
-            "General avatar training group_instructions.docx",
-        ],
-        "control": ["Control group.docx"],
-    }
-
-    files = file_map.get(training_type, [])
     available_files = []
-    for f in files:
-        path = os.path.join(MATERIALS_DIR, f)
-        if os.path.isfile(path):
-            available_files.append({"name": f, "url": f"/api/download-material/{f}"})
+    if os.path.isfile(COMBINED_MATERIALS_DOCX):
+        available_files.append({
+            "name": COMBINED_DOWNLOAD_NAME,
+            "url": "/api/download-material/combined_materials.docx",
+        })
+    elif os.path.isfile(COMBINED_MATERIALS_MD):
+        available_files.append({
+            "name": "培训材料合集.md",
+            "url": "/api/download-material/combined_materials.md",
+        })
 
     materials = {
         "theory_sue": {
@@ -2416,98 +2655,69 @@ def training_material(training_type):
 
 @app.route("/api/download-material/<path:filename>")
 def download_material(filename):
-    filepath = os.path.join(MATERIALS_DIR, filename)
+    safe_name = os.path.basename(filename)
+    if safe_name != filename or ".." in filename:
+        return jsonify({"error": "无效文件名"}), 400
+
+    allowed = {
+        "combined_materials.docx": (COMBINED_MATERIALS_DOCX, COMBINED_DOWNLOAD_NAME),
+        "combined_materials.md": (COMBINED_MATERIALS_MD, "培训材料合集.md"),
+    }
+    if safe_name not in allowed:
+        return jsonify({"error": "文件不存在"}), 404
+
+    filepath, download_name = allowed[safe_name]
     if not os.path.isfile(filepath):
         return jsonify({"error": "文件不存在"}), 404
 
-    ext = os.path.splitext(filename)[1].lower()
-    mime_map = {".pdf": "application/pdf", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+    ext = os.path.splitext(filepath)[1].lower()
+    mime_map = {
+        ".md": "text/markdown; charset=utf-8",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }
     mimetype = mime_map.get(ext, "application/octet-stream")
-
-    return send_file(filepath, as_attachment=True, download_name=filename, mimetype=mimetype)
+    return send_file(filepath, as_attachment=True, download_name=download_name, mimetype=mimetype)
 
 
 @app.route("/api/consent/<role>")
 def consent_text(role):
-    if role == "S":
-        fname = "Consent Form - Suspect (Clean).docx"
-    else:
-        fname = "Consent Form - Interviewer (Clean).docx"
-        
-    docx_path = os.path.join(BASE_DIR, fname)
-    text_content = ""
-    
-    if os.path.isfile(docx_path):
-        try:
-            from docx import Document
-            doc = Document(docx_path)
-            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-            text_content = "\n\n".join(paragraphs)
-        except Exception as e:
-            text_content = f"无法加载知情同意书 ({e})，请联系研究人员。"
-    else:
-        text_content = "知情同意书文件不存在，请联系研究人员。"
-
+    section_id = "consent_suspect" if role == "S" else "consent_interviewer"
+    text_content = _get_material_section(section_id)
+    if not text_content:
+        text_content = "知情同意书文件不存在，请联系研究人员。请确认 materials/combined_materials.md 已生成。"
     return jsonify({"text": text_content})
 
 @app.route("/api/material-text/<training_type>")
 def material_text(training_type):
     """Return the text content of training materials for inline display."""
-    file_map = {
-        "control": "Control group.docx",
-        "avatar_specific": "Specific avatar training group_instructions.docx",
-        "avatar_general": "General avatar training group_instructions.docx",
-    }
-
-    fname = file_map.get(training_type, "")
-    if not fname:
+    section_id = TRAINING_TYPE_SECTION.get(training_type)
+    if not section_id:
         return jsonify({"text": ""})
-
-    docx_path = os.path.join(MATERIALS_DIR, fname)
-    text_content = ""
-
-    if os.path.isfile(docx_path):
-        try:
-            from docx import Document
-            doc = Document(docx_path)
-            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-            text_content = "\n\n".join(paragraphs)
-        except Exception:
-            text_content = "材料加载失败，请下载文件阅读。"
-
-    return jsonify({"text": text_content, "source": fname})
+    text_content = _get_material_section(section_id)
+    if not text_content:
+        text_content = "材料加载失败，请下载合集文件阅读。"
+    return jsonify({"text": text_content, "source": "combined_materials.md"})
 
 
 @app.route("/api/sue-training-text")
 def sue_training_text():
-    docx_path = os.path.join(MATERIALS_DIR, "SUE theoretical training group.docx")
-    pdf_path = os.path.join(MATERIALS_DIR, "SUE theoretical training group.pdf")
+    text_content = _get_material_section("theory_sue")
 
-    text_content = ""
+    if not text_content:
+        legacy_docx = os.path.join(MATERIALS_DIR, "SUE theoretical training group.docx")
+        legacy_pdf = os.path.join(MATERIALS_DIR, "SUE theoretical training group.pdf")
+        if os.path.isfile(legacy_docx):
+            try:
+                text_content = _extract_text_from_file(legacy_docx)
+            except Exception:
+                pass
+        if not text_content and os.path.isfile(legacy_pdf):
+            try:
+                text_content = _extract_text_from_file(legacy_pdf)
+            except Exception:
+                pass
 
-    if os.path.isfile(docx_path):
-        try:
-            from docx import Document
-            doc = Document(docx_path)
-            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-            text_content = "\n\n".join(paragraphs)
-        except Exception:
-            pass
-
-    if not text_content and os.path.isfile(pdf_path):
-        try:
-            import pdfplumber
-            with pdfplumber.open(pdf_path) as pdf:
-                all_text = []
-                for page in pdf.pages:
-                    t = page.extract_text()
-                    if t:
-                        all_text.append(t)
-                text_content = "\n\n".join(all_text)
-        except Exception:
-            pass
-
-    return jsonify({"text": text_content, "source": "SUE theoretical training group"})
+    return jsonify({"text": text_content or "", "source": "combined_materials.md"})
 
 
 @app.route("/api/verify-sue-attention", methods=["POST"])
@@ -4001,13 +4211,6 @@ def api_avatar_training_submit():
     except Exception as e:
         feedback = f"反馈生成失败: {str(e)}"
 
-    try:
-        _save_training_session_files(
-            phone, session_num, judgment, transcript, feedback, avatar_setting, avatar_guilt,
-        )
-    except Exception as e:
-        logging.warning("Failed to save training feedback files: %s", e)
-
     store.submit_training_session(phone, session_num, judgment, transcript, feedback)
 
     completed_count = store.count_completed_training_sessions(phone)
@@ -4557,9 +4760,12 @@ def serious_game_complete():
 
 def initialize_app():
     """Run all startup initialization. Called at import time for Gunicorn workers."""
+    global AVATAR_FEEDBACK_SYSTEM_PROMPT
     init_excel()
     migrate_old_data()
+    migrate_legacy_exports()
     setup_materials_dir()
+    AVATAR_FEEDBACK_SYSTEM_PROMPT = _load_avatar_feedback_system_prompt()
     setup_liveavatar_voices()
     logger.info("Application initialized successfully")
 

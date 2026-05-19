@@ -35,8 +35,10 @@ docker compose run --rm certbot certonly \
     --email "$EMAIL" --agree-tos --no-eff-email
 
 echo ""
-echo "[3/3] Certificate obtained. Now update nginx config:"
-echo "  1. nginx/conf.d/app.conf should use domain '$DOMAIN' (preconfigured: spe-avatar.com)"
-echo "  2. Run: docker compose exec nginx nginx -s reload"
+echo "[3/3] Enabling HTTPS in nginx..."
+cp -n nginx/conf.d/app-ssl.conf.example nginx/conf.d/app-ssl.conf 2>/dev/null || true
+docker compose exec nginx nginx -t
+docker compose exec nginx nginx -s reload
+echo "Done. Visit https://$DOMAIN"
 echo ""
 echo "Certificate will auto-renew via the certbot container (checks every 12h)."

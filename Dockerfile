@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r re
 
 COPY --chown=appuser:appuser . .
 
-RUN mkdir -p /app/data /app/logs /app/training_feedback && chown -R appuser:appuser /app
+RUN mkdir -p /app/data /app/logs /app/materials /app/materials/prompts && chown -R appuser:appuser /app
 
 USER appuser
 
