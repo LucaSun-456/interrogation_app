@@ -75,6 +75,7 @@ bash certbot-setup.sh spe-avatar.com 你的邮箱@example.com
 | 日志关键词 | 处理 |
 |-----------|------|
 | `Permission denied: '/app/logs/app.log'` | 在服务器执行：`bash scripts/fix-server-permissions.sh` |
+| `Is a directory: '/app/experiment_data.xlsx'` | `docker compose down && rm -rf experiment_data.xlsx && mkdir -p data`，再 `git pull` 并重建 |
 | `location directive is not allowed here` | `git pull` 更新 `nginx/nginx.conf`，或删掉 `http {}` 里错误的 `location` 块 |
 | `Missing required environment variables` | 补全 `.env` 后 `docker compose up -d --force-recreate app` |
 
@@ -97,5 +98,6 @@ docker compose restart app
 
 - 每次 Avatar 访谈 **最长 10 分钟**，到时自动断开并提示提交判断（训练）或结束会话（练习）。
 - 日志目录：`./logs/app.log`
-- 实验数据：仅 **`experiment_data.xlsx`** 一个文件（含参与者、问卷、培训、严肃游戏等所有工作表；请定期备份）
+- 实验数据：**`data/experiment_data.xlsx`**（含参与者、问卷、培训、严肃游戏等所有工作表；请定期备份 `data/` 目录）
+- 勿将 `experiment_data.xlsx` 单独挂载为 Docker 卷——若宿主机上该路径不存在，Docker 会把它建成**目录**导致启动失败
 - 培训材料：`materials/combined_materials.docx`（由启动时或 `python scripts/build_combined_materials.py` 从 Word/PDF 合并生成）

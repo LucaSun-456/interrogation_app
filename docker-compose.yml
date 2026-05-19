@@ -6,10 +6,8 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
-      - ./experiment_data.xlsx:/app/experiment_data.xlsx
-      - ./logs:/app/logs
       - ./data:/app/data
-      - ./materials:/app/materials
+      - ./logs:/app/logs
       - ./materials:/app/materials:ro
     env_file:
       - .env
@@ -18,6 +16,8 @@ services:
       - FLASK_DEBUG=false
       - GUNICORN_LOG_LEVEL=info
       - LOG_DIR=/app/logs
+      - DATA_DIR=/app/data
+      - EXCEL_FILE=/app/data/experiment_data.xlsx
       - GUNICORN_WORKERS=1
     networks:
       - app-network

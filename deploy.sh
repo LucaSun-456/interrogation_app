@@ -41,11 +41,16 @@ chmod 600 .env
 
 # ---- Writable dirs & data file (app container runs as UID 999) ----
 mkdir -p logs data materials materials/prompts
-if [ ! -f experiment_data.xlsx ]; then
-    echo "[INFO] experiment_data.xlsx will be created on first run."
+# Remove Docker mistake: experiment_data.xlsx created as a directory when file was missing
+if [ -d experiment_data.xlsx ]; then
+    echo "[WARN] Removing erroneous directory experiment_data.xlsx (use data/experiment_data.xlsx)"
+    rm -rf experiment_data.xlsx
+fi
+if [ -f experiment_data.xlsx ] && [ ! -f data/experiment_data.xlsx ]; then
+    mv experiment_data.xlsx data/experiment_data.xlsx
+    echo "[INFO] Moved experiment_data.xlsx -> data/experiment_data.xlsx"
 fi
 chown -R 999:999 logs data materials 2>/dev/null || true
-[ -f experiment_data.xlsx ] && chown 999:999 experiment_data.xlsx 2>/dev/null || true
 chmod -R u+rwX logs data materials 2>/dev/null || true
 
 # ---- Build images ----

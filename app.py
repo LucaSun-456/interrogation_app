@@ -33,7 +33,14 @@ if not app.secret_key:
     raise RuntimeError("SECRET_KEY environment variable is required")
 
 BASE_DIR = os.path.dirname(__file__)
-EXCEL_FILE = os.path.join(BASE_DIR, "experiment_data.xlsx")
+DATA_DIR = os.environ.get("DATA_DIR", os.path.join(BASE_DIR, "data"))
+os.makedirs(DATA_DIR, exist_ok=True)
+EXCEL_FILE = os.environ.get(
+    "EXCEL_FILE",
+    os.path.join(DATA_DIR, "experiment_data.xlsx"),
+)
+# Legacy path when Excel lived at project root (pre-Docker data/ layout)
+LEGACY_EXCEL_FILE = os.path.join(BASE_DIR, "experiment_data.xlsx")
 _excel_lock = threading.Lock()
 
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
@@ -701,9 +708,24 @@ INTERVIEW_QUESTION_BANK = {
 
 # ====== Excel Storage Layer ======
 
+def ensure_excel_file():
+    """Ensure EXCEL_FILE is a writable file (not a Docker-created directory)."""
+    if os.path.isdir(EXCEL_FILE):
+        raise RuntimeError(
+            f"{EXCEL_FILE} is a directory (Docker mount error). "
+            f"On the server run: docker compose down && rm -rf experiment_data.xlsx && mkdir -p data"
+        )
+    if os.path.isfile(EXCEL_FILE):
+        return
+    if os.path.isfile(LEGACY_EXCEL_FILE) and not os.path.isdir(LEGACY_EXCEL_FILE):
+        shutil.copy2(LEGACY_EXCEL_FILE, EXCEL_FILE)
+        logger.info("Copied legacy Excel from %s to %s", LEGACY_EXCEL_FILE, EXCEL_FILE)
+
+
 def init_excel():
     """Create the Excel workbook with all required sheets if it doesn't exist."""
-    if os.path.exists(EXCEL_FILE):
+    ensure_excel_file()
+    if os.path.isfile(EXCEL_FILE):
         ensure_sheets()
         return
     wb = Workbook()
@@ -1811,8 +1833,6 @@ def setup_materials_dir():
     _export_feedback_prompt_md()
 
 
-DATA_DIR = os.environ.get("DATA_DIR", os.path.join(BASE_DIR, "data"))
-os.makedirs(DATA_DIR, exist_ok=True)
 AVATARS_FILE = os.path.join(DATA_DIR, "avatars.json")
 LEGACY_AVATARS_FILE = os.path.join(BASE_DIR, "avatars.json")
 if not os.path.isfile(AVATARS_FILE) and os.path.isfile(LEGACY_AVATARS_FILE):
