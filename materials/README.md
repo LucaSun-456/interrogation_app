@@ -7,8 +7,8 @@
 ```
 materials/
   README.md                 # 本说明
-  combined_materials.md     # 自动生成：全部材料文本（按章节）
-  combined_materials.docx     # 自动生成：可下载的 Word 合集
+  combined_materials.md     # 培训/知情同意合集（已纳入 Git，改后 push）
+  combined_materials.docx     # 自动生成，未纳入 Git（可选 scp 上传）
   prompts/
     avatar_feedback.md      # Avatar 培训反馈 Prompt（由 Feedback prompts.docx 导出）
   _legacy_sources/          # 可选：从外部 IRB 目录复制来的原始文件备份

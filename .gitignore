@@ -25,7 +25,7 @@ data/
 results_serious_game.xlsx
 training_feedback/
 materials/_legacy_sources/
-materials/combined_materials.md
+# combined_materials.md is tracked in Git for server deploy (git pull)
 materials/combined_materials.docx
 
 # IDE / OS
