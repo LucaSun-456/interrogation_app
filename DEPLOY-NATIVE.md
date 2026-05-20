@@ -13,6 +13,15 @@
 **DNS**：在域名商或 Cloudflare 添加 A 记录 `@` 和 `www` → `47.238.75.193`。  
 **云安全组**（阿里云等）：放行 **80**、**443**（若用 HTTPS）、**22**（SSH）。
 
+### 与同机其他站点共存（例如 rogare.site）
+
+| 站点 | 域名 | 本机端口 | Nginx 配置文件 |
+|------|------|----------|----------------|
+| 已有 | rogare.site | **3001** | 保持不动（如 `sites-available/rogare.site`） |
+| 本应用 | spe-avatar.com | **3003** | 仅写入 `sites-available/spe-avatar.com` |
+
+两台应用可同时监听 80：Nginx 按 `server_name` 分流，互不冲突。部署脚本**不会**修改 rogare 的配置或占用 3001。
+
 不需要 Docker、pnpm、Node。
 
 ---

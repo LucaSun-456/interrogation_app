@@ -122,12 +122,22 @@ systemctl daemon-reload
 systemctl enable "${SERVICE_NAME}"
 systemctl restart "${SERVICE_NAME}"
 
-# ---- 6. nginx reverse proxy ----
-echo "[6/8] nginx → ${DOMAIN} → ${GUNICORN_BIND}..."
-cat > "/etc/nginx/sites-available/${DOMAIN}" <<NGINX_EOF
+# ---- 6. nginx reverse proxy (only spe-avatar.com; does not touch rogare.site / :3001) ----
+echo "[6/8] nginx → ${DOMAIN} → ${GUNICORN_BIND} (rogare.site on :3001 unchanged)..."
+if [ "$APP_PORT" = "3001" ]; then
+    echo "ERROR: APP_PORT=3001 conflicts with rogare.site. Use default 3003."
+    exit 1
+fi
+if ss -tlnp 2>/dev/null | grep -q ":${APP_PORT} "; then
+  if ! curl -sf "http://127.0.0.1:${APP_PORT}/api/health" >/dev/null 2>&1; then
+    echo "WARN: port ${APP_PORT} is in use by another process. Check: ss -tlnp | grep ${APP_PORT}"
+  fi
+fi
+
+cat > "/etc/nginx/sites-available/${DOMAIN}" <<'NGINX_EOF'
 server {
     listen 80;
-    server_name spe-avatar.com www.spe-avatar.com ${SERVER_IP};
+    server_name spe-avatar.com www.spe-avatar.com __SERVER_IP__;
 
     client_max_body_size 20m;
 
@@ -156,13 +166,16 @@ server {
 }
 NGINX_EOF
 
-# Replace port if not 3003
+sed -i "s|__SERVER_IP__|${SERVER_IP}|g" "/etc/nginx/sites-available/${DOMAIN}"
 if [ "$APP_PORT" != "3003" ]; then
     sed -i "s|127.0.0.1:3003|127.0.0.1:${APP_PORT}|g" "/etc/nginx/sites-available/${DOMAIN}"
 fi
 
 ln -sf "/etc/nginx/sites-available/${DOMAIN}" "/etc/nginx/sites-enabled/${DOMAIN}"
-rm -f /etc/nginx/sites-enabled/default
+# Do not remove other sites (e.g. rogare.site → :3001)
+if [ -L /etc/nginx/sites-enabled/default ] && [ ! -f /etc/nginx/sites-enabled/rogare.site ]; then
+    rm -f /etc/nginx/sites-enabled/default
+fi
 nginx -t
 systemctl reload nginx
 
