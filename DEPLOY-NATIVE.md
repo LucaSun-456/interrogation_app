@@ -24,6 +24,28 @@
 
 不需要 Docker、pnpm、Node。
 
+### 培训 / 知情同意材料（`combined_materials.md`）
+
+该文件**不在 Git 里**（由 Word/PDF 合并生成）。服务器若未上传会提示「知情同意书文件不存在」。
+
+**立刻修复（服务器）：**
+
+```bash
+cd ~/interrogation-app
+git pull
+cp -n materials/combined_materials.md.example materials/combined_materials.md
+sudo systemctl restart interrogation-app
+```
+
+**正式材料（三选一）：**
+
+1. 从本机上传已生成的合集（PowerShell）：
+   ```powershell
+   scp materials/combined_materials.md spe_avatar@47.238.75.193:/home/spe_avatar/interrogation-app/materials/
+   ```
+2. 把原始 `.docx` / `.pdf` 放到项目根或 `materials/` 后执行：`python scripts/build_combined_materials.py`
+3. 从旧服务器打包拷贝 `materials/` 目录
+
 ---
 
 ## 零、一键部署（推荐）

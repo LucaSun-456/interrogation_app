@@ -33,6 +33,13 @@ materials/
 python scripts/build_combined_materials.py
 ```
 
+服务器上若没有源文件，可先使用仓库内的模板（仅供联调，**正式实验前务必替换**）：
+
+```bash
+cp materials/combined_materials.md.example materials/combined_materials.md
+sudo systemctl restart interrogation-app
+```
+
 ## 实验数据（统计）
 
 所有参与者、预约、问卷、Avatar 培训记录、严肃游戏选择等**统计数据**统一保存在项目根目录的 **`experiment_data.xlsx`**（多工作表），不再使用 `results_serious_game.xlsx` 或 `training_feedback/` 多文件存档。

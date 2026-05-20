@@ -49,6 +49,14 @@ export GUNICORN_WORKERS="${GUNICORN_WORKERS:-1}"
 
 echo "[3/6] Building combined materials (if sources exist)..."
 python scripts/build_combined_materials.py 2>/dev/null || true
+if [ ! -f materials/combined_materials.md ] && [ -f materials/combined_materials.md.example ]; then
+    cp materials/combined_materials.md.example materials/combined_materials.md
+    echo "WARN: Using template materials/combined_materials.md — replace with real IRB materials when ready."
+fi
+if [ ! -f materials/combined_materials.md ]; then
+    echo "ERROR: materials/combined_materials.md missing. Upload it or add source .docx/.pdf files."
+    exit 1
+fi
 
 echo "[4/6] Smoke test import..."
 python -c "from app import app; print('OK:', app.name)"

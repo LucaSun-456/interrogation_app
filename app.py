@@ -138,6 +138,7 @@ def csrf_protect():
 MATERIALS_DIR = os.path.join(BASE_DIR, "materials")
 MATERIALS_PROMPTS_DIR = os.path.join(MATERIALS_DIR, "prompts")
 COMBINED_MATERIALS_MD = os.path.join(MATERIALS_DIR, "combined_materials.md")
+COMBINED_MATERIALS_EXAMPLE = os.path.join(MATERIALS_DIR, "combined_materials.md.example")
 COMBINED_MATERIALS_DOCX = os.path.join(MATERIALS_DIR, "combined_materials.docx")
 COMBINED_DOWNLOAD_NAME = "培训材料合集.docx"
 FEEDBACK_PROMPT_MD = os.path.join(MATERIALS_PROMPTS_DIR, "avatar_feedback.md")
@@ -1835,6 +1836,20 @@ def _export_feedback_prompt_md():
         logger.warning("Failed to export feedback prompt: %s", e)
 
 
+def _ensure_combined_materials_from_example():
+    """Use shipped template when no Word/PDF sources exist (e.g. fresh server deploy)."""
+    if os.path.isfile(COMBINED_MATERIALS_MD):
+        return False
+    if not os.path.isfile(COMBINED_MATERIALS_EXAMPLE):
+        return False
+    shutil.copy2(COMBINED_MATERIALS_EXAMPLE, COMBINED_MATERIALS_MD)
+    logger.warning(
+        "Using template %s — upload real combined_materials.md or add source docx/pdf and rebuild.",
+        COMBINED_MATERIALS_EXAMPLE,
+    )
+    return True
+
+
 def setup_materials_dir():
     """Organize materials/: merge legacy Word/PDF into combined_materials.md/.docx."""
     os.makedirs(MATERIALS_DIR, exist_ok=True)
@@ -1851,6 +1866,8 @@ def setup_materials_dir():
 
     if not os.path.isfile(COMBINED_MATERIALS_MD):
         _build_combined_materials_md()
+    if not os.path.isfile(COMBINED_MATERIALS_MD):
+        _ensure_combined_materials_from_example()
     if os.path.isfile(COMBINED_MATERIALS_MD) and not os.path.isfile(COMBINED_MATERIALS_DOCX):
         _build_combined_materials_docx()
 

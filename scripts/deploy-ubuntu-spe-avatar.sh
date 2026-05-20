@@ -105,6 +105,10 @@ export LOG_DIR='${APP_DIR}/logs'
 export DATA_DIR='${APP_DIR}/data'
 export EXCEL_FILE='${APP_DIR}/data/experiment_data.xlsx'
 python scripts/build_combined_materials.py 2>/dev/null || true
+if [ ! -f materials/combined_materials.md ] && [ -f materials/combined_materials.md.example ]; then
+  cp materials/combined_materials.md.example materials/combined_materials.md
+  echo 'WARN: Using template combined_materials.md'
+fi
 python -c 'from app import app; print(\"Import OK:\", app.name)'
 "
 
