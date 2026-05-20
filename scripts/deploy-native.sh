@@ -6,7 +6,7 @@ APP_DIR="${APP_DIR:-/home/spe_avatar/interrogation-app}"
 APP_PORT="${APP_PORT:-3003}"
 PY="${PYTHON:-python3}"
 SERVICE_NAME="${SERVICE_NAME:-interrogation-app}"
-export GUNICORN_BIND="${GUNICORN_BIND:-127.0.0.1:${APP_PORT}}"
+export GUNICORN_BIND="${GUNICORN_BIND:-0.0.0.0:${APP_PORT}}"
 
 cd "$APP_DIR"
 

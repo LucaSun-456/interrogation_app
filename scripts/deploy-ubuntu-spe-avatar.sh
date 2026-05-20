@@ -18,7 +18,7 @@ DOMAIN="${DOMAIN:-spe-avatar.com}"
 SERVER_IP="${SERVER_IP:-47.238.75.193}"
 GITHUB_REPO="${GITHUB_REPO:-https://github.com/LucaSun-456/interrogation_app.git}"
 SERVICE_NAME="${SERVICE_NAME:-interrogation-app}"
-GUNICORN_BIND="127.0.0.1:${APP_PORT}"
+GUNICORN_BIND="0.0.0.0:${APP_PORT}"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "Please run as root: sudo bash $0"
@@ -85,6 +85,22 @@ source .venv/bin/activate
 pip install -U pip -q
 pip install -r requirements.txt -q
 mkdir -p data logs materials materials/prompts
+EXCEL_PATH='${APP_DIR}/data/experiment_data.xlsx'
+if [ -d \"\$EXCEL_PATH\" ]; then
+  echo \"ERROR: \$EXCEL_PATH is a directory. Run: rm -rf \$EXCEL_PATH\"
+  exit 1
+fi
+if [ -f \"\$EXCEL_PATH\" ]; then
+  if ! python3 -c \"import zipfile; z=zipfile.ZipFile('${APP_DIR}/data/experiment_data.xlsx'); assert '[Content_Types].xml' in z.namelist()\" 2>/dev/null; then
+    echo \"WARN: corrupt experiment_data.xlsx — quarantining\"
+    mv \"\$EXCEL_PATH\" \"\${EXCEL_PATH}.corrupt.\$(date +%Y%m%d_%H%M%S)\"
+  fi
+fi
+if grep -q '^GUNICORN_WORKERS=' '${APP_DIR}/.env' 2>/dev/null; then
+  sed -i 's/^GUNICORN_WORKERS=.*/GUNICORN_WORKERS=1/' '${APP_DIR}/.env'
+else
+  echo 'GUNICORN_WORKERS=1' >> '${APP_DIR}/.env'
+fi
 export LOG_DIR='${APP_DIR}/logs'
 export DATA_DIR='${APP_DIR}/data'
 export EXCEL_FILE='${APP_DIR}/data/experiment_data.xlsx'
@@ -137,7 +153,7 @@ fi
 cat > "/etc/nginx/sites-available/${DOMAIN}" <<'NGINX_EOF'
 server {
     listen 80;
-    server_name spe-avatar.com www.spe-avatar.com __SERVER_IP__;
+    server_name spe-avatar.com www.spe-avatar.com;
 
     client_max_body_size 20m;
 
@@ -166,7 +182,6 @@ server {
 }
 NGINX_EOF
 
-sed -i "s|__SERVER_IP__|${SERVER_IP}|g" "/etc/nginx/sites-available/${DOMAIN}"
 if [ "$APP_PORT" != "3003" ]; then
     sed -i "s|127.0.0.1:3003|127.0.0.1:${APP_PORT}|g" "/etc/nginx/sites-available/${DOMAIN}"
 fi
@@ -184,6 +199,7 @@ echo "[7/8] UFW (SSH + HTTP + HTTPS)..."
 ufw allow 22/tcp comment "SSH" 2>/dev/null || true
 ufw allow 80/tcp comment "HTTP" 2>/dev/null || true
 ufw allow 443/tcp comment "HTTPS" 2>/dev/null || true
+ufw allow "${APP_PORT}/tcp" comment "interrogation-app" 2>/dev/null || true
 echo "y" | ufw enable 2>/dev/null || true
 
 # ---- 8. Health check ----
@@ -201,8 +217,8 @@ fi
 echo ""
 echo "=== Deploy complete ==="
 echo "  App:      http://127.0.0.1:${APP_PORT}"
-echo "  By IP:    http://${SERVER_IP}"
-echo "  Domain:   http://${DOMAIN}  (DNS A → ${SERVER_IP})"
+echo "  By IP:    http://${SERVER_IP}:${APP_PORT}"
+echo "  Domain:   http://${DOMAIN}  (DNS A → ${SERVER_IP}, nginx :80)"
 echo ""
 echo "Cloudflare (recommended):"
 echo "  - A record @ and www → ${SERVER_IP}, proxy ON (orange cloud)"

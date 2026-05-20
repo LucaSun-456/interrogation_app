@@ -17,7 +17,7 @@ EnvironmentFile=/home/spe_avatar/interrogation-app/.env
 Environment=LOG_DIR=/home/spe_avatar/interrogation-app/logs
 Environment=DATA_DIR=/home/spe_avatar/interrogation-app/data
 Environment=EXCEL_FILE=/home/spe_avatar/interrogation-app/data/experiment_data.xlsx
-Environment=GUNICORN_BIND=127.0.0.1:3003
+Environment=GUNICORN_BIND=0.0.0.0:3003
 Environment=GUNICORN_WORKERS=1
 ExecStart=/home/spe_avatar/interrogation-app/.venv/bin/gunicorn -c gunicorn_config.py wsgi:app
 Restart=on-failure

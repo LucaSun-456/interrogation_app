@@ -1,4 +1,5 @@
-# Host nginx (no Docker). VPS: 47.238.75.193 → Gunicorn 127.0.0.1:3003
+# Host nginx (no Docker). Domain spe-avatar.com :80 → 127.0.0.1:3003
+# Direct IP access: http://47.238.75.193:3003 (Gunicorn, not port 80)
 #
 # DNS: A 记录 @ 和 www → 47.238.75.193
 # Install:
@@ -9,7 +10,7 @@
 
 server {
     listen 80;
-    server_name spe-avatar.com www.spe-avatar.com 47.238.75.193;
+    server_name spe-avatar.com www.spe-avatar.com;
 
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;

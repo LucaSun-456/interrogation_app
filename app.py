@@ -6,6 +6,7 @@ All experiment statistics stored in a single Excel file (experiment_data.xlsx).
 import json
 import logging
 import os
+import zipfile
 import random
 import shutil
 import re
@@ -699,6 +700,27 @@ INTERVIEW_QUESTION_BANK = {
 
 # ====== Excel Storage Layer ======
 
+def _is_valid_xlsx(path):
+    """True if path looks like a readable .xlsx (zip with expected parts)."""
+    if not os.path.isfile(path) or os.path.getsize(path) < 128:
+        return False
+    try:
+        with zipfile.ZipFile(path, "r") as zf:
+            return "[Content_Types].xml" in zf.namelist()
+    except (zipfile.BadZipFile, OSError):
+        return False
+
+
+def _quarantine_corrupt_excel(path):
+    """Move unreadable Excel aside so a fresh workbook can be created."""
+    if not os.path.isfile(path):
+        return
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup = f"{path}.corrupt.{stamp}"
+    shutil.move(path, backup)
+    logger.warning("Corrupt or invalid Excel moved to %s — a new file will be created.", backup)
+
+
 def ensure_excel_file():
     """Ensure EXCEL_FILE is a writable file (not a Docker-created directory)."""
     if os.path.isdir(EXCEL_FILE):
@@ -707,10 +729,15 @@ def ensure_excel_file():
             f"On the server run: docker compose down && rm -rf experiment_data.xlsx && mkdir -p data"
         )
     if os.path.isfile(EXCEL_FILE):
-        return
+        if _is_valid_xlsx(EXCEL_FILE):
+            return
+        _quarantine_corrupt_excel(EXCEL_FILE)
     if os.path.isfile(LEGACY_EXCEL_FILE) and not os.path.isdir(LEGACY_EXCEL_FILE):
-        shutil.copy2(LEGACY_EXCEL_FILE, EXCEL_FILE)
-        logger.info("Copied legacy Excel from %s to %s", LEGACY_EXCEL_FILE, EXCEL_FILE)
+        if _is_valid_xlsx(LEGACY_EXCEL_FILE):
+            shutil.copy2(LEGACY_EXCEL_FILE, EXCEL_FILE)
+            logger.info("Copied legacy Excel from %s to %s", LEGACY_EXCEL_FILE, EXCEL_FILE)
+        else:
+            logger.warning("Legacy Excel invalid, skipping copy: %s", LEGACY_EXCEL_FILE)
 
 
 def init_excel():
@@ -737,7 +764,13 @@ def init_excel():
 
 def ensure_sheets():
     """Add any missing sheets to an existing Excel file (migration)."""
-    wb = load_workbook(EXCEL_FILE)
+    try:
+        wb = load_workbook(EXCEL_FILE)
+    except (zipfile.BadZipFile, OSError, KeyError) as e:
+        logger.error("Cannot open %s: %s", EXCEL_FILE, e)
+        _quarantine_corrupt_excel(EXCEL_FILE)
+        init_excel()
+        return
     try:
         existing_sheets = wb.sheetnames
         for name, columns in SHEET_COLUMNS.items():
