@@ -22,6 +22,7 @@ app.log
 logs/
 data/
 !data/avatars.json.example
+!data/avatars.json
 *.xlsx
 results_serious_game.xlsx
 training_feedback/
