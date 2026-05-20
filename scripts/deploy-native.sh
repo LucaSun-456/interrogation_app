@@ -3,8 +3,10 @@
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/home/spe_avatar/interrogation-app}"
+APP_PORT="${APP_PORT:-3003}"
 PY="${PYTHON:-python3}"
 SERVICE_NAME="${SERVICE_NAME:-interrogation-app}"
+export GUNICORN_BIND="${GUNICORN_BIND:-127.0.0.1:${APP_PORT}}"
 
 cd "$APP_DIR"
 
@@ -63,11 +65,11 @@ fi
 
 echo "[6/6] Health check..."
 sleep 1
-if curl -sf http://127.0.0.1:8000/api/health >/dev/null 2>&1; then
-    curl -s http://127.0.0.1:8000/api/health | python -m json.tool
+if curl -sf "http://127.0.0.1:${APP_PORT}/api/health" >/dev/null 2>&1; then
+    curl -s "http://127.0.0.1:${APP_PORT}/api/health" | python -m json.tool
     echo ""
-    echo "=== Done ==="
+    echo "=== Done (port ${APP_PORT}) ==="
 else
-    echo "WARN: http://127.0.0.1:8000/api/health not reachable yet."
+    echo "WARN: http://127.0.0.1:${APP_PORT}/api/health not reachable yet."
     echo "Start gunicorn or install systemd unit, then configure nginx."
 fi

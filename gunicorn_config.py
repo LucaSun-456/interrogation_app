@@ -1,7 +1,8 @@
 import multiprocessing
 import os
 
-bind = "0.0.0.0:8000"
+# Native deploy: 127.0.0.1:3003 (nginx → spe-avatar.com). Docker compose overrides via env if needed.
+bind = os.environ.get("GUNICORN_BIND", "127.0.0.1:3003")
 backlog = 2048
 
 # Default 1 worker for small VPS (1–2 GB RAM). Set GUNICORN_WORKERS in .env to scale up.

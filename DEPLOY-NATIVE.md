@@ -2,7 +2,36 @@
 
 路径：**`/home/spe_avatar/interrogation-app`**
 
+应用监听 **`127.0.0.1:3003`**，Nginx 反代 **`spe-avatar.com`** 与 **`47.238.75.193`**（80 → 3003）。
+
+| 项目 | 值 |
+|------|-----|
+| 服务器 IP | **47.238.75.193** |
+| 域名 | **spe-avatar.com** |
+| 应用端口（本机） | **3003** |
+
+**DNS**：在域名商或 Cloudflare 添加 A 记录 `@` 和 `www` → `47.238.75.193`。  
+**云安全组**（阿里云等）：放行 **80**、**443**（若用 HTTPS）、**22**（SSH）。
+
 不需要 Docker、pnpm、Node。
+
+---
+
+## 零、一键部署（推荐）
+
+在 Ubuntu 服务器上以 **root** 执行：
+
+```bash
+# 1) 先在本机上传 .env（PowerShell）
+# scp .env spe_avatar@47.238.75.193:/home/spe_avatar/interrogation-app/.env
+
+# 2) 克隆后一键部署
+git clone https://github.com/LucaSun-456/interrogation_app.git /home/spe_avatar/interrogation-app
+chmod +x /home/spe_avatar/interrogation-app/scripts/deploy-ubuntu-spe-avatar.sh
+sudo bash /home/spe_avatar/interrogation-app/scripts/deploy-ubuntu-spe-avatar.sh
+```
+
+脚本会自动：安装依赖、创建用户、venv、systemd（3003）、nginx（spe-avatar.com）、UFW、健康检查。
 
 ---
 
@@ -37,7 +66,7 @@ cd ~/interrogation-app
 从本机上传 `.env` 到 `/home/spe_avatar/interrogation-app/.env`（`scp` 示例）：
 
 ```powershell
-scp .env spe_avatar@你的服务器IP:/home/spe_avatar/interrogation-app/.env
+scp .env spe_avatar@47.238.75.193:/home/spe_avatar/interrogation-app/.env
 ```
 
 ```bash
@@ -56,7 +85,7 @@ sudo cp /home/spe_avatar/interrogation-app/scripts/interrogation-app.service.exa
 sudo systemctl daemon-reload
 sudo systemctl enable --now interrogation-app
 sudo systemctl status interrogation-app
-curl http://127.0.0.1:8000/api/health
+curl http://127.0.0.1:3003/api/health
 ```
 
 ---
@@ -71,7 +100,7 @@ sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Cloudflare：A 记录 → 新服务器 IP，**Flexible SSL**，源站只开 **80**。
+Cloudflare：A 记录 `@`、`www` → **47.238.75.193**，**Flexible SSL**，源站只开 **80**。
 
 ---
 
