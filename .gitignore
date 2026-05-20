@@ -46,6 +46,7 @@ dist/
 build/
 .pytest_cache/
 
-# Serious game videos (~800MB); keep folder via .gitkeep
-static/videos/serious-game/*.mp4
+# Serious game videos (~800MB) — deploy via WinSCP, never commit
+static/videos/**/*.mp4
+static/videos/serious-game-backup/
 !static/videos/serious-game/.gitkeep

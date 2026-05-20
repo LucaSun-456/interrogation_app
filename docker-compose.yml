@@ -47,6 +47,7 @@ services:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/ssl:/etc/letsencrypt:ro
       - ./nginx/www:/var/www/certbot:ro
+      - ./static/videos:/var/www/interrogation-static/videos:ro
     depends_on:
       - app
     networks:

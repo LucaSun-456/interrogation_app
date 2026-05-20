@@ -16,6 +16,17 @@ server {
         root /var/www/certbot;
     }
 
+    # 视频由 Nginx 直出磁盘，避免经 Gunicorn（大 MP4 会卡）
+    location /static/videos/ {
+        alias /home/spe_avatar/interrogation-app/static/videos/;
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        add_header Accept-Ranges bytes;
+        expires 7d;
+        access_log off;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:3003;
         proxy_http_version 1.1;

@@ -1032,6 +1032,14 @@
       </div>
       <div style="position:relative;width:100%;padding-top:56.25%;background:#000;border-radius:8px;overflow:hidden;">
         <div id="sg-player" style="position:absolute;top:0;left:0;width:100%;height:100%;"></div>
+        <!-- 进入本步视频前预缓存 -->
+        <div id="sg-buffer-overlay" class="hidden" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:8;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.88);">
+          <div style="text-align:center;color:#fff;padding:24px;max-width:90%;">
+            <div style="font-size:17px;font-weight:600;margin-bottom:12px;">正在缓存视频，请稍候</div>
+            <div id="sg-buffer-hint" style="font-size:14px;color:#9ca3af;line-height:1.6;margin-bottom:16px;">请勿关闭或刷新页面。缓存完成后将自动播放。</div>
+            <div id="sg-buffer-countdown" style="font-size:42px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--accent,#60a5fa);">10</div>
+          </div>
+        </div>
         <!-- Choice overlay -->
         <div id="sg-choice-overlay" class="hidden" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:flex-end;justify-content:center;padding-bottom:30px;background:transparent;z-index:10;pointer-events:none;">
           <div style="pointer-events:auto;background:rgba(15,22,32,0.92);border:1px solid rgba(34,48,67,0.9);border-radius:14px;padding:20px 30px;text-align:center;box-shadow:0 18px 60px rgba(0,0,0,0.55);">
@@ -2136,10 +2144,23 @@ function showGameLink() {
 
 let sgVideoEl = null;
 let sgEndPollId = null;
+let sgBufferCountdownId = null;
 let sgChoiceFrozen = false;
+const SG_BUFFER_MIN_SEC = 10;
+const SG_BUFFER_MAX_WAIT_SEC = 90;
+
+function clearSGBufferUI() {
+  if (sgBufferCountdownId != null) {
+    clearInterval(sgBufferCountdownId);
+    sgBufferCountdownId = null;
+  }
+  const overlay = $('sg-buffer-overlay');
+  if (overlay) overlay.classList.add('hidden');
+}
 
 function destroySGVideoPlayer() {
   clearSGPoll();
+  clearSGBufferUI();
   if (sgVideoEl) {
     try {
       sgVideoEl.pause();
@@ -2218,6 +2239,71 @@ function setupSGHtml5Player(videoUrl, hasChoice, question, aLabel, bLabel) {
   container.appendChild(video);
   sgVideoEl = video;
 
+  const overlay = $('sg-buffer-overlay');
+  const countdownEl = $('sg-buffer-countdown');
+  const hintEl = $('sg-buffer-hint');
+  let minWaitDone = false;
+  let bufferReady = false;
+  let playbackStarted = false;
+  const stepStartedAt = Date.now();
+
+  overlay.classList.remove('hidden');
+  $('sg-status-text').textContent = '正在缓存视频…';
+  if (countdownEl) countdownEl.textContent = String(SG_BUFFER_MIN_SEC);
+
+  function trySGPlay() {
+    if (!sgVideoEl || playbackStarted) return;
+    playbackStarted = true;
+    clearSGBufferUI();
+    sgVideoEl.play().catch(() => {
+      $('sg-status-text').textContent = '请点击视频开始播放';
+      sgVideoEl.addEventListener('click', () => sgVideoEl.play(), { once: true });
+    });
+  }
+
+  function maybeStartPlayback() {
+    if (playbackStarted || !sgVideoEl) return;
+    const elapsed = (Date.now() - stepStartedAt) / 1000;
+    if (!minWaitDone) return;
+    if (bufferReady) {
+      trySGPlay();
+      return;
+    }
+    if (hintEl) hintEl.textContent = '仍在缓存视频，请稍候。缓存完成后将自动播放。';
+    if (countdownEl) countdownEl.textContent = '…';
+    if (elapsed >= SG_BUFFER_MAX_WAIT_SEC) {
+      bufferReady = true;
+      trySGPlay();
+    }
+  }
+
+  function markBufferReady() {
+    if (bufferReady) return;
+    bufferReady = true;
+    maybeStartPlayback();
+  }
+
+  let secLeft = SG_BUFFER_MIN_SEC;
+  sgBufferCountdownId = setInterval(() => {
+    secLeft -= 1;
+    if (countdownEl && secLeft > 0) countdownEl.textContent = String(secLeft);
+    if (secLeft <= 0) {
+      clearInterval(sgBufferCountdownId);
+      sgBufferCountdownId = null;
+      minWaitDone = true;
+      if (countdownEl) countdownEl.textContent = '0';
+      if (hintEl && !bufferReady) {
+        hintEl.textContent = '10 秒准备时间结束，正在完成缓存…';
+      }
+      maybeStartPlayback();
+    }
+  }, 1000);
+
+  video.addEventListener('canplaythrough', markBufferReady, { once: true });
+  video.addEventListener('canplay', () => {
+    if (!bufferReady && minWaitDone) markBufferReady();
+  });
+
   function onNearEnd() {
     if (!sgVideoEl || sgChoiceFrozen) return;
     const d = sgVideoEl.duration;
@@ -2249,10 +2335,13 @@ function setupSGHtml5Player(videoUrl, hasChoice, question, aLabel, bLabel) {
       clearSGPoll();
       sgEndPollId = setInterval(onNearEnd, 150);
     }
-    video.play().catch(() => {
-      $('sg-status-text').textContent = '请点击视频开始播放';
-      video.addEventListener('click', () => video.play(), { once: true });
-    });
+  });
+  video.addEventListener('waiting', () => {
+    if (!playbackStarted) return;
+    $('sg-status-text').textContent = '视频缓冲中…';
+  });
+  video.addEventListener('playing', () => {
+    $('sg-status-text').textContent = hasChoice ? '请观看视频并做出选择' : '请观看视频';
   });
 
   video.addEventListener('timeupdate', () => {

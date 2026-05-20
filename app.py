@@ -2312,57 +2312,62 @@ class SeriousStep:
         return self.question is not None
 
 
+def _sg_video(case: str, condition: str, step: str) -> str:
+    """Serious-game MP4 filename: e.g. Arson_Guilty_1.mp4, Theft_Innocent_2-1.mp4."""
+    return f"{case}_{condition}_{step}.mp4"
+
+
 def build_serious_game_timeline(case: Case, condition: Condition) -> list[SeriousStep]:
     if case == "Theft":
         if condition == "Guilty":
             return [
-                SeriousStep(video="Theft_Guilty1.mp4", question="请选择：", a_label="A）买一杯拿铁", b_label="B）买牛奶", next_if_a=1, next_if_b=2),
-                SeriousStep(video="Theft_Guilty2-1.mp4", next_default=3),
-                SeriousStep(video="Theft_Guilty2-2.mp4", next_default=3),
-                SeriousStep(video="Theft_Guilty3.mp4", question="请选择：", a_label="A）快速穿过广场", b_label="B）以正常速度穿过广场", next_if_a=4, next_if_b=5),
-                SeriousStep(video="Theft_Guilty4-1.mp4", next_default=6),
-                SeriousStep(video="Theft_Guilty4-2.mp4", next_default=6),
-                SeriousStep(video="Theft_Guilty5.mp4", question="请选择：", a_label="A）放进背包", b_label="B）放进口袋", next_if_a=7, next_if_b=8),
-                SeriousStep(video="Theft_Guilty6-1.mp4", next_default=9),
-                SeriousStep(video="Theft_Guilty6-2.mp4", next_default=9),
-                SeriousStep(video="Theft_Guilty7.mp4", next_default=10),
+                SeriousStep(video=_sg_video("Theft", "Guilty", "1"), question="请选择：", a_label="A）买一杯拿铁", b_label="B）买牛奶", next_if_a=1, next_if_b=2),
+                SeriousStep(video=_sg_video("Theft", "Guilty", "2-1"), next_default=3),
+                SeriousStep(video=_sg_video("Theft", "Guilty", "2-2"), next_default=3),
+                SeriousStep(video=_sg_video("Theft", "Guilty", "3"), question="请选择：", a_label="A）快速穿过广场", b_label="B）以正常速度穿过广场", next_if_a=4, next_if_b=5),
+                SeriousStep(video=_sg_video("Theft", "Guilty", "4-1"), next_default=6),
+                SeriousStep(video=_sg_video("Theft", "Guilty", "4-2"), next_default=6),
+                SeriousStep(video=_sg_video("Theft", "Guilty", "5"), question="请选择：", a_label="A）放进背包", b_label="B）放进口袋", next_if_a=7, next_if_b=8),
+                SeriousStep(video=_sg_video("Theft", "Guilty", "6-1"), next_default=9),
+                SeriousStep(video=_sg_video("Theft", "Guilty", "6-2"), next_default=9),
+                SeriousStep(video=_sg_video("Theft", "Guilty", "7"), next_default=10),
             ]
         return [
-            SeriousStep(video="Theft_Innocent1.mp4", question="请选择：", a_label="A）买一杯拿铁", b_label="B）买牛奶", next_if_a=1, next_if_b=2),
-            SeriousStep(video="Theft_Innocent2-1.mp4", next_default=3),
-            SeriousStep(video="Theft_Innocent2-2.mp4", next_default=3),
-            SeriousStep(video="Theft_Innocent3.mp4", question="请选择：", a_label="A）拍大海", b_label="B）拍广场", next_if_a=4, next_if_b=5),
-            SeriousStep(video="Theft_Innocent4-1.mp4", next_default=6),
-            SeriousStep(video="Theft_Innocent4-2.mp4", next_default=6),
-            SeriousStep(video="Theft_Innocent5.mp4", question="请选择：", a_label="A）看左侧邮轮", b_label="B）看右侧邮轮", next_if_a=7, next_if_b=8),
-            SeriousStep(video="Theft_Innocent6-1.mp4", next_default=9),
-            SeriousStep(video="Theft_Innocent6-2.mp4", next_default=9),
-            SeriousStep(video="Theft_Innocent7.mp4", next_default=10),
+            SeriousStep(video=_sg_video("Theft", "Innocent", "1"), question="请选择：", a_label="A）买一杯拿铁", b_label="B）买牛奶", next_if_a=1, next_if_b=2),
+            SeriousStep(video=_sg_video("Theft", "Innocent", "2-1"), next_default=3),
+            SeriousStep(video=_sg_video("Theft", "Innocent", "2-2"), next_default=3),
+            SeriousStep(video=_sg_video("Theft", "Innocent", "3"), question="请选择：", a_label="A）拍大海", b_label="B）拍广场", next_if_a=4, next_if_b=5),
+            SeriousStep(video=_sg_video("Theft", "Innocent", "4-1"), next_default=6),
+            SeriousStep(video=_sg_video("Theft", "Innocent", "4-2"), next_default=6),
+            SeriousStep(video=_sg_video("Theft", "Innocent", "5"), question="请选择：", a_label="A）看左侧邮轮", b_label="B）看右侧邮轮", next_if_a=7, next_if_b=8),
+            SeriousStep(video=_sg_video("Theft", "Innocent", "6-1"), next_default=9),
+            SeriousStep(video=_sg_video("Theft", "Innocent", "6-2"), next_default=9),
+            SeriousStep(video=_sg_video("Theft", "Innocent", "7"), next_default=10),
         ]
     if condition == "Guilty":
         return [
-            SeriousStep(video="Guilty1.mp4", question="请选择：", a_label="A）停在400米外的小路上，再步行过去", b_label="B）停在公共停车场", next_if_a=1, next_if_b=2),
-            SeriousStep(video="Guilty2-1.mp4", next_default=3),
-            SeriousStep(video="Guilty2-2.mp4", next_default=3),
-            SeriousStep(video="Guilty3.mp4", question="请选择：", a_label="A）将汽油仔细倒在承重柱上", b_label="B）快速把汽油倒在地面上", next_if_a=4, next_if_b=5),
-            SeriousStep(video="Guilty4-1.mp4", next_default=6),
-            SeriousStep(video="Guilty4-2.mp4", next_default=6),
-            SeriousStep(video="Guilty5.mp4", question="请选择：", a_label="A）走主路开车回家", b_label="B）走小路开车回家", next_if_a=7, next_if_b=8),
-            SeriousStep(video="Guilty6-1.mp4", next_default=9),
-            SeriousStep(video="Guilty6-2.mp4", next_default=9),
-            SeriousStep(video="Guilty7.mp4", next_default=10),
+            SeriousStep(video=_sg_video("Arson", "Guilty", "1"), question="请选择：", a_label="A）停在400米外的小路上，再步行过去", b_label="B）停在公共停车场", next_if_a=1, next_if_b=2),
+            SeriousStep(video=_sg_video("Arson", "Guilty", "2-1"), next_default=3),
+            SeriousStep(video=_sg_video("Arson", "Guilty", "2-2"), next_default=3),
+            SeriousStep(video=_sg_video("Arson", "Guilty", "3"), question="请选择：", a_label="A）将汽油仔细倒在承重柱上", b_label="B）快速把汽油倒在地面上", next_if_a=4, next_if_b=5),
+            SeriousStep(video=_sg_video("Arson", "Guilty", "4-1"), next_default=6),
+            SeriousStep(video=_sg_video("Arson", "Guilty", "4-2"), next_default=6),
+            SeriousStep(video=_sg_video("Arson", "Guilty", "5"), question="请选择：", a_label="A）走主路开车回家", b_label="B）走小路开车回家", next_if_a=7, next_if_b=8),
+            SeriousStep(video=_sg_video("Arson", "Guilty", "6-1"), next_default=9),
+            SeriousStep(video=_sg_video("Arson", "Guilty", "6-2"), next_default=9),
+            SeriousStep(video=_sg_video("Arson", "Guilty", "7"), next_default=10),
         ]
     return [
-        SeriousStep(video="Innocent1.mp4", question="请选择：", a_label="A）看动画电影", b_label="B）看动作电影", next_if_a=1, next_if_b=2),
-        SeriousStep(video="Innocent2-1.mp4", next_default=3),
-        SeriousStep(video="Innocent2-2.mp4", next_default=3),
-        SeriousStep(video="Innocent3.mp4", question="请选择：", a_label="A）听轻柔音乐", b_label="B）听节奏感更强的音乐", next_if_a=4, next_if_b=5),
-        SeriousStep(video="Innocent4-1.mp4", next_default=6),
-        SeriousStep(video="Innocent4-2.mp4", next_default=6),
-        SeriousStep(video="Innocent5.mp4", question="请选择：", a_label="A）走主路开车回家", b_label="B）走小路开车回家", next_if_a=7, next_if_b=8),
-        SeriousStep(video="Innocent6-1.mp4", next_default=9),
-        SeriousStep(video="Innocent6-2.mp4", next_default=9),
-        SeriousStep(video="Innocent7.mp4", next_default=10),
+        SeriousStep(video=_sg_video("Arson", "Innocent", "1"), question="请选择：", a_label="A）看动画电影", b_label="B）看动作电影", next_if_a=1, next_if_b=2),
+        SeriousStep(video=_sg_video("Arson", "Innocent", "2-1"), next_default=3),
+        SeriousStep(video=_sg_video("Arson", "Innocent", "2-2"), next_default=3),
+        SeriousStep(video=_sg_video("Arson", "Innocent", "3"), question="请选择：", a_label="A）听轻柔音乐", b_label="B）听节奏感更强的音乐", next_if_a=4, next_if_b=5),
+        SeriousStep(video=_sg_video("Arson", "Innocent", "4-1"), next_default=6),
+        SeriousStep(video=_sg_video("Arson", "Innocent", "4-2"), next_default=6),
+        SeriousStep(video=_sg_video("Arson", "Innocent", "5"), question="请选择：", a_label="A）走主路开车回家", b_label="B）走小路开车回家", next_if_a=7, next_if_b=8),
+        SeriousStep(video=_sg_video("Arson", "Innocent", "6-1"), next_default=9),
+        SeriousStep(video=_sg_video("Arson", "Innocent", "6-2"), next_default=9),
+        SeriousStep(video=_sg_video("Arson", "Innocent", "7"), next_default=10),
     ]
 
 
