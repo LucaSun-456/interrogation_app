@@ -2191,15 +2191,26 @@ function startSeriousGame() {
 
 function loadSeriousGameStep() {
   fetch('/api/serious-game/step?' + Date.now())
-    .then(r => r.json())
+    .then(async (r) => {
+      const data = await r.json();
+      if (!r.ok || data.error) {
+        throw new Error(data.error || ('加载游戏步骤失败 (' + r.status + ')'));
+      }
+      return data;
+    })
     .then(data => {
       if (data.done) {
         completeSeriousGame();
         return;
       }
+      const videoUrl = data.video_url || data.youtube_id;
+      if (!videoUrl) {
+        showError('视频地址无效。请确认服务器已上传对应 MP4，并重新进入本环节。');
+        return;
+      }
       $('sg-step-num').textContent = (data.idx + 1);
       $('sg-status-text').textContent = data.has_choice ? '请观看视频并做出选择' : '请观看视频';
-      setupSGHtml5Player(data.video_url, data.has_choice, data.question, data.a_label, data.b_label);
+      setupSGHtml5Player(videoUrl, data.has_choice, data.question, data.a_label, data.b_label, data.idx === 0);
     })
     .catch(err => showError(err.message || '加载游戏步骤失败'));
 }
@@ -2208,7 +2219,11 @@ function clearSGPoll() {
   if (sgEndPollId != null) { clearInterval(sgEndPollId); sgEndPollId = null; }
 }
 
-function setupSGHtml5Player(videoUrl, hasChoice, question, aLabel, bLabel) {
+function setupSGHtml5Player(videoUrl, hasChoice, question, aLabel, bLabel, prefetchFirst) {
+  if (!videoUrl || typeof videoUrl !== 'string') {
+    showError('视频地址无效，无法播放');
+    return;
+  }
   sgChoiceFrozen = false;
   clearSGPoll();
   $('sg-choice-overlay').classList.add('hidden');
@@ -2242,67 +2257,78 @@ function setupSGHtml5Player(videoUrl, hasChoice, question, aLabel, bLabel) {
   const overlay = $('sg-buffer-overlay');
   const countdownEl = $('sg-buffer-countdown');
   const hintEl = $('sg-buffer-hint');
-  let minWaitDone = false;
-  let bufferReady = false;
   let playbackStarted = false;
-  const stepStartedAt = Date.now();
+  const statusWatching = hasChoice ? '请观看视频并做出选择' : '请观看视频';
 
-  overlay.classList.remove('hidden');
-  $('sg-status-text').textContent = '正在缓存视频…';
-  if (countdownEl) countdownEl.textContent = String(SG_BUFFER_MIN_SEC);
-
-  function trySGPlay() {
+  function beginSGPlayback() {
     if (!sgVideoEl || playbackStarted) return;
     playbackStarted = true;
     clearSGBufferUI();
+    if (overlay) overlay.classList.add('hidden');
     sgVideoEl.play().catch(() => {
       $('sg-status-text').textContent = '请点击视频开始播放';
       sgVideoEl.addEventListener('click', () => sgVideoEl.play(), { once: true });
     });
   }
 
-  function maybeStartPlayback() {
-    if (playbackStarted || !sgVideoEl) return;
-    const elapsed = (Date.now() - stepStartedAt) / 1000;
-    if (!minWaitDone) return;
-    if (bufferReady) {
-      trySGPlay();
-      return;
-    }
-    if (hintEl) hintEl.textContent = '仍在缓存视频，请稍候。缓存完成后将自动播放。';
-    if (countdownEl) countdownEl.textContent = '…';
-    if (elapsed >= SG_BUFFER_MAX_WAIT_SEC) {
-      bufferReady = true;
-      trySGPlay();
-    }
-  }
+  if (prefetchFirst) {
+    let minWaitDone = false;
+    let bufferReady = false;
+    const stepStartedAt = Date.now();
 
-  function markBufferReady() {
-    if (bufferReady) return;
-    bufferReady = true;
-    maybeStartPlayback();
-  }
+    overlay.classList.remove('hidden');
+    $('sg-status-text').textContent = '正在缓存视频…';
+    if (countdownEl) countdownEl.textContent = String(SG_BUFFER_MIN_SEC);
 
-  let secLeft = SG_BUFFER_MIN_SEC;
-  sgBufferCountdownId = setInterval(() => {
-    secLeft -= 1;
-    if (countdownEl && secLeft > 0) countdownEl.textContent = String(secLeft);
-    if (secLeft <= 0) {
-      clearInterval(sgBufferCountdownId);
-      sgBufferCountdownId = null;
-      minWaitDone = true;
-      if (countdownEl) countdownEl.textContent = '0';
-      if (hintEl && !bufferReady) {
-        hintEl.textContent = '10 秒准备时间结束，正在完成缓存…';
+    function maybeStartPlayback() {
+      if (playbackStarted || !sgVideoEl) return;
+      const elapsed = (Date.now() - stepStartedAt) / 1000;
+      if (!minWaitDone) return;
+      if (bufferReady) {
+        beginSGPlayback();
+        return;
       }
+      if (hintEl) hintEl.textContent = '仍在缓存视频，请稍候。缓存完成后将自动播放。';
+      if (countdownEl) countdownEl.textContent = '…';
+      if (elapsed >= SG_BUFFER_MAX_WAIT_SEC) {
+        bufferReady = true;
+        beginSGPlayback();
+      }
+    }
+
+    function markBufferReady() {
+      if (bufferReady) return;
+      bufferReady = true;
       maybeStartPlayback();
     }
-  }, 1000);
 
-  video.addEventListener('canplaythrough', markBufferReady, { once: true });
-  video.addEventListener('canplay', () => {
-    if (!bufferReady && minWaitDone) markBufferReady();
-  });
+    let secLeft = SG_BUFFER_MIN_SEC;
+    sgBufferCountdownId = setInterval(() => {
+      secLeft -= 1;
+      if (countdownEl && secLeft > 0) countdownEl.textContent = String(secLeft);
+      if (secLeft <= 0) {
+        clearInterval(sgBufferCountdownId);
+        sgBufferCountdownId = null;
+        minWaitDone = true;
+        if (countdownEl) countdownEl.textContent = '0';
+        if (hintEl && !bufferReady) {
+          hintEl.textContent = '10 秒准备时间结束，正在完成缓存…';
+        }
+        maybeStartPlayback();
+      }
+    }, 1000);
+
+    video.addEventListener('canplaythrough', markBufferReady, { once: true });
+    video.addEventListener('canplay', () => {
+      if (!bufferReady && minWaitDone) markBufferReady();
+    });
+  } else {
+    if (overlay) overlay.classList.add('hidden');
+    $('sg-status-text').textContent = statusWatching;
+    const startWhenReady = () => beginSGPlayback();
+    if (video.readyState >= 3) startWhenReady();
+    else video.addEventListener('canplay', startWhenReady, { once: true });
+  }
 
   function onNearEnd() {
     if (!sgVideoEl || sgChoiceFrozen) return;
@@ -2341,7 +2367,7 @@ function setupSGHtml5Player(videoUrl, hasChoice, question, aLabel, bLabel) {
     $('sg-status-text').textContent = '视频缓冲中…';
   });
   video.addEventListener('playing', () => {
-    $('sg-status-text').textContent = hasChoice ? '请观看视频并做出选择' : '请观看视频';
+    $('sg-status-text').textContent = statusWatching;
   });
 
   video.addEventListener('timeupdate', () => {
