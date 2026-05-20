@@ -113,6 +113,53 @@ Cloudflare：A 记录 `@`、`www` → **47.238.75.193**，**Flexible SSL**，源
 
 ---
 
+## 七、HTTPS：`https://spe-avatar.com`（二选一）
+
+当前架构：Gunicorn **`0.0.0.0:3003`**（IP 直连），Nginx **80** 反代域名 → `127.0.0.1:3003`。
+
+### 方案 A：Cloudflare（推荐，最简单）
+
+用户访问 **HTTPS**，源站仍用 **HTTP:80**，不必在服务器装证书。
+
+1. [Cloudflare](https://dash.cloudflare.com) 添加站点 `spe-avatar.com`，把域名 NS 改到 Cloudflare。
+2. **DNS**：
+
+| 类型 | 名称 | 内容 | 代理 |
+|------|------|------|------|
+| A | `@` | `47.238.75.193` | 橙云 ON |
+| A | `www` | `47.238.75.193` | 橙云 ON |
+
+3. **SSL/TLS** → 加密模式：**灵活（Flexible）**
+4. **SSL/TLS** → **始终使用 HTTPS**：开启
+5. 服务器确认 Nginx 已有 `spe-avatar.com` 的 80 反代（`scripts/nginx-spe-avatar.conf.example`）
+6. 阿里云安全组：放行 **80**（Flexible 下 Cloudflare 回源走 80）
+
+访问：**https://spe-avatar.com**（浏览器锁标志由 Cloudflare 提供）
+
+> 若访谈/WebRTC 异常，可暂时把该记录改为灰云（仅 DNS）排查。
+
+### 方案 B：服务器 Let's Encrypt（不用 Cloudflare）
+
+DNS 的 A 记录 **直接** 指向 `47.238.75.193`（不要经 Cloudflare 橙云，否则验证可能失败）。
+
+```bash
+cd ~/interrogation-app
+sudo bash scripts/certbot-native.sh spe-avatar.com 你的邮箱@example.com
+```
+
+脚本会：申请证书、启用 `scripts/nginx-spe-avatar-ssl.conf.example`（443 → `127.0.0.1:3003`）、HTTP 跳转 HTTPS。
+
+安全组放行 **80** 和 **443**。证书自动续期：`certbot renew --dry-run`。
+
+访问：**https://spe-avatar.com**
+
+| 访问方式 | 地址 |
+|----------|------|
+| IP + 端口 | http://47.238.75.193:3003 |
+| 域名 HTTPS | https://spe-avatar.com |
+
+---
+
 ## 五、从旧服务器迁移
 
 ```bash
