@@ -45,3 +45,7 @@ node_modules/
 dist/
 build/
 .pytest_cache/
+
+# Serious game videos (~800MB); keep folder via .gitkeep
+static/videos/serious-game/*.mp4
+!static/videos/serious-game/.gitkeep

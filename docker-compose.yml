@@ -9,6 +9,7 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./materials:/app/materials:ro
+      - ./static/videos/serious-game:/app/static/videos/serious-game:ro
     env_file:
       - .env
     environment:

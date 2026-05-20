@@ -2129,15 +2129,28 @@ function showGameLink() {
   $('sg-completed').classList.add('hidden');
   APP.sg_started = false;
   clearSGPoll();
-  if (sgPlayer) { try { sgPlayer.destroy(); } catch(_) {} sgPlayer = null; }
-  if (window._sgHandler) { window.removeEventListener('message', window._sgHandler); window._sgHandler = null; }
+  destroySGVideoPlayer();
 }
 
 // ====== Serious Game Functions ======
 
-let sgPlayer = null;
+let sgVideoEl = null;
 let sgEndPollId = null;
 let sgChoiceFrozen = false;
+
+function destroySGVideoPlayer() {
+  clearSGPoll();
+  if (sgVideoEl) {
+    try {
+      sgVideoEl.pause();
+      sgVideoEl.removeAttribute('src');
+      sgVideoEl.load();
+    } catch (_) {}
+    sgVideoEl = null;
+  }
+  const container = $('sg-player');
+  if (container) container.innerHTML = '';
+}
 
 function startSeriousGame() {
   showLoading('正在初始化游戏...');
@@ -2165,7 +2178,7 @@ function loadSeriousGameStep() {
       }
       $('sg-step-num').textContent = (data.idx + 1);
       $('sg-status-text').textContent = data.has_choice ? '请观看视频并做出选择' : '请观看视频';
-      setupSGYouTubePlayer(data.youtube_id, data.has_choice, data.question, data.a_label, data.b_label);
+      setupSGHtml5Player(data.video_url, data.has_choice, data.question, data.a_label, data.b_label);
     })
     .catch(err => showError(err.message || '加载游戏步骤失败'));
 }
@@ -2174,24 +2187,7 @@ function clearSGPoll() {
   if (sgEndPollId != null) { clearInterval(sgEndPollId); sgEndPollId = null; }
 }
 
-function waitForYTAPI(cb) {
-  if (window.YT && window.YT.Player && window.YT.loaded) {
-    cb();
-    return;
-  }
-  const prev = window.onYouTubeIframeAPIReady;
-  window.onYouTubeIframeAPIReady = () => {
-    if (prev) prev();
-    cb();
-  };
-  if (!window.YT) {
-    const tag = document.createElement('script');
-    tag.src = 'https://www.youtube.com/iframe_api';
-    document.head.appendChild(tag);
-  }
-}
-
-function setupSGYouTubePlayer(videoId, hasChoice, question, aLabel, bLabel) {
+function setupSGHtml5Player(videoUrl, hasChoice, question, aLabel, bLabel) {
   sgChoiceFrozen = false;
   clearSGPoll();
   $('sg-choice-overlay').classList.add('hidden');
@@ -2202,74 +2198,69 @@ function setupSGYouTubePlayer(videoId, hasChoice, question, aLabel, bLabel) {
     $('sg-choice-overlay').querySelector('[data-choice="B"]').textContent = bLabel || 'B';
   }
 
-  // Clean up previous YT player
-  if (sgPlayer) {
-    try { sgPlayer.destroy(); } catch(_) {}
-    sgPlayer = null;
+  destroySGVideoPlayer();
+
+  const container = $('sg-player');
+  const video = document.createElement('video');
+  video.id = 'sg-html5-player';
+  video.style.width = '100%';
+  video.style.height = '100%';
+  video.style.display = 'block';
+  video.style.objectFit = 'contain';
+  video.style.background = '#000';
+  video.setAttribute('playsinline', '');
+  video.setAttribute('webkit-playsinline', '');
+  video.controls = false;
+  video.disablePictureInPicture = true;
+  video.controlsList = 'nodownload noplaybackrate';
+  video.preload = 'auto';
+  video.src = videoUrl + (videoUrl.includes('?') ? '&' : '?') + '_=' + Date.now();
+  container.appendChild(video);
+  sgVideoEl = video;
+
+  function onNearEnd() {
+    if (!sgVideoEl || sgChoiceFrozen) return;
+    const d = sgVideoEl.duration;
+    const t = sgVideoEl.currentTime;
+    if (!isFinite(d) || d <= 0) return;
+    if (t >= d - 0.25) {
+      sgChoiceFrozen = true;
+      clearSGPoll();
+      try {
+        sgVideoEl.pause();
+        sgVideoEl.currentTime = Math.max(0, d - 0.05);
+      } catch (_) {}
+      setTimeout(() => showSGChoices(), 120);
+    }
   }
 
-  // Clear container and create a fresh div for YT.Player to replace
-  const container = $('sg-player');
-  container.innerHTML = '';
-  const playerDiv = document.createElement('div');
-  playerDiv.id = 'sg-yt-player';
-  playerDiv.style.width = '100%';
-  playerDiv.style.height = '100%';
-  container.appendChild(playerDiv);
+  function onEnded() {
+    clearSGPoll();
+    if (hasChoice) {
+      if (!sgChoiceFrozen) showSGChoices();
+    } else {
+      sgAutoNext();
+    }
+  }
 
-  waitForYTAPI(() => {
-    sgPlayer = new YT.Player('sg-yt-player', {
-      width: '100%',
-      height: '100%',
-      videoId: videoId,
-      playerVars: {
-        autoplay: 1,
-        controls: 0,
-        disablekb: 1,
-        rel: 0,
-        modestbranding: 1,
-        playsinline: 1,
-        iv_load_policy: 3,
-      },
-      events: {
-        onReady: () => {
-          try {
-            const iframe = sgPlayer.getIframe();
-            iframe.style.width = '100%';
-            iframe.style.height = '100%';
-            iframe.style.display = 'block';
-          } catch (_) {}
-          sgChoiceFrozen = false;
-          if (hasChoice) {
-            clearSGPoll();
-            sgEndPollId = setInterval(() => {
-              if (!sgPlayer || sgChoiceFrozen) return;
-              try {
-                const d = sgPlayer.getDuration();
-                const t = sgPlayer.getCurrentTime();
-                if (d > 0 && t >= d - 0.25) {
-                  sgChoiceFrozen = true;
-                  clearSGPoll();
-                  try { sgPlayer.pauseVideo(); } catch(_) {}
-                  try { sgPlayer.seekTo(Math.max(0, d - 0.05), true); } catch(_) {}
-                  setTimeout(() => showSGChoices(), 120);
-                }
-              } catch(_) {}
-            }, 150);
-          }
-        },
-        onStateChange: (event) => {
-          if (event.data === YT.PlayerState.ENDED) {
-            clearSGPoll();
-            if (hasChoice) {
-              if (!sgChoiceFrozen) showSGChoices();
-            } else {
-              sgAutoNext();
-            }
-          }
-        },
-      },
+  video.addEventListener('loadedmetadata', () => {
+    sgChoiceFrozen = false;
+    if (hasChoice) {
+      clearSGPoll();
+      sgEndPollId = setInterval(onNearEnd, 150);
+    }
+    video.play().catch(() => {
+      $('sg-status-text').textContent = '请点击视频开始播放';
+      video.addEventListener('click', () => video.play(), { once: true });
     });
+  });
+
+  video.addEventListener('timeupdate', () => {
+    if (hasChoice) onNearEnd();
+  });
+  video.addEventListener('ended', onEnded);
+  video.addEventListener('error', () => {
+    showError('视频加载失败，请确认文件已上传到服务器: ' + videoUrl);
   });
 }
 
@@ -2305,8 +2296,7 @@ function sgAutoNext() {
 function completeSeriousGame() {
   APP.sg_completed = true;
   $('sg-play').classList.add('hidden');
-  clearSGPoll();
-  if (sgPlayer) { try { sgPlayer.destroy(); } catch(_) {} sgPlayer = null; }
+  destroySGVideoPlayer();
   api('/api/serious-game/complete', { phone: APP.phone }).then(data => {
     $('sg-completed').classList.remove('hidden');
   }).catch(err => {

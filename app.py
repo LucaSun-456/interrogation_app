@@ -89,13 +89,13 @@ Talisman(
     app,
     content_security_policy={
         "default-src": "'self'",
-        "script-src": "'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://www.youtube.com",
+        "script-src": "'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",
         "style-src": "'self' 'unsafe-inline'",
         "img-src": "'self' data: blob:",
         "connect-src": "'self' https://api.deepseek.com https://api.liveavatar.com https://api.elevenlabs.io https://api.heygen.com https://webrtc-signaling.heygen.io wss://webrtc-signaling.heygen.io wss://*.heygen.io wss://*.liveavatar.com wss://*.livekit.io https://*.livekit.cloud wss://*.livekit.cloud https://cdn.jsdelivr.net",
         "font-src": "'self'",
         "media-src": "'self' blob: data:",
-        "frame-src": "'self' https://www.youtube.com",
+        "frame-src": "'self'",
     },
     force_https=False,
     session_cookie_secure=False,
@@ -2293,48 +2293,8 @@ Condition = Literal["Guilty", "Innocent"]
 Case = Literal["Arson", "Theft"]
 Choice = Literal["A", "B"]
 
-SERIOUS_GAME_VIDEO_IDS: dict[str, str] = {
-    "Guilty1.mp4": "tKf2BCNEh-M",
-    "Guilty2-1.mp4": "k0GL1uXqUkk",
-    "Guilty2-2.mp4": "KALNxqLiJZM",
-    "Guilty3.mp4": "sQLStPwicr4",
-    "Guilty4-1.mp4": "zQ88Dzu-D0I",
-    "Guilty4-2.mp4": "jW4yCLAV2II",
-    "Guilty5.mp4": "WpBchjwBMec",
-    "Guilty6-1.mp4": "rHQv0gLh1Ls",
-    "Guilty6-2.mp4": "3LU89Josrjs",
-    "Guilty7.mp4": "D1mJTQvoIaY",
-    "Innocent1.mp4": "KqcOFshJ1UE",
-    "Innocent2-1.mp4": "k-kScca4P4U",
-    "Innocent2-2.mp4": "bd5LR81eZfw",
-    "Innocent3.mp4": "I6GL4QA4qn4",
-    "Innocent4-1.mp4": "Nh1naKB74ho",
-    "Innocent4-2.mp4": "LLJq5LG9qmk",
-    "Innocent5.mp4": "XuePULTX0BU",
-    "Innocent6-1.mp4": "BmACObyXqmQ",
-    "Innocent6-2.mp4": "NZaCYGkQ8KI",
-    "Innocent7.mp4": "25Fj6u28Bqc",
-    "Theft_Guilty1.mp4": "UfGQOGLl9Lc",
-    "Theft_Guilty2-1.mp4": "OqoPLqe9o4Y",
-    "Theft_Guilty2-2.mp4": "0Oo3b7JJku8",
-    "Theft_Guilty3.mp4": "aIh9QzrNcFI",
-    "Theft_Guilty4-1.mp4": "XUbCdq_dCu8",
-    "Theft_Guilty4-2.mp4": "GxAJxGwAgKQ",
-    "Theft_Guilty5.mp4": "G1YveoiofPY",
-    "Theft_Guilty6-1.mp4": "FHnFy5r9IJQ",
-    "Theft_Guilty6-2.mp4": "ZqhndWKBpZk",
-    "Theft_Guilty7.mp4": "S5zHcfVcpd4",
-    "Theft_Innocent1.mp4": "UfGQOGLl9Lc",
-    "Theft_Innocent2-1.mp4": "OqoPLqe9o4Y",
-    "Theft_Innocent2-2.mp4": "0Oo3b7JJku8",
-    "Theft_Innocent3.mp4": "aIh9QzrNcFI",
-    "Theft_Innocent4-1.mp4": "99Gk-iwdAqo",
-    "Theft_Innocent4-2.mp4": "Vqyt3g0HUcc",
-    "Theft_Innocent5.mp4": "Au7twsHYwf8",
-    "Theft_Innocent6-1.mp4": "ZUV3Jk9B1ww",
-    "Theft_Innocent6-2.mp4": "hsKqRAe8Lls",
-    "Theft_Innocent7.mp4": "d1i1SdStq0Y",
-}
+SERIOUS_GAME_VIDEO_DIR = os.path.join(BASE_DIR, "static", "videos", "serious-game")
+os.makedirs(SERIOUS_GAME_VIDEO_DIR, exist_ok=True)
 
 
 @dataclass(frozen=True)
@@ -2406,9 +2366,15 @@ def build_serious_game_timeline(case: Case, condition: Condition) -> list[Seriou
     ]
 
 
-def youtube_id_for_sg(video_name: str) -> str | None:
-    vid = (SERIOUS_GAME_VIDEO_IDS.get(video_name) or "").strip()
-    return vid or None
+def serious_game_video_url(video_name: str) -> str | None:
+    """Local MP4 under static/videos/serious-game/ (filename must match SeriousStep.video)."""
+    name = (video_name or "").strip()
+    if not name or name != os.path.basename(name):
+        return None
+    path = os.path.join(SERIOUS_GAME_VIDEO_DIR, name)
+    if not os.path.isfile(path):
+        return None
+    return f"/static/videos/serious-game/{name}"
 
 
 def log_serious_game_choice(phone: str, pid: str, case: str, condition: str, step_index: int, video: str, choice: str):
@@ -4716,15 +4682,17 @@ def serious_game_step():
         return jsonify({"done": True})
 
     step = timeline[idx]
-    youtube_id = youtube_id_for_sg(step["video"])
-    if not youtube_id:
-        return jsonify({"error": f"Missing YouTube mapping for {step['video']}"}), 500
+    video_url = serious_game_video_url(step["video"])
+    if not video_url:
+        return jsonify({
+            "error": f"视频文件未找到: {step['video']}（请放入 static/videos/serious-game/）",
+        }), 500
 
     return jsonify({
         "done": False,
         "idx": idx,
         "total": len(timeline),
-        "youtube_id": youtube_id,
+        "video_url": video_url,
         "has_choice": step["has_choice"],
         "question": step.get("question"),
         "a_label": step.get("a_label"),
