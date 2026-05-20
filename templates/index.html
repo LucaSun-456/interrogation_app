@@ -594,6 +594,29 @@
     display: inline-block;
   }
   .number-reminder-modal .warning-icon { font-size: 40px; margin-bottom: 8px; }
+  .sg-recap-timer {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--primary);
+    text-align: center;
+    margin: 12px 0;
+  }
+  .sg-recap-hint {
+    font-size: 12px;
+    color: var(--text-light);
+    text-align: center;
+    margin-bottom: 16px;
+    line-height: 1.6;
+  }
+  .ai-review-progress {
+    width: 72px;
+    height: 72px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    border: 5px solid #e8edf3;
+    border-top-color: var(--primary);
+    animation: spin 0.9s linear infinite;
+  }
 
   /* New booking UI */
   .booking-grid {
@@ -965,7 +988,7 @@
   <div class="card hidden" id="screen-attention-terminated">
     <h2 style="color:var(--accent);">无法继续参与实验</h2>
     <p id="attentionTerminatedMsg" style="font-size:14px;line-height:1.8;margin:16px 0;">
-      两次回答均不正确，无法参与正式实验。您的手机号已被记录，无法再次参与。
+      回答不正确，无法参与正式实验。您的手机号已被记录，无法再次参与。
     </p>
     <p style="font-size:13px;color:var(--text-light);">如有疑问，请联系研究人员。</p>
     <button class="btn btn-primary" onclick="showPhoneScreen()" style="margin-top:16px;">返回首页</button>
@@ -975,14 +998,13 @@
   <div class="card hidden" id="screen-attention">
     <h2>注意力检测</h2>
     <p style="font-size:13px;color:var(--text-light);margin-bottom:16px;">
-      请根据刚才阅读的案件背景回答以下问题。必须全部回答正确才能继续。
+      请根据刚才阅读的案件背景回答以下问题。必须全部回答正确才能继续。<strong>您仅有一次作答机会</strong>，答错将无法继续参与实验。
     </p>
     <div id="attentionQuestions"></div>
     <div id="attentionFeedback" style="margin-bottom:12px;"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn btn-prev" onclick="goBackToSuspectContext()">← 上一步</button>
       <button class="btn btn-primary" id="attentionSubmitBtn" onclick="submitAttention()" style="flex:1;">提交答案</button>
-      <button class="btn btn-outline hidden" id="attentionRetryBtn" onclick="retryAttention()">重新回答</button>
     </div>
   </div>
 
@@ -991,8 +1013,11 @@
     <h2>模拟行动游戏</h2>
     <!-- Game intro -->
     <div id="sg-intro">
-      <p style="margin-bottom:12px;">在接下来的环节中，您需要观看一系列视频并根据您的角色做出选择。请认真观看并如实选择。</p>
-      <button class="btn btn-primary" onclick="showSgAiDisclaimer()">开始游戏</button>
+      <p style="margin-bottom:12px;">在接下来的环节中，您需要观看一系列视频并根据您的角色做出选择。</p>
+      <p style="margin-bottom:12px;font-size:13px;line-height:1.7;color:var(--text);">
+        <strong>请务必认真观看每一段视频</strong>，记住关键情节。全部视频结束后，您需要<strong>口头复述</strong>自己的动机以及当晚经历，并由系统审核后方可继续。
+      </p>
+      <button class="btn btn-primary" onclick="showSgWatchReminder()">开始游戏</button>
       <div style="margin-top:8px;display:flex;gap:8px;">
         <button class="btn btn-prev" onclick="showAttentionCheck()" style="flex:1;">← 上一步</button>
       </div>
@@ -1024,8 +1049,24 @@
       <div style="font-size:48px;">✓</div>
       <h3 style="color:var(--success);border:none;">模拟行动游戏完成</h3>
       <p style="margin-top:8px;font-size:13px;color:var(--text-light);">您已完成所有视频观看和选择。</p>
-      <button class="btn btn-primary" onclick="sgProceedToProfile()" style="margin-top:16px;">继续填写个人信息 →</button>
+      <button class="btn btn-primary" onclick="sgProceedToRecap()" style="margin-top:16px;">进入情节复述 →</button>
     </div>
+  </div>
+
+  <!-- ===== SUSPECT: Motive recap recording ===== -->
+  <div class="card hidden" id="screen-sg-recap">
+    <h2>情节复述</h2>
+    <p style="font-size:13px;line-height:1.8;margin-bottom:12px;">
+      请用<strong>30秒至1分钟</strong>的时间，口头陈述您在模拟行动中的<strong>动机</strong>以及<strong>当晚的经历</strong>。请尽量具体、连贯地描述。
+    </p>
+    <p class="sg-recap-hint">点击下方按钮开始录音，录音满 30 秒后可提交；最长 1 分钟将自动停止。</p>
+    <div class="sg-recap-timer" id="sgRecapTimer">00:00</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+      <button class="btn btn-primary" id="sgRecapRecordBtn" onclick="toggleSgRecapRecording()" style="flex:1;">🎙️ 开始录音</button>
+      <span id="sgRecapRecordStatus" style="font-size:12px;color:var(--text-light);">待录音</span>
+    </div>
+    <button class="btn btn-primary hidden" id="sgRecapSubmitBtn" onclick="submitSgRecap()" style="width:100%;margin-bottom:8px;">提交复述</button>
+    <button class="btn btn-prev" onclick="showGameLink()" style="width:100%;">← 返回</button>
   </div>
 
   <!-- ===== SUSPECT SCREEN 4: Profile Questionnaire ===== -->
@@ -1038,7 +1079,7 @@
     <div id="profileForm"></div>
     <button class="btn btn-outline" onclick="downloadProfile()" style="margin-bottom:8px;">📥 下载问卷</button>
     <div style="display:flex;gap:8px;">
-      <button class="btn btn-prev" onclick="showGameLink()">← 上一步</button>
+      <button class="btn btn-prev" onclick="showSgRecap()">← 上一步</button>
       <button class="btn btn-primary" onclick="submitProfile()" style="flex:1;">提交问卷</button>
     </div>
   </div>
@@ -1207,6 +1248,53 @@
   </div>
 </div>
 
+
+<!-- D group: suspect not booked yet -->
+<div class="number-reminder-overlay" id="dGroupBookingWaitModal">
+  <div class="number-reminder-modal">
+    <div class="warning-icon">⏳</div>
+    <h3 style="color:var(--primary);border:none;margin-bottom:8px;">尚未完成配对</h3>
+    <p style="font-size:13px;color:var(--text);margin-bottom:20px;line-height:1.8;text-align:left;">
+      您已预约的时间段，<strong>嫌疑人尚未预约</strong>同一时段。请过段时间后返回本界面再次查看确认；配对成功后再进入虚拟审讯训练。
+    </p>
+    <button class="btn-primary" onclick="closeDGroupBookingWaitModal()" style="padding:12px 40px;font-size:15px;width:auto;">我知道了</button>
+  </div>
+</div>
+
+<!-- Serious game: watch carefully reminder -->
+<div class="number-reminder-overlay" id="sgWatchReminderModal">
+  <div class="number-reminder-modal">
+    <div class="warning-icon">👀</div>
+    <h3 style="color:var(--primary);border:none;margin-bottom:8px;">请认真观看视频</h3>
+    <p style="font-size:13px;color:var(--text);margin-bottom:12px;line-height:1.8;text-align:left;">
+      本环节视频是后续复述与审核的依据，请<strong>专注观看每一段视频</strong>，记住关键情节与您的选择理由。
+    </p>
+    <p style="font-size:13px;color:var(--text);margin-bottom:20px;line-height:1.8;text-align:left;">
+      全部视频结束后，您将<strong>口头复述动机与当晚经历</strong>，并由系统进行审核。
+    </p>
+    <button class="btn-primary" onclick="confirmSgWatchReminder()" style="padding:12px 40px;font-size:15px;width:auto;">我已了解，继续</button>
+  </div>
+</div>
+
+<!-- AI review in progress -->
+<div class="number-reminder-overlay" id="sgAiReviewModal">
+  <div class="number-reminder-modal">
+    <div class="ai-review-progress"></div>
+    <h3 style="color:var(--primary);border:none;margin-bottom:8px;">正在审核</h3>
+    <p style="font-size:13px;color:var(--text-light);line-height:1.7;">正在由 AI 进行审核，请稍候…</p>
+  </div>
+</div>
+
+<!-- AI review passed -->
+<div class="number-reminder-overlay" id="sgAiPassModal">
+  <div class="number-reminder-modal">
+    <div class="warning-icon">✅</div>
+    <h3 style="color:var(--success);border:none;margin-bottom:8px;">审核通过</h3>
+    <p style="font-size:13px;color:var(--text);margin-bottom:20px;line-height:1.7;">您的复述已通过审核，请继续下一步。</p>
+    <button class="btn-primary" onclick="confirmSgAiPass()" style="padding:12px 40px;font-size:15px;width:auto;">继续</button>
+  </div>
+</div>
+
 <!-- Number reminder modal -->
 <div class="number-reminder-overlay" id="numberReminderModal">
   <div class="number-reminder-modal">
@@ -1260,11 +1348,11 @@ const APP = {
   role: '',
   participant: null,
   completed: false,
-  attentionRetryUsed: false,
   chatHistory: [],
   avatarInteractionMode: 'live',
   sg_started: false,
   sg_completed: false,
+  sg_recap_passed: false,
 };
 
 const TRAINING_GROUP_LABELS = {
@@ -1457,6 +1545,7 @@ const SCREEN_ROUTE_MAP = {
   'screen-suspect-context': '#/flow/suspect-context',
   'screen-attention': '#/flow/attention-check',
   'screen-game': '#/flow/serious-game',
+  'screen-sg-recap': '#/flow/sg-recap',
   'screen-profile': '#/flow/profile',
   'screen-interviewer': '#/flow/interviewer-training',
   'screen-case-info': '#/flow/case-info',
@@ -1673,6 +1762,12 @@ async function startFromDashboard() {
       const ti = lookup.participant && lookup.participant.training_info;
       const hasBooking = lookup.appointment && lookup.appointment.time_slot;
       if (ti && !ti.all_completed && hasBooking) {
+        if (data.training_type === 'avatar_specific' && lookup.appointment && !lookup.appointment.is_matched) {
+          bookingState.myBooking = lookup.appointment;
+          showDGroupBookingWaitModal();
+          showBookingFromCaseInfo();
+          return;
+        }
         showAvatarTrainingSessions();
         return;
       }
@@ -1783,7 +1878,6 @@ function showSuspectFlow(data) {
 
   // Store attention questions
   APP.attentionQuestions = data.attention_questions;
-  APP.attentionRetryUsed = false;
 
   showScreen('screen-suspect-context');
 }
@@ -1807,7 +1901,6 @@ function showAttentionCheck() {
   $('attentionQuestions').innerHTML = html;
   $('attentionFeedback').innerHTML = '';
   $('attentionSubmitBtn').classList.remove('hidden');
-  $('attentionRetryBtn').classList.add('hidden');
   showScreen('screen-attention');
 
   // Show number reminder popup on this second step
@@ -1829,6 +1922,149 @@ function showSgAiDisclaimer() {
 function confirmSgAiDisclaimer() {
   $('sgAiDisclaimerModal').classList.remove('show');
   startSeriousGame();
+}
+
+
+function showSgWatchReminder() {
+  $('sgWatchReminderModal').classList.add('show');
+}
+
+function confirmSgWatchReminder() {
+  $('sgWatchReminderModal').classList.remove('show');
+  showSgAiDisclaimer();
+}
+
+let sgRecapRecorder = null;
+let sgRecapChunks = [];
+let sgRecapIsRecording = false;
+let sgRecapStartedAt = 0;
+let sgRecapTimerId = null;
+const SG_RECAP_MIN_SEC = 30;
+const SG_RECAP_MAX_SEC = 60;
+
+function resetSgRecapUI() {
+  stopSgRecapTimer();
+  sgRecapIsRecording = false;
+  sgRecapChunks = [];
+  if (sgRecapRecorder && sgRecapRecorder.state !== 'inactive') {
+    try { sgRecapRecorder.stop(); } catch (_) {}
+  }
+  sgRecapRecorder = null;
+  $('sgRecapTimer').textContent = '00:00';
+  $('sgRecapRecordBtn').textContent = '🎙️ 开始录音';
+  $('sgRecapRecordStatus').textContent = '待录音';
+  $('sgRecapSubmitBtn').classList.add('hidden');
+}
+
+function stopSgRecapTimer() {
+  if (sgRecapTimerId) {
+    clearInterval(sgRecapTimerId);
+    sgRecapTimerId = null;
+  }
+}
+
+function formatSgRecapTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+function updateSgRecapTimerDisplay() {
+  const elapsed = Math.floor((Date.now() - sgRecapStartedAt) / 1000);
+  $('sgRecapTimer').textContent = formatSgRecapTime(elapsed);
+  if (elapsed >= SG_RECAP_MIN_SEC) {
+    $('sgRecapSubmitBtn').classList.remove('hidden');
+  }
+  if (elapsed >= SG_RECAP_MAX_SEC) {
+    stopSgRecapRecording(true);
+  }
+}
+
+function showSgRecap() {
+  resetSgRecapUI();
+  showScreen('screen-sg-recap');
+}
+
+function sgProceedToRecap() {
+  showSgRecap();
+}
+
+async function toggleSgRecapRecording() {
+  if (sgRecapIsRecording) {
+    const elapsed = Math.floor((Date.now() - sgRecapStartedAt) / 1000);
+    if (elapsed < SG_RECAP_MIN_SEC) {
+      alert('请至少录音 ' + SG_RECAP_MIN_SEC + ' 秒后再停止。');
+      return;
+    }
+    stopSgRecapRecording(false);
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('当前浏览器不支持录音功能');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    sgRecapChunks = [];
+    try {
+      sgRecapRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    } catch (_) {
+      sgRecapRecorder = new MediaRecorder(stream);
+    }
+    sgRecapRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size) sgRecapChunks.push(e.data);
+    };
+    sgRecapRecorder.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      $('sgRecapRecordBtn').textContent = '🎙️ 开始录音';
+      $('sgRecapRecordStatus').textContent = '录音已结束，可提交';
+    };
+    sgRecapRecorder.start();
+    sgRecapIsRecording = true;
+    sgRecapStartedAt = Date.now();
+    $('sgRecapRecordBtn').textContent = '⏹️ 停止录音';
+    $('sgRecapRecordStatus').textContent = '录音中…';
+    stopSgRecapTimer();
+    sgRecapTimerId = setInterval(updateSgRecapTimerDisplay, 200);
+    updateSgRecapTimerDisplay();
+  } catch (err) {
+    alert('无法启动录音：' + err.message);
+  }
+}
+
+function stopSgRecapRecording(autoMax) {
+  stopSgRecapTimer();
+  if (!sgRecapIsRecording) return;
+  sgRecapIsRecording = false;
+  if (sgRecapRecorder && sgRecapRecorder.state !== 'inactive') {
+    try { sgRecapRecorder.stop(); } catch (_) {}
+  }
+  if (autoMax) {
+    $('sgRecapRecordStatus').textContent = '已达最长 1 分钟，请提交';
+    $('sgRecapSubmitBtn').classList.remove('hidden');
+  }
+}
+
+function submitSgRecap() {
+  const elapsed = sgRecapStartedAt
+    ? Math.floor((Date.now() - sgRecapStartedAt) / 1000)
+    : 0;
+  if (elapsed < SG_RECAP_MIN_SEC && !sgRecapChunks.length) {
+    alert('请先完成至少 ' + SG_RECAP_MIN_SEC + ' 秒的录音。');
+    return;
+  }
+  $('sgAiReviewModal').classList.add('show');
+  const waitMs = 7000 + Math.floor(Math.random() * 3001);
+  setTimeout(() => {
+    $('sgAiReviewModal').classList.remove('show');
+    $('sgAiPassModal').classList.add('show');
+  }, waitMs);
+}
+
+function confirmSgAiPass() {
+  $('sgAiPassModal').classList.remove('show');
+  APP.sg_recap_passed = true;
+  showProfile();
 }
 
 function goBackToSuspectContext() {
@@ -1853,7 +2089,6 @@ async function submitAttention() {
     const result = await api('/api/verify-attention', {
       phone: APP.phone,
       answers: answers,
-      retry: APP.attentionRetryUsed,
     });
 
     hideLoading();
@@ -1874,40 +2109,17 @@ async function submitAttention() {
 
     if (result.all_correct) {
       $('attentionSubmitBtn').classList.add('hidden');
-      $('attentionRetryBtn').classList.add('hidden');
       $('attentionFeedback').innerHTML = '<div style="color:#27ae60;font-weight:600;">全部正确！正在进入下一环节...</div>';
       setTimeout(() => showGameLink(), 800);
-    } else if (result.retry_allowed) {
-      APP.attentionRetryUsed = true;
-      $('attentionSubmitBtn').classList.add('hidden');
-      $('attentionRetryBtn').classList.remove('hidden');
-      $('attentionFeedback').innerHTML = '<div style="color:#c0392b;font-weight:600;">部分答案不正确，您有一次重新回答的机会。请修改错误答案后点击"重新回答"。</div>';
-    } else if (result.terminated) {
-      $('attentionTerminatedMsg').textContent = result.message || '两次回答均不正确，无法参与正式实验。您的手机号已被记录，无法再次参与。';
-      showScreen('screen-attention-terminated');
     } else {
       $('attentionSubmitBtn').classList.add('hidden');
-      $('attentionRetryBtn').classList.add('hidden');
-      $('attentionFeedback').innerHTML = '<div style="color:#c0392b;font-weight:600;">⚠️ 两次回答均不正确。请联系研究人员获取帮助。</div>';
+      $('attentionTerminatedMsg').textContent = result.message || '回答不正确，无法参与正式实验。您的手机号已被记录，无法再次参与。';
+      showScreen('screen-attention-terminated');
     }
   } catch (err) {
     hideLoading();
     showError(err.message);
   }
-}
-
-function retryAttention() {
-  const questions = APP.attentionQuestions;
-  // Reset selections for wrong answers
-  questions.forEach((q, i) => {
-    const fb = $(`fb-${i}`);
-    const aq = $(`aq-${i}`);
-    aq.classList.remove('correct', 'wrong');
-    fb.innerHTML = '';
-  });
-  $('attentionFeedback').innerHTML = '';
-  $('attentionSubmitBtn').classList.remove('hidden');
-  $('attentionRetryBtn').classList.add('hidden');
 }
 
 function showGameLink() {
@@ -2103,7 +2315,7 @@ function completeSeriousGame() {
 }
 
 function sgProceedToProfile() {
-  showProfile();
+  sgProceedToRecap();
 }
 
 function showProfile() {
@@ -3783,11 +3995,20 @@ function renderBookingSlotsForInterviewer() {
           腾讯会议号: 123 456 7890
         </div>`;
     } else {
-      matchStatusHtml = `
+      const ttBooking = APP.participant ? APP.participant.training_type : '';
+      if (ttBooking === 'avatar_specific') {
+        matchStatusHtml = `
+        <div style="margin-top:8px;padding:8px;background:#fff3cd;border-radius:4px;color:#856404;font-size:13px;line-height:1.6;">
+          ⏳ 您已预约该时间段，但<strong>嫌疑人尚未预约</strong>同一时段。<br>
+          请过段时间后返回本界面再次查看确认；配对成功后再进入虚拟审讯训练。
+        </div>`;
+      } else {
+        matchStatusHtml = `
         <div style="margin-top:8px;padding:8px;background:#fff3cd;border-radius:4px;color:#856404;font-size:13px;">
           ⏳ 目前该时间段只有您预约。<br>
           请联系研究人员，并报上您的编号：<strong>${bookingState.myBooking.participant_id || bookingState.fullId || '暂无'}</strong>
         </div>`;
+      }
     }
 
     $('myBookingInfo').innerHTML = `
@@ -3795,23 +4016,30 @@ function renderBookingSlotsForInterviewer() {
         <span style="font-weight:600;color:var(--success);">✓ 您已预约</span>
         <span style="margin-left:8px;">${bookingState.myBooking.time_slot}</span>
         ${matchStatusHtml}
-        <div style="font-size:12px;color:var(--text-light);margin-top:8px;">预约已确认，请继续下一步。</div>
+        <div style="font-size:12px;color:var(--text-light);margin-top:8px;">${(APP.participant && APP.participant.training_type === 'avatar_specific' && !bookingState.myBooking.is_matched) ? '请稍后返回本页刷新配对状态。' : '预约已确认，请继续下一步。'}</div>
       </div>
     `;
     $('myBookingInfo').classList.remove('hidden');
     $('bookingSlotList').classList.add('hidden');
     $('bookingResult').classList.add('hidden');
 
-    // Show "proceed" button
+    // Show action area
     if (actionArea) {
       const tt = APP.participant ? APP.participant.training_type : '';
-      let nextLabel = '完成实验 →';
-      if (needsSixAvatarSessions(tt)) {
-        nextLabel = '进入虚拟审讯训练（6次） →';
+      if (tt === 'avatar_specific' && !bookingState.myBooking.is_matched) {
+        actionArea.innerHTML = `
+          <button class="btn btn-outline" onclick="loadBookingSlotsForInterviewer()" style="width:100%;margin-top:12px;">刷新配对状态</button>
+          <p style="font-size:12px;color:#856404;margin-top:8px;text-align:center;">嫌疑人预约同一时段后，方可进入训练</p>
+        `;
+      } else {
+        let nextLabel = '完成实验 →';
+        if (needsSixAvatarSessions(tt)) {
+          nextLabel = '进入虚拟审讯训练（6次） →';
+        }
+        actionArea.innerHTML = `
+          <button class="btn btn-primary" onclick="proceedAfterBooking()" style="width:100%;margin-top:12px;">${nextLabel}</button>
+        `;
       }
-      actionArea.innerHTML = `
-        <button class="btn btn-primary" onclick="proceedAfterBooking()" style="width:100%;margin-top:12px;">${nextLabel}</button>
-      `;
     }
     return;
   }
@@ -3952,6 +4180,24 @@ async function showAvatarTrainingSessions() {
   if (!needsSixAvatarSessions(tt)) {
     showError('当前实验条件不需要 6 次虚拟审讯训练');
     return;
+  }
+  if (tt === 'avatar_specific') {
+    try {
+      const myResp = await fetch('/api/appointments/my', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: APP.phone }),
+      });
+      if (myResp.ok) {
+        const myData = await myResp.json();
+        bookingState.myBooking = myData.appointment || null;
+        if (bookingState.myBooking && !bookingState.myBooking.is_matched) {
+          showDGroupBookingWaitModal();
+          showBookingFromCaseInfo();
+          return;
+        }
+      }
+    } catch (e) { /* continue */ }
   }
   showLoading('正在加载训练状态...');
   try {

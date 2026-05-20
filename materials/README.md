@@ -40,6 +40,20 @@ cp materials/combined_materials.md.example materials/combined_materials.md
 sudo systemctl restart interrogation-app
 ```
 
+## LiveAvatar 配置（D/C 组虚拟审讯）
+
+Avatar 的视觉 ID 与语音 ID **不在** `.env` 里，而在数据目录的 JSON 文件中：
+
+| 文件 | 说明 |
+|------|------|
+| `data/avatars.json` | 运行时读取（勿提交含真实 ID 的版本时可加入 `.gitignore`） |
+| `data/avatars.json.example` | 结构模板，复制为 `avatars.json` 后填入 LiveAvatar 控制台中的 `avatar_id` 与 ElevenLabs `voice_id` |
+
+- **C 组（`avatar_general`）**：使用 `generic` 节点下的 `avatar_id`。
+- **D 组（`avatar_specific`）**：按配对嫌疑人的问卷（性别、眼镜、发型）匹配 `specific` 下 8 种组合；若无嫌疑人档案则回退到 `generic`。
+
+还需在 `.env` 中配置 `LIVEAVATAR_API_KEY`（及 `ELEVENLABS_API_KEY`）。若仍报「未配置 Avatar ID」，说明 `avatars.json` 缺失或对应节点的 `avatar_id` 为空。
+
 ## 实验数据（统计）
 
 所有参与者、预约、问卷、Avatar 培训记录、严肃游戏选择等**统计数据**统一保存在项目根目录的 **`experiment_data.xlsx`**（多工作表），不再使用 `results_serious_game.xlsx` 或 `training_feedback/` 多文件存档。

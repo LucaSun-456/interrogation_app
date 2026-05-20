@@ -2593,7 +2593,6 @@ def verify_attention():
     data = request.get_json()
     phone = (data.get("phone") or "").strip()
     answers = data.get("answers") or []
-    retry = data.get("retry") or False
 
     p = store.get_participant(phone)
     if not p:
@@ -2620,20 +2619,19 @@ def verify_attention():
 
     if all_correct:
         store.update_participant(phone, attention_passed=1)
-    elif retry:
-        store.blacklist_phone(phone, reason="attention_failed")
         return jsonify({
-            "all_correct": False,
+            "all_correct": True,
             "results": results,
             "retry_allowed": False,
-            "terminated": True,
-            "message": "两次回答均不正确，无法参与正式实验。您的手机号已被记录，无法再次参与。",
         })
 
+    store.blacklist_phone(phone, reason="attention_failed")
     return jsonify({
-        "all_correct": all_correct,
+        "all_correct": False,
         "results": results,
-        "retry_allowed": not all_correct and not retry,
+        "retry_allowed": False,
+        "terminated": True,
+        "message": "回答不正确，无法参与正式实验。您的手机号已被记录，无法再次参与。",
     })
 
 

@@ -1,0 +1,11 @@
+﻿<!-- D group: suspect not booked yet -->
+<div class="number-reminder-overlay" id="dGroupBookingWaitModal">
+  <motion class="number-reminder-modal">
+    <div class="warning-icon">⏳</div>
+    <h3 style="color:var(--primary);border:none;margin-bottom:8px;">尚未完成配对</h3>
+    <p style="font-size:13px;color:var(--text);margin-bottom:20px;line-height:1.8;text-align:left;">
+      您已预约的时间段，<strong>嫌疑人尚未预约</strong>同一时段。请过段时间后返回本界面再次查看确认；配对成功后再进入虚拟审讯训练。
+    </p>
+    <button class="btn-primary" onclick="closeDGroupBookingWaitModal()" style="padding:12px 40px;font-size:15px;width:auto;">我知道了</button>
+  </div>
+</div>
