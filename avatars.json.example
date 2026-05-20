@@ -1,0 +1,43 @@
+{
+  "generic": {
+    "avatar_id": "YOUR_LIVEAVATAR_AVATAR_ID",
+    "face_id": "",
+    "elevenlabs_voice_id": "YOUR_ELEVENLABS_VOICE_ID",
+    "language": "zh",
+    "opening_text": "你有什么要问的？"
+  },
+  "specific": {
+    "male_glasses_long": {
+      "avatar_id": "YOUR_AVATAR_ID_MALE_GLASSES_LONG",
+      "elevenlabs_voice_id": "YOUR_VOICE_ID"
+    },
+    "male_glasses_short": {
+      "avatar_id": "YOUR_AVATAR_ID_MALE_GLASSES_SHORT",
+      "elevenlabs_voice_id": "YOUR_VOICE_ID"
+    },
+    "male_noglasses_long": {
+      "avatar_id": "YOUR_AVATAR_ID_MALE_NOGLASSES_LONG",
+      "elevenlabs_voice_id": "YOUR_VOICE_ID"
+    },
+    "male_noglasses_short": {
+      "avatar_id": "YOUR_AVATAR_ID_MALE_NOGLASSES_SHORT",
+      "elevenlabs_voice_id": "YOUR_VOICE_ID"
+    },
+    "female_glasses_long": {
+      "avatar_id": "YOUR_AVATAR_ID_FEMALE_GLASSES_LONG",
+      "elevenlabs_voice_id": "YOUR_VOICE_ID"
+    },
+    "female_glasses_short": {
+      "avatar_id": "YOUR_AVATAR_ID_FEMALE_GLASSES_SHORT",
+      "elevenlabs_voice_id": "YOUR_VOICE_ID"
+    },
+    "female_noglasses_long": {
+      "avatar_id": "YOUR_AVATAR_ID_FEMALE_NOGLASSES_LONG",
+      "elevenlabs_voice_id": "YOUR_VOICE_ID"
+    },
+    "female_noglasses_short": {
+      "avatar_id": "YOUR_AVATAR_ID_FEMALE_NOGLASSES_SHORT",
+      "elevenlabs_voice_id": "YOUR_VOICE_ID"
+    }
+  }
+}

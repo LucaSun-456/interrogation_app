@@ -21,6 +21,7 @@ ENV/
 app.log
 logs/
 data/
+!data/avatars.json.example
 *.xlsx
 results_serious_game.xlsx
 training_feedback/

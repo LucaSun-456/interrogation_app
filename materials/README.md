@@ -46,8 +46,16 @@ Avatar 的视觉 ID 与语音 ID **不在** `.env` 里，而在数据目录的 J
 
 | 文件 | 说明 |
 |------|------|
-| `data/avatars.json` | 运行时读取（勿提交含真实 ID 的版本时可加入 `.gitignore`） |
-| `data/avatars.json.example` | 结构模板，复制为 `avatars.json` 后填入 LiveAvatar 控制台中的 `avatar_id` 与 ElevenLabs `voice_id` |
+| `data/avatars.json` | 运行时读取（已在 `.gitignore`，含真实 ID，仅留在服务器本地） |
+| `avatars.json.example` 或 `data/avatars.json.example` | 结构模板（已纳入 Git），复制后改名并填入 ID |
+
+服务器上执行（任选其一）：
+
+```bash
+cp avatars.json.example data/avatars.json
+# 或
+cp data/avatars.json.example data/avatars.json
+```
 
 - **C 组（`avatar_general`）**：使用 `generic` 节点下的 `avatar_id`。
 - **D 组（`avatar_specific`）**：按配对嫌疑人的问卷（性别、眼镜、发型）匹配 `specific` 下 8 种组合；若无嫌疑人档案则回退到 `generic`。
