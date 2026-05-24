@@ -116,6 +116,31 @@
     margin-bottom: 4px;
   }
 
+  .completed-group-card {
+    border: 1px solid #bbf7d0;
+    border-radius: 10px;
+    padding: 12px 14px;
+    background: #f0fdf4;
+    margin-bottom: 10px;
+  }
+  .completed-group-card .group-title { color: #15803d; }
+  .completed-member {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: white;
+    border: 1px solid var(--border);
+    font-size: 12px;
+    line-height: 1.7;
+  }
+  .completed-member.s { border-left: 3px solid var(--suspect); }
+  .completed-member.i { border-left: 3px solid var(--interviewer); }
+  .completed-meta {
+    font-size: 11px;
+    color: var(--text-light);
+    margin-top: 8px;
+  }
+
   .calendar-wrap {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -282,8 +307,14 @@
 </div>
 
 <div class="card">
+  <h2>已完成组别</h2>
+  <p class="count" style="margin-bottom:10px;">显示嫌疑人和审讯者均已完成线上实验流程的配对组（共 <span id="completedGroupCount">0</span> 组）。</p>
+  <div id="completedGroupsWrap"></div>
+</div>
+
+<div class="card">
   <h2>预约时段管理</h2>
-  <p class="count" style="margin-bottom:10px;">默认时段：上午 9:30–11:00、下午 14:00–17:00、晚上 19:30–21:00（每 30 分钟一档），开放未来 5 天。点击下方日期配置各时段是否开放预约。</p>
+  <p class="count" style="margin-bottom:10px;">默认时段：上午 9:30–11:00、下午 14:00–17:00、晚上 19:30–21:00（每 30 分钟一档），开放未来 24 小时至 7 天内。点击下方日期配置各时段是否开放预约。</p>
   <div id="slotConfigWrap" class="calendar-wrap"></div>
 </div>
 
@@ -462,6 +493,7 @@ function applyFiltersAndRender() {
   document.getElementById('filterHint').textContent =
     `当前显示：${participants.length} 位参与者，${appointments.length} 条预约，${questionnaires.length} 份问卷`;
   renderGroupGrid(participants, appointments);
+  renderCompletedGroups(participants, appointments);
   renderCalendar(appointments);
   renderParticipantTable(participants);
   renderAppointmentTable(appointments);
@@ -529,6 +561,75 @@ function renderGroupGrid(participants, appointments) {
         <div style="margin-top:8px;">
           <span class="badge ${allCompleted ? 'badge-ok' : 'badge-warn'}">${allCompleted ? '全员已完成' : '有人未完成'}</span>
           <span class="badge ${bothReady ? 'badge-ok' : 'badge-warn'}">${bothReady ? '双方已预约' : '预约未齐'}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function getAppointmentForPhone(phone, appointments) {
+  const rows = appointments.filter(a => a.phone === phone && a.status === 'confirmed');
+  return rows.length ? rows[0] : null;
+}
+
+function questionnaireStatusLabel(phone) {
+  const qs = getQuestionnaireStatus(phone);
+  const parts = [];
+  parts.push('访谈前' + (qs.pre ? '✓' : '✗'));
+  parts.push('访谈后' + (qs.post ? '✓' : '✗'));
+  return parts.join(' · ');
+}
+
+function renderCompletedGroups(participants, appointments) {
+  const groupMap = new Map();
+  participants.forEach(p => {
+    const g = String(p.group_name || '').trim();
+    if (!g) return;
+    if (!groupMap.has(g)) groupMap.set(g, { S: null, I: null });
+    if (p.role === 'S') groupMap.get(g).S = p;
+    if (p.role === 'I') groupMap.get(g).I = p;
+  });
+
+  const completed = [];
+  groupMap.forEach((pair, g) => {
+    if (!pair.S || !pair.I) return;
+    if (Number(pair.S.completed) !== 1 || Number(pair.I.completed) !== 1) return;
+    completed.push({ group: g, suspect: pair.S, interviewer: pair.I });
+  });
+  completed.sort((a, b) => Number(a.group) - Number(b.group));
+
+  const host = document.getElementById('completedGroupsWrap');
+  const countEl = document.getElementById('completedGroupCount');
+  if (countEl) countEl.textContent = String(completed.length);
+
+  if (!completed.length) {
+    host.innerHTML = '<div class="empty">暂无双方均已完成实验的组别</div>';
+    return;
+  }
+
+  host.innerHTML = completed.map(({ group, suspect, interviewer }) => {
+    const sAppt = getAppointmentForPhone(suspect.phone, appointments);
+    const iAppt = getAppointmentForPhone(interviewer.phone, appointments);
+    const sSlot = sAppt ? sAppt.time_slot : '未预约';
+    const iSlot = iAppt ? iAppt.time_slot : '未预约';
+    const matchedSlot = sAppt && iAppt && sAppt.time_slot === iAppt.time_slot;
+    return `
+      <div class="completed-group-card">
+        <div class="group-title">第 ${group} 组 · 双方已完成</div>
+        <div class="completed-member s">
+          <strong>嫌疑人</strong> ${suspect.full_id || '-'}<br>
+          手机：${suspect.phone || '-'} · 案件：${caseLabel(suspect.case_type)} · ${guiltLabel(suspect.guilt)}<br>
+          预约：${sSlot} · 问卷：${questionnaireStatusLabel(suspect.phone)}
+        </div>
+        <div class="completed-member i">
+          <strong>审讯者</strong> ${interviewer.full_id || '-'}<br>
+          手机：${interviewer.phone || '-'} · 培训：${trainingLabel(interviewer.training_type)}<br>
+          预约：${iSlot} · 问卷：${questionnaireStatusLabel(interviewer.phone)}
+        </div>
+        <div class="completed-meta">
+          ${matchedSlot
+            ? '✓ 双方预约同一时段：' + sSlot
+            : '⚠ 双方预约时段不一致或未齐'}
         </div>
       </div>
     `;

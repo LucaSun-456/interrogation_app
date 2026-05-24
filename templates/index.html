@@ -955,6 +955,18 @@
     </div>
   </div>
 
+  <!-- ===== CONSENT ATTENTION CHECK (after consent, before dashboard) ===== -->
+  <div class="card hidden" id="screen-consent-attention">
+    <h2>实验说明检测</h2>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:16px;">
+      请根据您刚才阅读的知情同意书内容，回答以下问题。必须<strong>全部回答正确</strong>才能继续参与实验。
+      <strong>您仅有一次作答机会</strong>，任意一题答错将无法继续参与。
+    </p>
+    <div id="consentAttentionQuestions"></div>
+    <div id="consentAttentionFeedback" style="margin-bottom:12px;"></div>
+    <button class="btn btn-primary" id="consentAttentionSubmitBtn" onclick="submitConsentAttention()" style="width:100%;">提交答案</button>
+  </div>
+
   <!-- ===== DASHBOARD / PROGRESS SCREEN ===== -->
   <div class="card hidden" id="screen-dashboard">
     <h2 id="dashboardTitle">实验流程</h2>
@@ -1672,10 +1684,98 @@ async function showConsent() {
 }
 
 function agreeConsent() {
+  if (APP.participant && APP.participant.consent_attention_required !== false) {
+    showConsentAttentionCheck();
+    return;
+  }
   if (APP.participant) {
     showDashboard(APP.participant);
   } else {
     resumeParticipant(APP.phone);
+  }
+}
+
+async function showConsentAttentionCheck() {
+  showLoading('正在加载检测题...');
+  try {
+    const res = await fetch(`/api/consent-attention/${APP.role}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '加载失败');
+    APP.consentAttentionQuestions = data.questions || [];
+    hideLoading();
+    renderConsentAttentionQuestions();
+    showScreen('screen-consent-attention');
+  } catch (err) {
+    hideLoading();
+    showError(err.message || '加载检测题失败');
+  }
+}
+
+function renderConsentAttentionQuestions() {
+  const questions = APP.consentAttentionQuestions || [];
+  let html = '';
+  questions.forEach((q, i) => {
+    html += `<div class="attention-question" id="caq-${i}">`;
+    html += `<div class="q-title">${i + 1}. ${q.question}</div>`;
+    q.options.forEach((opt, j) => {
+      html += `<label style="display:block;margin:4px 0;font-size:13px;cursor:pointer;">
+        <input type="radio" name="caq-${i}" value="${j}"> ${opt}
+      </label>`;
+    });
+    html += `<div id="cafb-${i}" style="margin-top:6px;font-size:12px;"></div></div>`;
+  });
+  $('consentAttentionQuestions').innerHTML = html;
+  $('consentAttentionFeedback').innerHTML = '';
+  $('consentAttentionSubmitBtn').classList.remove('hidden');
+}
+
+async function submitConsentAttention() {
+  const questions = APP.consentAttentionQuestions || [];
+  const answers = [];
+  for (let i = 0; i < questions.length; i++) {
+    const el = document.querySelector(`input[name="caq-${i}"]:checked`);
+    answers.push(el ? parseInt(el.value) : -1);
+  }
+  if (answers.some(a => a === -1)) {
+    alert('请回答所有问题后再提交。');
+    return;
+  }
+
+  showLoading('正在验证答案...');
+  try {
+    const result = await api('/api/verify-consent-attention', {
+      phone: APP.phone,
+      answers,
+    });
+    hideLoading();
+
+    result.results.forEach((r, i) => {
+      const aq = $(`caq-${i}`);
+      const fb = $(`cafb-${i}`);
+      if (!aq) return;
+      aq.classList.remove('correct', 'wrong');
+      if (r.correct) {
+        aq.classList.add('correct');
+        fb.innerHTML = '<span style="color:#27ae60;">✓ 正确</span>';
+      } else {
+        aq.classList.add('wrong');
+        fb.innerHTML = '<span style="color:#c0392b;">✗ 错误</span>';
+      }
+    });
+
+    if (result.all_correct) {
+      $('consentAttentionSubmitBtn').classList.add('hidden');
+      $('consentAttentionFeedback').innerHTML = '<div style="color:#27ae60;font-weight:600;">全部正确！正在进入实验流程...</div>';
+      if (APP.participant) APP.participant.consent_attention_required = false;
+      setTimeout(() => showDashboard(APP.participant), 800);
+    } else {
+      $('consentAttentionSubmitBtn').classList.add('hidden');
+      $('attentionTerminatedMsg').textContent = result.message || '回答不正确，无法参与正式实验。您的手机号已被记录，无法再次参与。';
+      showScreen('screen-attention-terminated');
+    }
+  } catch (err) {
+    hideLoading();
+    showError(err.message);
   }
 }
 
@@ -1806,9 +1906,9 @@ async function resumeParticipant(phone) {
       if (p.training_info) {
         APP.participant.training_info = p.training_info;
       }
-
-      if (p.training_info) {
-        APP.participant.training_info = p.training_info;
+      if (p.consent_attention_required) {
+        showConsentAttentionCheck();
+        return;
       }
       showDashboard(APP.participant);
     } else {

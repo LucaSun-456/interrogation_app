@@ -175,6 +175,49 @@ THEFT_INNOCENT_CONTEXT = """你一直对航海和海洋充满热情，尽管你�
 
 开放日已经过去几天。你突然接到警方电话——"Sea Whisper"上发生了一起盗窃案。由于你曾在C码头附近观赏船只，并出现在俱乐部照片的背景中，警方将你视为潜在证人或相关人员。你没有任何需要隐瞒的事情，但面对警方可能仍会有些紧张。只需要证明你是一个前来游玩的普通公民即可。"""
 
+CONSENT_ATTENTION_CHECKS = {
+    "S": [
+        {
+            "question": "在本实验的第一阶段（线上环节），您作为嫌疑人需要完成以下哪项核心任务？",
+            "options": [
+                "A. 阅读案件背景、完成模拟行动游戏、填写个人信息并预约正式访谈时间",
+                "B. 无需阅读任何材料，直接与其他参与者进行面对面审讯",
+                "C. 只需填写一份简短问卷即可结束，无需预约访谈",
+            ],
+            "answer": 0,
+        },
+        {
+            "question": "关于本实验的正式访谈环节，以下哪项描述是正确的？",
+            "options": [
+                "A. 您将在预约时间通过腾讯会议与一名访谈员进行实时视频访谈",
+                "B. 正式访谈会在线上注册后立即自动开始，无需预约",
+                "C. 正式访谈仅通过文字聊天完成，不需要视频通话",
+            ],
+            "answer": 0,
+        },
+    ],
+    "I": [
+        {
+            "question": "在本实验的第一阶段（线上环节），您作为审讯者需要完成以下哪项核心任务？",
+            "options": [
+                "A. 阅读培训材料、了解案件信息，并预约与嫌疑人匹配的访谈时间",
+                "B. 无需培训，注册后直接参加正式访谈",
+                "C. 只需观看一段案件视频并填写问卷，无需预约访谈",
+            ],
+            "answer": 0,
+        },
+        {
+            "question": "关于本实验的正式访谈环节，以下哪项描述是正确的？",
+            "options": [
+                "A. 您将在预约时间通过腾讯会议与一名模拟嫌疑人进行实时视频访谈",
+                "B. 正式访谈由系统自动完成，您无需实际出席",
+                "C. 访谈必须在注册后 24 小时内进行且无法更改时间",
+            ],
+            "answer": 0,
+        },
+    ],
+}
+
 ATTENTION_CHECKS = {
     "arson_guilty": [
         {
@@ -482,7 +525,7 @@ SHEET_SERIOUS_GAME = "serious_game_choices"
 SHEET_META = "meta"
 
 SHEET_COLUMNS = {
-    SHEET_PARTICIPANTS: ["id", "phone", "role", "group_name", "full_id", "guilt", "case_type", "training_type", "attention_passed", "attention_failed", "game_completed", "profile_completed", "completed", "created_at", "avatar_practice_transcript"],
+    SHEET_PARTICIPANTS: ["id", "phone", "role", "group_name", "full_id", "guilt", "case_type", "training_type", "consent_attention_passed", "attention_passed", "attention_failed", "game_completed", "profile_completed", "completed", "created_at", "avatar_practice_transcript"],
     SHEET_GROUPS: ["name", "suspect_id", "interviewer_id", "created_at"],
     SHEET_PROFILES: ["participant_id", "data", "submitted_at"],
     SHEET_AVAILABILITIES: ["id", "phone", "group_name", "role", "slots", "updated_at"],
@@ -957,6 +1000,7 @@ class ExcelStore:
                 participants = self._read_all(wb, SHEET_PARTICIPANTS)
                 pid = self._next_id(wb, "next_participant_id")
                 kwargs["id"] = pid
+                kwargs.setdefault("consent_attention_passed", 0)
                 kwargs.setdefault("attention_passed", 0)
                 kwargs.setdefault("full_id", "")
                 kwargs.setdefault("game_completed", 0)
@@ -2051,6 +2095,23 @@ def make_full_id(group_name, role, suffix_code):
     return f"{group_name}-{role}-{suffix_code}"
 
 
+def consent_attention_required(participant):
+    """Whether participant still needs post-consent comprehension check."""
+    if int(participant.get("consent_attention_passed") or 0) == 1:
+        return False
+    if int(participant.get("attention_failed") or 0) == 1:
+        return False
+    # Grandfather users who already progressed before this check was added
+    if participant.get("role") == "S":
+        if int(participant.get("attention_passed") or 0) == 1:
+            return False
+        if int(participant.get("game_completed") or 0) == 1:
+            return False
+    if participant.get("role") == "I" and int(participant.get("completed") or 0) == 1:
+        return False
+    return True
+
+
 def _count_training_assignments():
     counts = {t: 0 for t in TRAINING_TYPES}
     for p in store.get_all_participants():
@@ -2546,6 +2607,7 @@ def register():
             "case_label": "纵火案 Arson" if case_type == "arson" else "盗窃案 Theft",
             "context": context_text,
             "attention_questions": attention_questions,
+            "consent_attention_required": True,
         })
 
     else:
@@ -2572,6 +2634,7 @@ def register():
                 "paired": True,
                 "suspect_case": suspect["case_type"] if suspect else None,
                 "suspect_guilt": suspect["guilt"] if suspect else None,
+                "consent_attention_required": True,
             })
         else:
             # No waiting suspect — register as new suspect (should not happen with role logic above)
@@ -2604,7 +2667,56 @@ def register():
                 "case_label": "纵火案 Arson" if case_type == "arson" else "盗窃案 Theft",
                 "context": context_text,
                 "attention_questions": attention_questions,
+                "consent_attention_required": True,
             })
+
+
+@app.route("/api/consent-attention/<role>")
+def consent_attention_questions(role):
+    if role not in CONSENT_ATTENTION_CHECKS:
+        return jsonify({"error": "无效角色"}), 400
+    return jsonify({"questions": CONSENT_ATTENTION_CHECKS[role]})
+
+
+@app.route("/api/verify-consent-attention", methods=["POST"])
+def verify_consent_attention():
+    data = request.get_json()
+    phone = (data.get("phone") or "").strip()
+    answers = data.get("answers") or []
+
+    p = store.get_participant(phone)
+    if not p:
+        return jsonify({"error": "未找到参与者"}), 404
+
+    role = p.get("role")
+    expected = CONSENT_ATTENTION_CHECKS.get(role, [])
+
+    results = []
+    all_correct = True
+    for i, q in enumerate(expected):
+        user_ans = answers[i] if i < len(answers) else -1
+        correct = user_ans == q["answer"]
+        if not correct:
+            all_correct = False
+        results.append({
+            "question_index": i,
+            "correct": correct,
+            "correct_answer": q["answer"],
+            "user_answer": user_ans,
+        })
+
+    if all_correct:
+        store.update_participant(phone, consent_attention_passed=1)
+        return jsonify({"all_correct": True, "results": results})
+
+    store.blacklist_phone(phone, reason="consent_attention_failed")
+    store.update_participant(phone, attention_failed=1)
+    return jsonify({
+        "all_correct": False,
+        "results": results,
+        "terminated": True,
+        "message": "回答不正确，无法参与正式实验。您的手机号已被记录，无法再次参与。",
+    })
 
 
 @app.route("/api/verify-attention", methods=["POST"])
@@ -3850,6 +3962,7 @@ def api_lookup_participant():
             "case_label": suspect_case_label,
             "context": suspect_context,
             "attention_questions": suspect_attention_qs,
+            "consent_attention_required": consent_attention_required(p),
         },
         "appointment": booking,
     })
