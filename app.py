@@ -3,6 +3,7 @@ Interrogation Experiment Web App
 Flask backend for suspect/interviewer assignment and training management.
 All experiment statistics stored in a single Excel file (experiment_data.xlsx).
 """
+import html as html_module
 import json
 import logging
 import os
@@ -1854,6 +1855,93 @@ def _get_material_section(section_id):
     return parts.strip().lstrip("-").strip()
 
 
+def _calc_slide_min_seconds(text):
+    n = len(text or "")
+    if n < 100:
+        return 5
+    if n < 300:
+        return 6
+    if n < 600:
+        return 7
+    if n < 1000:
+        return 8
+    return 10
+
+
+def _format_slide_html(block):
+    """Turn a plain-text block into simple HTML without altering wording."""
+    lines = block.split("\n")
+    out = []
+    buf = []
+
+    def flush_para():
+        nonlocal buf
+        if buf:
+            out.append(
+                "<p>" + "<br>".join(html_module.escape(l) for l in buf) + "</p>"
+            )
+            buf = []
+
+    for line in lines:
+        s = line.strip()
+        if not s:
+            flush_para()
+            continue
+        if s.startswith("# "):
+            flush_para()
+            out.append(f'<h2 class="doc-h1">{html_module.escape(s[2:].strip())}</h2>')
+        elif s.startswith("## "):
+            flush_para()
+            out.append(f'<h3 class="doc-h2">{html_module.escape(s[3:].strip())}</h3>')
+        elif s.startswith("<") and s.endswith(">"):
+            flush_para()
+            out.append(f'<p class="doc-subtitle">{html_module.escape(s)}</p>')
+        elif (
+            len(s) <= 42
+            and not s.endswith("。")
+            and not s.endswith(".")
+            and not s.endswith("；")
+            and not s.endswith(":")
+        ):
+            flush_para()
+            out.append(f'<h4 class="doc-section">{html_module.escape(s)}</h4>')
+        else:
+            buf.append(s)
+    flush_para()
+    return "".join(out) if out else f"<p>{html_module.escape(block)}</p>"
+
+
+def _split_document_into_slides(text, max_chars=950):
+    text = (text or "").strip()
+    if not text:
+        return []
+    blocks = [b.strip() for b in re.split(r"\n\s*\n", text) if b.strip()]
+    if not blocks:
+        blocks = [text]
+    slides_raw = []
+    cur = []
+    cur_len = 0
+    for block in blocks:
+        bl = len(block)
+        if cur and cur_len + bl + 2 > max_chars:
+            slides_raw.append("\n\n".join(cur))
+            cur = [block]
+            cur_len = bl
+        else:
+            cur.append(block)
+            cur_len += bl + 2
+    if cur:
+        slides_raw.append("\n\n".join(cur))
+    return [
+        {
+            "index": i,
+            "html": _format_slide_html(raw),
+            "min_seconds": _calc_slide_min_seconds(raw),
+        }
+        for i, raw in enumerate(slides_raw)
+    ]
+
+
 def _build_combined_materials_md():
     sections = []
     for section_id, title, filenames, search_dirs in MATERIAL_SECTION_SPECS:
@@ -2905,6 +2993,47 @@ def consent_text(role):
     if not text_content:
         text_content = "知情同意书文件不存在，请联系研究人员。请确认 materials/combined_materials.md 已生成。"
     return jsonify({"text": text_content})
+
+
+@app.route("/api/consent-slides/<role>")
+def consent_slides(role):
+    section_id = "consent_suspect" if role == "S" else "consent_interviewer"
+    title = "知情同意书（嫌疑人）" if role == "S" else "知情同意书（访谈员）"
+    text_content = _get_material_section(section_id)
+    if not text_content:
+        return jsonify({
+            "error": "知情同意书文件不存在，请联系研究人员。",
+            "slides": [],
+        }), 404
+    return jsonify({
+        "title": title,
+        "slides": _split_document_into_slides(text_content),
+    })
+
+
+@app.route("/api/material-slides/<section_id>")
+def material_slides(section_id):
+    """Paginated training sections for guided reading UI."""
+    allowed = {
+        "consent_suspect", "consent_interviewer", "theory_sue",
+        "avatar_specific", "avatar_general", "control",
+    }
+    if section_id not in allowed:
+        return jsonify({"error": "无效的材料标识"}), 400
+    text_content = _get_material_section(section_id)
+    if not text_content:
+        return jsonify({"error": "材料加载失败", "slides": []}), 404
+    titles = {
+        "theory_sue": "SUE 理论培训材料",
+        "avatar_specific": "特定 Avatar 组培训说明",
+        "avatar_general": "通用 Avatar 组培训说明",
+        "control": "对照组培训材料",
+    }
+    return jsonify({
+        "title": titles.get(section_id, "培训材料"),
+        "slides": _split_document_into_slides(text_content),
+    })
+
 
 @app.route("/api/material-text/<training_type>")
 def material_text(training_type):
