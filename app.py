@@ -500,7 +500,18 @@ SHEET_COLUMNS = {
 PHASE_PRE = "pre"
 PHASE_POST = "post"
 
-BOOKING_DAYS_AHEAD = 5
+APP_VERSION = "1.2.0"
+APP_UPDATE_DATE = "2026-05-24"
+
+
+@app.context_processor
+def inject_app_meta():
+    return {"app_version": APP_VERSION, "app_updated": APP_UPDATE_DATE}
+
+
+BOOKING_MIN_HOURS = 24
+BOOKING_MAX_DAYS = 7
+MAX_GROUPS = 112
 BOOKING_SLOT_WINDOWS = [
     ("09:30", "11:00"),
     ("14:00", "17:00"),
@@ -2014,11 +2025,30 @@ def build_session_body(avatar_id, voice_id, context_id, language, opening_text=N
 # ====== Route Helpers ======
 
 def next_group_name():
-    return f"{store.count_groups() + 1:03d}"
+    """Lowest unused group number 001–112 among active participants."""
+    used = set()
+    for p in store.get_all_participants():
+        gn = (p.get("group_name") or "").strip()
+        if gn:
+            used.add(gn)
+    for i in range(1, MAX_GROUPS + 1):
+        candidate = f"{i:03d}"
+        if candidate not in used:
+            return candidate
+    raise ValueError(f"Maximum group count ({MAX_GROUPS}) reached")
 
 
-def make_full_id(group_name, role, guilt_code):
-    return f"{group_name}-{role}-{guilt_code}"
+def participant_id_suffix(participant):
+    """Third segment of AAA-B-C: suspect case (T/A) or interviewer training group (A–D)."""
+    if participant.get("role") == "S":
+        return "T" if participant.get("case_type") == "theft" else "A"
+    if participant.get("role") == "I":
+        return TRAINING_GROUP_LABELS.get(participant.get("training_type", ""), "X")
+    return "X"
+
+
+def make_full_id(group_name, role, suffix_code):
+    return f"{group_name}-{role}-{suffix_code}"
 
 
 def _count_training_assignments():
@@ -2217,19 +2247,31 @@ def _iter_slot_times(start_hm, end_hm, step_minutes=BOOKING_SLOT_STEP_MINUTES):
         cur += step_minutes
 
 
-def _candidate_booking_slots():
-    """All bookable slots in the booking window (morning / afternoon / evening)."""
+def _booking_slot_bounds():
     now = datetime.now()
+    return now + timedelta(hours=BOOKING_MIN_HOURS), now + timedelta(days=BOOKING_MAX_DAYS)
+
+
+def _is_valid_booking_slot(slot_dt):
+    min_dt, max_dt = _booking_slot_bounds()
+    return min_dt <= slot_dt <= max_dt
+
+
+def _candidate_booking_slots():
+    """Bookable slots from 24h after now through one week ahead."""
+    now = datetime.now()
+    min_dt, max_dt = _booking_slot_bounds()
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
     slots = []
-    for day_offset in range(BOOKING_DAYS_AHEAD):
-        day = today + timedelta(days=day_offset)
+    day = today
+    while day.date() <= max_dt.date():
         for start_hm, end_hm in BOOKING_SLOT_WINDOWS:
             for time_str in _iter_slot_times(start_hm, end_hm):
                 h, m = map(int, time_str.split(":"))
                 slot_dt = day.replace(hour=h, minute=m, second=0, microsecond=0)
-                if slot_dt > now:
+                if min_dt <= slot_dt <= max_dt:
                     slots.append(slot_dt.strftime("%Y-%m-%d %H:%M"))
+        day += timedelta(days=1)
     return slots
 
 
@@ -2475,7 +2517,10 @@ def register():
     role = "I" if waiting else "S"
 
     if role == "S":
-        group_name = next_group_name()
+        try:
+            group_name = next_group_name()
+        except ValueError:
+            return jsonify({"error": f"实验组别已达上限（{MAX_GROUPS} 组）"}), 503
         guilt, case_type = pick_balanced_suspect_attrs()
 
         pid = store.add_participant(
@@ -2530,7 +2575,10 @@ def register():
             })
         else:
             # No waiting suspect — register as new suspect (should not happen with role logic above)
-            group_name = next_group_name()
+            try:
+                group_name = next_group_name()
+            except ValueError:
+                return jsonify({"error": f"实验组别已达上限（{MAX_GROUPS} 组）"}), 503
             guilt, case_type = pick_balanced_suspect_attrs()
 
             pid = store.add_participant(
@@ -2626,9 +2674,8 @@ def submit_profile():
     # Assign full_id now (at completion, not registration)
     full_id = p.get("full_id", "") or ""
     if not full_id:
-        guilt = p.get("guilt", "Guilty")
-        guilt_code = "1" if guilt == "Guilty" else "2"
-        full_id = make_full_id(p["group_name"], p["role"], guilt_code)
+        suffix = participant_id_suffix(p)
+        full_id = make_full_id(p["group_name"], p["role"], suffix)
         store.update_participant(phone, full_id=full_id)
 
     store.update_participant(phone, profile_completed=1, completed=1)
@@ -2948,7 +2995,8 @@ def complete_interviewer():
     # Assign full_id now (at completion, not registration)
     full_id = p.get("full_id", "") or ""
     if not full_id:
-        full_id = make_full_id(p["group_name"], p["role"], "0")
+        suffix = participant_id_suffix(p)
+        full_id = make_full_id(p["group_name"], p["role"], suffix)
         store.update_participant(phone, full_id=full_id)
 
     store.update_participant(phone, completed=1)
@@ -3037,7 +3085,7 @@ def generate_results_docx():
 # ====== Appointment APIs ======
 
 def generate_time_slots():
-    """Evening slots (19:30–21:00) for the next BOOKING_DAYS_AHEAD days, minus admin-disabled."""
+    """Slots from 24h ahead through 7 days, minus admin-disabled."""
     disabled = store.get_disabled_slots()
     return [s for s in _candidate_booking_slots() if s not in disabled]
 
@@ -3093,8 +3141,10 @@ def api_book_appointment():
 
     try:
         slot_dt = datetime.strptime(time_slot, "%Y-%m-%d %H:%M")
-        if slot_dt <= datetime.now():
-            return jsonify({"error": "不能预约过去的时间"}), 400
+        if not _is_valid_booking_slot(slot_dt):
+            return jsonify({
+                "error": f"预约时间须在 {BOOKING_MIN_HOURS} 小时之后至 {BOOKING_MAX_DAYS} 天以内",
+            }), 400
     except ValueError:
         return jsonify({"error": "时间格式无效"}), 400
 
@@ -3180,8 +3230,10 @@ def api_modify_appointment():
 
     try:
         slot_dt = datetime.strptime(new_time_slot, "%Y-%m-%d %H:%M")
-        if slot_dt <= datetime.now():
-            return jsonify({"error": "不能预约过去的时间"}), 400
+        if not _is_valid_booking_slot(slot_dt):
+            return jsonify({
+                "error": f"预约时间须在 {BOOKING_MIN_HOURS} 小时之后至 {BOOKING_MAX_DAYS} 天以内",
+            }), 400
     except ValueError:
         return jsonify({"error": "时间格式无效"}), 400
 
@@ -3771,7 +3823,8 @@ def api_lookup_participant():
         case_type = p.get("case_type", "arson")
         guilt = p.get("guilt", "Guilty")
         group_name = p.get("group_name", "")
-        suspect_display_id = f"{group_name}-S" if is_completed else ""
+        case_code = "T" if case_type == "theft" else "A"
+        suspect_display_id = f"{group_name}-S-{case_code}" if group_name else ""
         suspect_case_label = "纵火案 Arson" if case_type == "arson" else "盗窃案 Theft"
         if case_type == "arson":
             suspect_context = ARSON_GUILTY_CONTEXT if guilt == "Guilty" else ARSON_INNOCENT_CONTEXT
@@ -4551,7 +4604,8 @@ def admin_get_appointment_slots():
         })
     return jsonify({
         "slots": slots,
-        "days_ahead": BOOKING_DAYS_AHEAD,
+        "min_hours": BOOKING_MIN_HOURS,
+        "max_days": BOOKING_MAX_DAYS,
         "time_windows": [
             {"label": "上午", "start": w[0], "end": w[1]} for w in BOOKING_SLOT_WINDOWS
         ],

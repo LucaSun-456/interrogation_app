@@ -1067,7 +1067,7 @@
     <p style="font-size:13px;line-height:1.8;margin-bottom:12px;">
       请用<strong>30秒至1分钟</strong>的时间，口头陈述您在模拟行动中的<strong>动机</strong>以及<strong>当晚的经历</strong>。请尽量具体、连贯地描述。
     </p>
-    <p class="sg-recap-hint">点击下方按钮开始录音，录音满 30 秒后可提交；最长 1 分钟将自动停止。</p>
+    <p class="sg-recap-hint">点击下方按钮开始录音，录音满 30 秒后可提交；最长 1 分钟将自动停止。系统将使用浏览器语音转文字校验复述内容，识别文字不足 100 字将要求重新复述。</p>
     <div class="sg-recap-timer" id="sgRecapTimer">00:00</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
       <button class="btn btn-primary" id="sgRecapRecordBtn" onclick="toggleSgRecapRecording()" style="flex:1;">🎙️ 开始录音</button>
@@ -1199,7 +1199,8 @@
     <h2>正式访谈时间预约</h2>
     <p style="font-size:13px;color:var(--text-light);margin-bottom:4px;">
       每个时间段有<strong>两个名额</strong>：<span class="avail-tag suspect">嫌疑人</span> 和 <span class="avail-tag interviewer">审讯者</span>。
-      当同一个时间段<strong>嫌疑人和审讯者都预约后</strong>，该时间段即配对成功。
+      当同一个时间段<strong>嫌疑人和审讯者都预约后</strong>，该时间段即配对成功。<br>
+      可预约时间范围：<strong>从现在起 24 小时之后</strong>至<strong>一周内</strong>。
     </p>
     <p style="font-size:12px;color:var(--text-light);margin-bottom:4px;">
       💡 <strong style="color:#e65100;">建议优先选择已有对方角色预约的时间段（橙色高亮）</strong>，这样可以快速完成配对，尽早开展正式访谈。
@@ -1346,7 +1347,8 @@
 
 <div class="footer-note">
   © IRB Research Project — Interrogation Experiment System<br>
-  <small>如有问题请联系研究人员</small>
+  <small>如有问题请联系研究人员</small><br>
+  <small>版本 {{ app_version }} · 更新日期 {{ app_updated }}</small>
 </div>
 
 <script>
@@ -1362,6 +1364,8 @@ const APP = {
   sg_completed: false,
   sg_recap_passed: false,
 };
+
+const TENCENT_MEETING_LABEL = '#腾讯会议：915-688-5929';
 
 const TRAINING_GROUP_LABELS = {
   control: 'A',
@@ -1947,13 +1951,49 @@ let sgRecapChunks = [];
 let sgRecapIsRecording = false;
 let sgRecapStartedAt = 0;
 let sgRecapTimerId = null;
+let sgRecapSpeechRec = null;
+let sgRecapTranscript = '';
 const SG_RECAP_MIN_SEC = 30;
 const SG_RECAP_MAX_SEC = 60;
+const SG_RECAP_MIN_CHARS = 100;
+
+function countSgRecapChars(text) {
+  return (text || '').replace(/\s/g, '').length;
+}
+
+function stopSgRecapSpeechRecognition() {
+  if (sgRecapSpeechRec) {
+    try { sgRecapSpeechRec.stop(); } catch (_) {}
+    sgRecapSpeechRec = null;
+  }
+}
+
+function createSgRecapSpeechRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return null;
+  const rec = new SR();
+  rec.lang = 'zh-CN';
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.onresult = (event) => {
+    let text = '';
+    for (let i = 0; i < event.results.length; i++) {
+      if (event.results[i].isFinal) {
+        text += event.results[i][0].transcript;
+      }
+    }
+    if (text) sgRecapTranscript = text;
+  };
+  rec.onerror = () => {};
+  return rec;
+}
 
 function resetSgRecapUI() {
   stopSgRecapTimer();
+  stopSgRecapSpeechRecognition();
   sgRecapIsRecording = false;
   sgRecapChunks = [];
+  sgRecapTranscript = '';
   if (sgRecapRecorder && sgRecapRecorder.state !== 'inactive') {
     try { sgRecapRecorder.stop(); } catch (_) {}
   }
@@ -2030,8 +2070,14 @@ async function toggleSgRecapRecording() {
     sgRecapRecorder.start();
     sgRecapIsRecording = true;
     sgRecapStartedAt = Date.now();
+    sgRecapTranscript = '';
+    stopSgRecapSpeechRecognition();
+    sgRecapSpeechRec = createSgRecapSpeechRecognition();
+    if (sgRecapSpeechRec) {
+      try { sgRecapSpeechRec.start(); } catch (_) {}
+    }
     $('sgRecapRecordBtn').textContent = '⏹️ 停止录音';
-    $('sgRecapRecordStatus').textContent = '录音中…';
+    $('sgRecapRecordStatus').textContent = '录音中…（后台转录）';
     stopSgRecapTimer();
     sgRecapTimerId = setInterval(updateSgRecapTimerDisplay, 200);
     updateSgRecapTimerDisplay();
@@ -2044,6 +2090,7 @@ function stopSgRecapRecording(autoMax) {
   stopSgRecapTimer();
   if (!sgRecapIsRecording) return;
   sgRecapIsRecording = false;
+  stopSgRecapSpeechRecognition();
   if (sgRecapRecorder && sgRecapRecorder.state !== 'inactive') {
     try { sgRecapRecorder.stop(); } catch (_) {}
   }
@@ -2053,12 +2100,28 @@ function stopSgRecapRecording(autoMax) {
   }
 }
 
-function submitSgRecap() {
+async function submitSgRecap() {
   const elapsed = sgRecapStartedAt
     ? Math.floor((Date.now() - sgRecapStartedAt) / 1000)
     : 0;
   if (elapsed < SG_RECAP_MIN_SEC && !sgRecapChunks.length) {
     alert('请先完成至少 ' + SG_RECAP_MIN_SEC + ' 秒的录音。');
+    return;
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    alert('当前浏览器不支持语音转文字，请使用 Chrome 或 Edge 浏览器完成复述。');
+    return;
+  }
+  stopSgRecapSpeechRecognition();
+  await new Promise((r) => setTimeout(r, 600));
+  const charCount = countSgRecapChars(sgRecapTranscript);
+  if (charCount < SG_RECAP_MIN_CHARS) {
+    alert(
+      '系统判断您的复述不够详细（识别文字约 ' + charCount + ' 字，需至少 ' + SG_RECAP_MIN_CHARS + ' 字）。\n'
+      + '请重新进行更详细、连贯的口头复述。'
+    );
+    resetSgRecapUI();
     return;
   }
   $('sgAiReviewModal').classList.add('show');
@@ -4097,7 +4160,7 @@ function renderBookingSlotsForInterviewer() {
       matchStatusHtml = `
         <div style="margin-top:8px;padding:8px;background:#e8f5e9;border-radius:4px;color:#2e7d32;font-size:13px;font-weight:600;">
           🎉 匹配成功！<br>
-          腾讯会议号: 123 456 7890
+          ${TENCENT_MEETING_LABEL}
         </div>`;
     } else {
       const ttBooking = APP.participant ? APP.participant.training_type : '';
@@ -5155,7 +5218,7 @@ function renderBookingUI() {
       matchStatusHtml = `
         <div style="margin-top:8px;padding:8px;background:#e8f5e9;border-radius:4px;color:#2e7d32;font-size:13px;font-weight:600;">
           🎉 匹配成功！<br>
-          腾讯会议号: 123 456 7890
+          ${TENCENT_MEETING_LABEL}
         </div>`;
     } else {
       matchStatusHtml = `
@@ -5349,7 +5412,7 @@ async function bookSlot(slot) {
         <div style="margin-top:12px;padding:12px;background:#e8f5e9;border-radius:6px;color:#2e7d32;font-size:14px;font-weight:600;border:1px solid #4caf50;">
           🎉 匹配成功！<br>
           您和另一位参与者都已预约此时间。<br>
-          腾讯会议号: 123 456 7890
+          ${TENCENT_MEETING_LABEL}
         </div>`;
     } else {
       matchStatusHtml = `
