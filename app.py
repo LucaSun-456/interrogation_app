@@ -554,6 +554,7 @@ def inject_app_meta():
 
 BOOKING_MIN_HOURS = 24
 BOOKING_MAX_DAYS = 7
+UNBOOKED_PURGE_HOURS = 24
 MAX_GROUPS = 112
 BOOKING_SLOT_WINDOWS = [
     ("09:30", "11:00"),
@@ -1033,37 +1034,62 @@ class ExcelStore:
         with _excel_lock:
             wb = self._load()
             try:
-                # Get participant info for cleanup
                 phone = None
+                group_name = None
+                role = None
                 participants = self._read_all(wb, SHEET_PARTICIPANTS)
                 for p in participants:
                     if p["id"] == pid:
                         phone = p.get("phone", "")
-                # Remove participant
+                        group_name = p.get("group_name", "")
+                        role = p.get("role", "")
+                        break
                 participants = [p for p in participants if p["id"] != pid]
                 self._write_all(wb, SHEET_PARTICIPANTS, participants)
-                # Remove related profile
                 profiles = [p for p in self._read_all(wb, SHEET_PROFILES) if p["participant_id"] != pid]
                 self._write_all(wb, SHEET_PROFILES, profiles)
-                # Remove availabilities
                 if phone:
                     avails = [a for a in self._read_all(wb, SHEET_AVAILABILITIES) if a.get("phone") != phone]
                     self._write_all(wb, SHEET_AVAILABILITIES, avails)
-                    # Remove appointments
                     appts = [a for a in self._read_all(wb, SHEET_APPOINTMENTS) if a.get("phone") != phone]
                     self._write_all(wb, SHEET_APPOINTMENTS, appts)
-                    # Remove interview questionnaires
                     qrows = [q for q in self._read_all(wb, SHEET_INTERVIEW_QUESTIONNAIRES) if q.get("phone") != phone]
                     self._write_all(wb, SHEET_INTERVIEW_QUESTIONNAIRES, qrows)
-                    # Remove questionnaire overrides
                     qover = [q for q in self._read_all(wb, SHEET_QUESTIONNAIRE_OVERRIDES) if q.get("phone") != phone]
                     self._write_all(wb, SHEET_QUESTIONNAIRE_OVERRIDES, qover)
-                    # Remove training sessions
                     sessions = [s for s in self._read_all(wb, SHEET_TRAINING_SESSIONS) if s.get("phone") != phone]
                     self._write_all(wb, SHEET_TRAINING_SESSIONS, sessions)
+                    sg_rows = [r for r in self._read_all(wb, SHEET_SERIOUS_GAME) if r.get("phone") != phone]
+                    self._write_all(wb, SHEET_SERIOUS_GAME, sg_rows)
+                if group_name and role:
+                    self._cleanup_group_after_participant_delete(wb, pid, group_name, role)
                 self._save(wb)
             finally:
                 self._close(wb)
+
+    def _cleanup_group_after_participant_delete(self, wb, pid, group_name, role):
+        groups = self._read_all(wb, SHEET_GROUPS)
+        updated = []
+        for g in groups:
+            if g.get("name") != group_name:
+                updated.append(g)
+                continue
+            suspect_id = g.get("suspect_id")
+            interviewer_id = g.get("interviewer_id")
+            if role == "S" and str(suspect_id) == str(pid):
+                g = dict(g)
+                g["suspect_id"] = ""
+                if g.get("interviewer_id"):
+                    updated.append(g)
+                continue
+            if role == "I" and str(interviewer_id) == str(pid):
+                g = dict(g)
+                g["interviewer_id"] = ""
+                if g.get("suspect_id"):
+                    updated.append(g)
+                continue
+            updated.append(g)
+        self._write_all(wb, SHEET_GROUPS, updated)
 
     # ---- Groups ----
 
@@ -2561,12 +2587,15 @@ def register():
 
     if store.is_phone_blacklisted(phone):
         return jsonify({
-            "error": "该手机号无法参与实验（注意力检测未通过，已被限制参与）",
+            "error": "该手机号无法参与实验（已被限制参与，含超时未预约等情况）",
             "blacklisted": True,
         }), 403
 
     existing = store.get_participant(phone)
     if existing:
+        blocked = _block_if_unbooked_timeout(existing)
+        if blocked:
+            return blocked
         if store.is_phone_blacklisted(phone) or existing.get("attention_failed"):
             return jsonify({
                 "error": "该手机号无法参与实验（注意力检测未通过）",
@@ -3906,6 +3935,10 @@ def api_lookup_participant():
     if not p:
         return jsonify({"error": "未找到参与者"}), 404
 
+    blocked = _block_if_unbooked_timeout(p)
+    if blocked:
+        return blocked
+
     booking = store.get_my_booking(phone)
     if booking:
         time_slot = booking["time_slot"]
@@ -4685,6 +4718,20 @@ def admin_results():
     })
 
 
+@app.route("/api/admin/purge-unbooked", methods=["POST"])
+@admin_required
+def admin_purge_unbooked():
+    """Manually purge participants registered 24h+ ago without a confirmed booking."""
+    purged = _purge_stale_unbooked_participants()
+    if purged:
+        logger.info(
+            "Admin purged %d unbooked participant(s): %s",
+            len(purged),
+            [x["phone"] for x in purged],
+        )
+    return jsonify({"success": True, "count": len(purged), "purged": purged})
+
+
 @app.route("/api/admin/results/<int:pid>", methods=["DELETE"])
 @admin_required
 def admin_delete_result(pid):
@@ -4949,6 +4996,67 @@ def serious_game_complete():
         "full_id": session["sg_participant_id"],
         "message": f"编号 {session['sg_participant_id']} 模拟行动游戏已完成。请截图此页面。",
     })
+
+
+def _parse_participant_created_at(created_at_str):
+    if not created_at_str:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(str(created_at_str).strip(), fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _is_unbooked_past_deadline(participant):
+    phone = (participant.get("phone") or "").strip()
+    if not phone or store.has_booking(phone):
+        return False
+    created = _parse_participant_created_at(participant.get("created_at"))
+    if not created:
+        return False
+    return datetime.now() - created >= timedelta(hours=UNBOOKED_PURGE_HOURS)
+
+
+def _block_if_unbooked_timeout(participant):
+    """On login: if past booking deadline without appointment, delete, blacklist, deny access."""
+    if not _is_unbooked_past_deadline(participant):
+        return None
+    phone = participant.get("phone")
+    store.blacklist_phone(phone, reason="unbooked_timeout")
+    store.delete_participant(participant["id"])
+    return jsonify({
+        "error": "您注册已超过 24 小时仍未预约访谈时间，账号已注销且无法继续登录。",
+        "blacklisted": True,
+        "unbooked_timeout": True,
+    }), 403
+
+
+def _purge_stale_unbooked_participants():
+    """Delete and blacklist participants with no booking UNBOOKED_PURGE_HOURS after registration."""
+    now = datetime.now()
+    cutoff = timedelta(hours=UNBOOKED_PURGE_HOURS)
+    purged = []
+    for p in store.get_all_participants():
+        phone = (p.get("phone") or "").strip()
+        if not phone:
+            continue
+        if store.has_booking(phone):
+            continue
+        created = _parse_participant_created_at(p.get("created_at"))
+        if not created or now - created < cutoff:
+            continue
+        store.blacklist_phone(phone, reason="unbooked_timeout")
+        store.delete_participant(p["id"])
+        purged.append({
+            "id": p["id"],
+            "phone": phone,
+            "role": p.get("role", ""),
+            "group_name": p.get("group_name", ""),
+            "created_at": p.get("created_at", ""),
+        })
+    return purged
 
 
 def initialize_app():

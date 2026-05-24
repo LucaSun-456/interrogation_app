@@ -252,6 +252,8 @@
 <div class="toolbar">
   <a href="/" class="nav-link">← 返回首页</a>
   <button class="btn btn-refresh" onclick="loadData()">刷新数据</button>
+  <button class="btn btn-danger" onclick="purgeUnbookedParticipants()">清理超时未预约</button>
+  <span class="count" id="purgeHint">参与者再次登录时，若注册超 24 小时仍未预约将被拒绝；也可点击下方按钮手动批量清理。</span>
 </div>
 
 <div class="card">
@@ -924,6 +926,22 @@ async function loadData() {
   } catch (err) {
     console.error('loadData error:', err);
     document.getElementById('groupGrid').innerHTML = `<div class="empty" style="grid-column:1/-1;color:var(--accent);">加载失败：${err.message}</div>`;
+  }
+}
+
+async function purgeUnbookedParticipants() {
+  if (!confirm('将删除注册超过 24 小时且仍未预约的参与者，并拉黑其手机号。确定执行？')) return;
+  try {
+    const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
+    if (!headers.Authorization) { promptForPassword(); return; }
+    const resp = await fetch('/api/admin/purge-unbooked', { method: 'POST', headers });
+    if (resp.status === 401) { sessionStorage.removeItem('admin_password'); promptForPassword(); return; }
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '清理失败');
+    alert(`清理完成：共删除 ${data.count || 0} 人`);
+    loadData();
+  } catch (err) {
+    alert('清理失败: ' + err.message);
   }
 }
 
