@@ -1675,7 +1675,9 @@ function guidedReaderNext() {
   if (done) done();
 }
 
-async function showMaterialGuidedReader(sectionId, title, finalLabel, onComplete) {
+async function showMaterialGuidedReader(sectionId, title, finalLabel, onComplete, options) {
+  const opts = options && typeof options === 'object' ? options : {};
+  const returnScreen = opts.returnScreen !== undefined ? opts.returnScreen : 'screen-interviewer';
   showLoading('正在加载材料...');
   try {
     const resp = await fetch(`/api/material-slides/${sectionId}`);
@@ -1689,7 +1691,10 @@ async function showMaterialGuidedReader(sectionId, title, finalLabel, onComplete
       title: title || data.title,
       slides: data.slides,
       finalLabel: finalLabel,
-      onComplete: onComplete,
+      onComplete: () => {
+        if (returnScreen) showScreen(returnScreen);
+        if (onComplete) onComplete();
+      },
     });
   } catch (e) {
     hideLoading();
@@ -3507,7 +3512,6 @@ async function showControlGroup(data) {
         <h3>${trainingGroupLabel('control')} 组 — 注意力检测</h3>
         <div id="controlActionArea"></div>
       `;
-      showScreen('screen-interviewer');
       showControlAttentionCheck();
     },
   );
