@@ -747,6 +747,40 @@
     margin-bottom: 16px;
     line-height: 1.6;
   }
+  .sg-recap-transcript-box {
+    width: 100%;
+    min-height: 140px;
+    max-height: 220px;
+    margin-bottom: 12px;
+    padding: 12px 14px;
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--text);
+    background: #f7f9fc;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    resize: none;
+    overflow-y: auto;
+    cursor: default;
+  }
+  .sg-recap-transcript-box:read-only {
+    background: #f7f9fc;
+  }
+  .sg-recap-transcript-box::placeholder {
+    color: #9ca3af;
+  }
+  .sg-recap-transcript-label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-light);
+    margin-bottom: 6px;
+  }
+  .sg-recap-transcript-meta {
+    font-size: 11px;
+    color: var(--text-light);
+    margin-top: -6px;
+    margin-bottom: 10px;
+  }
   .ai-review-progress {
     width: 72px;
     height: 72px;
@@ -1288,6 +1322,16 @@
       <button class="btn btn-primary" id="sgRecapRecordBtn" onclick="toggleSgRecapRecording()" style="flex:1;">🎙️ 开始录音</button>
       <span id="sgRecapRecordStatus" style="font-size:12px;color:var(--text-light);">待录音</span>
     </div>
+    <label class="sg-recap-transcript-label" for="sgRecapTranscriptBox">实时转录（仅供查看，不可编辑）</label>
+    <textarea
+      id="sgRecapTranscriptBox"
+      class="sg-recap-transcript-box"
+      readonly
+      tabindex="-1"
+      aria-readonly="true"
+      placeholder="开始录音后，此处将实时显示语音转文字内容…"
+    ></textarea>
+    <div class="sg-recap-transcript-meta" id="sgRecapTranscriptMeta">识别字数：0（提交需至少 100 字）</div>
     <button class="btn btn-primary hidden" id="sgRecapSubmitBtn" onclick="submitSgRecap()" style="width:100%;margin-bottom:8px;">提交复述</button>
     <button class="btn btn-prev" onclick="showGameLink()" style="width:100%;">← 返回</button>
   </div>
@@ -2953,6 +2997,20 @@ function stopSgRecapSpeechRecognition() {
   }
 }
 
+function updateSgRecapTranscriptDisplay(text) {
+  const box = $('sgRecapTranscriptBox');
+  if (box) {
+    box.value = text || '';
+    box.scrollTop = box.scrollHeight;
+  }
+  const meta = $('sgRecapTranscriptMeta');
+  if (meta) {
+    const n = countSgRecapChars(text);
+    meta.textContent = '识别字数：' + n + '（提交需至少 ' + SG_RECAP_MIN_CHARS + ' 字）';
+    meta.style.color = n >= SG_RECAP_MIN_CHARS ? 'var(--success)' : 'var(--text-light)';
+  }
+}
+
 function createSgRecapSpeechRecognition() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return null;
@@ -2963,11 +3021,10 @@ function createSgRecapSpeechRecognition() {
   rec.onresult = (event) => {
     let text = '';
     for (let i = 0; i < event.results.length; i++) {
-      if (event.results[i].isFinal) {
-        text += event.results[i][0].transcript;
-      }
+      text += event.results[i][0].transcript;
     }
-    if (text) sgRecapTranscript = text;
+    sgRecapTranscript = text;
+    updateSgRecapTranscriptDisplay(text);
   };
   rec.onerror = () => {};
   return rec;
@@ -2987,6 +3044,7 @@ function resetSgRecapUI() {
   $('sgRecapRecordBtn').textContent = '🎙️ 开始录音';
   $('sgRecapRecordStatus').textContent = '待录音';
   $('sgRecapSubmitBtn').classList.add('hidden');
+  updateSgRecapTranscriptDisplay('');
 }
 
 function stopSgRecapTimer() {
@@ -3056,13 +3114,18 @@ async function toggleSgRecapRecording() {
     sgRecapIsRecording = true;
     sgRecapStartedAt = Date.now();
     sgRecapTranscript = '';
+    updateSgRecapTranscriptDisplay('');
     stopSgRecapSpeechRecognition();
     sgRecapSpeechRec = createSgRecapSpeechRecognition();
     if (sgRecapSpeechRec) {
       try { sgRecapSpeechRec.start(); } catch (_) {}
+    } else {
+      $('sgRecapRecordStatus').textContent = '录音中（本浏览器不支持实时转录）';
     }
     $('sgRecapRecordBtn').textContent = '⏹️ 停止录音';
-    $('sgRecapRecordStatus').textContent = '录音中…（后台转录）';
+    if (sgRecapSpeechRec) {
+      $('sgRecapRecordStatus').textContent = '录音中…';
+    }
     stopSgRecapTimer();
     sgRecapTimerId = setInterval(updateSgRecapTimerDisplay, 200);
     updateSgRecapTimerDisplay();
