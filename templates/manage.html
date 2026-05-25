@@ -398,6 +398,7 @@
 <div class="toolbar">
   <a href="/" class="nav-link">← 返回首页</a>
   <button class="btn btn-refresh" onclick="loadData()">刷新数据</button>
+  <button class="btn btn-outline" onclick="downloadExperimentData()">📥 下载数据文件 (Excel)</button>
   <button class="btn btn-danger" onclick="purgeUnbookedParticipants()">清理超时未预约</button>
   <span class="count" id="purgeHint">参与者再次登录时，若注册超 24 小时仍未预约将被拒绝；也可点击下方按钮手动批量清理。</span>
   <span class="count" id="groupAssignHint" style="margin-left:8px;"></span>
@@ -1556,6 +1557,39 @@ async function editParticipantGroup(phone, currentGroup, currentFullId) {
     loadData();
   } catch (err) {
     alert('修改失败：' + err.message);
+  }
+}
+
+async function downloadExperimentData() {
+  try {
+    const headers = getAuthHeaders();
+    if (!headers.Authorization) { promptForPassword(); return; }
+    const resp = await fetch('/api/admin/download-data', { headers });
+    if (resp.status === 401) {
+      sessionStorage.removeItem('admin_password');
+      promptForPassword();
+      return;
+    }
+    if (!resp.ok) {
+      let msg = '下载失败';
+      try {
+        const err = await resp.json();
+        msg = err.error || msg;
+      } catch (_) {}
+      throw new Error(msg);
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '').slice(0, 12);
+    a.href = url;
+    a.download = 'experiment_data_' + stamp + '.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('下载失败：' + err.message);
   }
 }
 

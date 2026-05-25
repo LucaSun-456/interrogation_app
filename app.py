@@ -558,8 +558,8 @@ SHEET_COLUMNS = {
 PHASE_PRE = "pre"
 PHASE_POST = "post"
 
-APP_VERSION = "1.2.0"
-APP_UPDATE_DATE = "2026-05-24"
+APP_VERSION = "1.3.0"
+APP_UPDATE_DATE = "2026-05-25 21:00"
 
 
 @app.context_processor
@@ -5614,6 +5614,22 @@ def admin_set_participant_group():
         return jsonify({"success": True, **result})
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/admin/download-data")
+@admin_required
+def admin_download_data():
+    """Download the full experiment Excel database."""
+    ensure_excel_file()
+    if not os.path.isfile(EXCEL_FILE):
+        return jsonify({"error": "数据文件不存在"}), 404
+    stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    return send_file(
+        EXCEL_FILE,
+        as_attachment=True,
+        download_name=f"experiment_data_{stamp}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @app.route("/api/admin/purge-unbooked", methods=["POST"])

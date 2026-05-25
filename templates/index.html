@@ -437,6 +437,21 @@
     margin-top: 16px;
     padding: 16px;
   }
+  .footer-phone {
+    display: block;
+    margin: 6px 0 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--primary);
+    letter-spacing: 0.5px;
+  }
+  .footer-phone.hidden { display: none; }
+  .sg-recap-segment-list {
+    font-size: 12px;
+    color: var(--text-light);
+    margin-bottom: 10px;
+    line-height: 1.6;
+  }
 
   /* Guided document reader (consent / training materials) */
   .guided-progress {
@@ -1316,11 +1331,11 @@
     <p style="font-size:13px;line-height:1.8;margin-bottom:12px;">
       请用<strong>30秒至1分钟</strong>的时间，口头陈述您在模拟行动中的<strong>动机</strong>以及<strong>当晚的经历</strong>。请尽量具体、连贯地描述。
     </p>
-    <p class="sg-recap-hint">点击下方按钮开始录音，录音满 30 秒后可提交；最长 1 分钟将自动停止。系统将使用浏览器语音转文字校验复述内容，识别文字不足 100 字将要求重新复述。</p>
-    <div class="sg-recap-timer" id="sgRecapTimer">00:00</div>
+    <p class="sg-recap-hint">请分多次录制，<strong>每次录一句话</strong>后点击「完成本句」。系统会实时转写并拼接；最多 20 句，合计识别文字至少 100 字方可提交（建议使用 Chrome 或 Edge）。</p>
+    <div class="sg-recap-segment-list" id="sgRecapSegmentInfo">已录制 0/20 句</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
-      <button class="btn btn-primary" id="sgRecapRecordBtn" onclick="toggleSgRecapRecording()" style="flex:1;">🎙️ 开始录音</button>
-      <span id="sgRecapRecordStatus" style="font-size:12px;color:var(--text-light);">待录音</span>
+      <button class="btn btn-primary" id="sgRecapRecordBtn" onclick="toggleSgRecapSegmentRecording()" style="flex:1;">🎙️ 录制本句</button>
+      <span id="sgRecapRecordStatus" style="font-size:12px;color:var(--text-light);">点击开始录制一句话</span>
     </div>
     <label class="sg-recap-transcript-label" for="sgRecapTranscriptBox">实时转录（仅供查看，不可编辑）</label>
     <textarea
@@ -1660,6 +1675,7 @@
 <div class="footer-note">
   © IRB Research Project — Interrogation Experiment System<br>
   <small>如有问题请联系研究人员</small><br>
+  <small id="footerParticipantPhone" class="footer-phone hidden"></small>
   <small>版本 {{ app_version }} · 更新日期 {{ app_updated }}</small>
 </div>
 
@@ -2257,16 +2273,59 @@ const SCREEN_ROUTE_MAP = {
 const ROUTE_SCREEN_MAP = Object.fromEntries(
   Object.entries(SCREEN_ROUTE_MAP).map(([screenId, route]) => [route, screenId])
 );
+const FLOW_ENTRY_ROUTE = '#/flow/phone';
+let suppressRouteGuard = false;
+let routeGuardInProgress = false;
+
+function persistExperimentPhone(phone) {
+  if (phone && String(phone).trim().length >= 8) {
+    sessionStorage.setItem('experiment_phone', String(phone).trim());
+  }
+}
+
+function updateFooterPhone() {
+  const el = $('footerParticipantPhone');
+  if (!el) return;
+  const phone = APP.phone || sessionStorage.getItem('experiment_phone') || '';
+  if (phone) {
+    el.textContent = '参与手机号：' + phone;
+    el.classList.remove('hidden');
+  } else {
+    el.textContent = '';
+    el.classList.add('hidden');
+  }
+}
+
+async function ensureParticipantSession() {
+  if (APP.participant && APP.phone) return true;
+  const saved = (sessionStorage.getItem('experiment_phone') || '').trim();
+  if (saved.length < 8) return false;
+  try {
+    const lookup = await api('/api/lookup', { phone: saved });
+    if (!lookup.found) return false;
+    APP.phone = saved;
+    APP.role = lookup.participant.role;
+    const p = lookup.participant;
+    APP.participant = { ...p, training_type: p.training_type || '' };
+    if (p.training_info) APP.participant.training_info = p.training_info;
+    if (lookup.appointment) bookingState.myBooking = lookup.appointment;
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 
 function syncRouteForScreen(screenId, replace) {
   const route = SCREEN_ROUTE_MAP[screenId];
   if (!route) return;
   if (window.location.hash === route) return;
+  suppressRouteGuard = true;
   if (replace) {
     history.replaceState(null, '', route);
   } else {
     history.pushState(null, '', route);
   }
+  setTimeout(() => { suppressRouteGuard = false; }, 0);
 }
 
 function hideAll() {
@@ -2280,16 +2339,47 @@ function showScreen(id, options) {
   if (opts.updateRoute !== false) {
     syncRouteForScreen(id, !!opts.replaceRoute);
   }
+  updateFooterPhone();
 }
 
-function applyRouteToScreen() {
+async function applyRouteToScreen() {
   if (window.DeviceCheck && DeviceCheck.isBlocked()) return;
-  const hash = window.location.hash || '';
-  const targetScreen = ROUTE_SCREEN_MAP[hash];
-  if (!targetScreen) return;
-  const el = $(targetScreen);
-  if (!el) return;
-  showScreen(targetScreen, { updateRoute: false });
+  if (routeGuardInProgress) return;
+
+  const hash = window.location.hash || FLOW_ENTRY_ROUTE;
+
+  if (suppressRouteGuard) {
+    const targetScreen = ROUTE_SCREEN_MAP[hash];
+    if (targetScreen && $(targetScreen)) {
+      showScreen(targetScreen, { updateRoute: false });
+    } else {
+      showScreen('screen-phone', { updateRoute: false });
+    }
+    return;
+  }
+
+  if (!hash.startsWith('#/flow/') || hash === FLOW_ENTRY_ROUTE) {
+    const screenId = ROUTE_SCREEN_MAP[hash] || 'screen-phone';
+    showScreen(screenId, { updateRoute: false });
+    return;
+  }
+
+  routeGuardInProgress = true;
+  try {
+    const ok = await ensureParticipantSession();
+    if (!ok) {
+      history.replaceState(null, '', FLOW_ENTRY_ROUTE);
+      showScreen('screen-phone', { updateRoute: false });
+      alert('请先输入手机号开始或继续实验。不能通过网址直接跳转到中间步骤。');
+      return;
+    }
+    const lookup = await api('/api/lookup', { phone: APP.phone });
+    if (lookup.appointment) bookingState.myBooking = lookup.appointment;
+    await continueParticipantFlow(lookup);
+  } finally {
+    routeGuardInProgress = false;
+    updateFooterPhone();
+  }
 }
 
 window.addEventListener('hashchange', applyRouteToScreen);
@@ -2322,6 +2412,7 @@ async function register() {
   if (!phone || phone.length < 8) { alert('请输入有效的手机号（至少8位）'); return; }
 
   APP.phone = phone;
+  persistExperimentPhone(phone);
   showLoading('正在分配实验条件...');
 
   try {
@@ -2822,6 +2913,7 @@ async function resumeParticipant(phone) {
 
     if (lookup.found) {
       APP.phone = phone;
+      persistExperimentPhone(phone);
       APP.role = lookup.participant.role;
       const p = lookup.participant;
       APP.participant = { ...p, training_type: p.training_type || '' };
@@ -2975,25 +3067,38 @@ function confirmSgWatchReminder() {
   showSgAiDisclaimer();
 }
 
-let sgRecapRecorder = null;
-let sgRecapChunks = [];
-let sgRecapIsRecording = false;
-let sgRecapStartedAt = 0;
-let sgRecapTimerId = null;
-let sgRecapSpeechRec = null;
+let sgRecapSegments = [];
+let sgRecapSegmentRecording = false;
+let sgRecapSegmentRec = null;
+let sgRecapSegmentInterim = '';
+let sgRecapSegmentStream = null;
 let sgRecapTranscript = '';
-const SG_RECAP_MIN_SEC = 30;
-const SG_RECAP_MAX_SEC = 60;
+const SG_RECAP_MAX_SEGMENTS = 20;
 const SG_RECAP_MIN_CHARS = 100;
 
 function countSgRecapChars(text) {
   return (text || '').replace(/\s/g, '').length;
 }
 
-function stopSgRecapSpeechRecognition() {
-  if (sgRecapSpeechRec) {
-    try { sgRecapSpeechRec.stop(); } catch (_) {}
-    sgRecapSpeechRec = null;
+function rebuildSgRecapTranscript() {
+  sgRecapTranscript = sgRecapSegments.map((s) => s.text).join('');
+  updateSgRecapTranscriptDisplay(sgRecapTranscript);
+}
+
+function stopSgRecapSegmentRecognition() {
+  if (sgRecapSegmentRec) {
+    try { sgRecapSegmentRec.stop(); } catch (_) {}
+    sgRecapSegmentRec.onresult = null;
+    sgRecapSegmentRec.onend = null;
+    sgRecapSegmentRec.onerror = null;
+    sgRecapSegmentRec = null;
+  }
+}
+
+function updateSgRecapSegmentInfo() {
+  const el = $('sgRecapSegmentInfo');
+  if (el) {
+    el.textContent = '已录制 ' + sgRecapSegments.length + '/' + SG_RECAP_MAX_SEGMENTS + ' 句';
   }
 }
 
@@ -3004,71 +3109,37 @@ function updateSgRecapTranscriptDisplay(text) {
     box.scrollTop = box.scrollHeight;
   }
   const meta = $('sgRecapTranscriptMeta');
+  const n = countSgRecapChars(text);
   if (meta) {
-    const n = countSgRecapChars(text);
     meta.textContent = '识别字数：' + n + '（提交需至少 ' + SG_RECAP_MIN_CHARS + ' 字）';
     meta.style.color = n >= SG_RECAP_MIN_CHARS ? 'var(--success)' : 'var(--text-light)';
   }
-}
-
-function createSgRecapSpeechRecognition() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) return null;
-  const rec = new SR();
-  rec.lang = 'zh-CN';
-  rec.continuous = true;
-  rec.interimResults = true;
-  rec.onresult = (event) => {
-    let text = '';
-    for (let i = 0; i < event.results.length; i++) {
-      text += event.results[i][0].transcript;
+  const submitBtn = $('sgRecapSubmitBtn');
+  if (submitBtn) {
+    if (n >= SG_RECAP_MIN_CHARS && sgRecapSegments.length > 0 && !sgRecapSegmentRecording) {
+      submitBtn.classList.remove('hidden');
+    } else if (sgRecapSegmentRecording) {
+      submitBtn.classList.add('hidden');
     }
-    sgRecapTranscript = text;
-    updateSgRecapTranscriptDisplay(text);
-  };
-  rec.onerror = () => {};
-  return rec;
+  }
 }
 
 function resetSgRecapUI() {
-  stopSgRecapTimer();
-  stopSgRecapSpeechRecognition();
-  sgRecapIsRecording = false;
-  sgRecapChunks = [];
+  stopSgRecapSegmentRecognition();
+  sgRecapSegmentRecording = false;
+  sgRecapSegmentInterim = '';
+  sgRecapSegments = [];
   sgRecapTranscript = '';
-  if (sgRecapRecorder && sgRecapRecorder.state !== 'inactive') {
-    try { sgRecapRecorder.stop(); } catch (_) {}
+  if (sgRecapSegmentStream) {
+    sgRecapSegmentStream.getTracks().forEach((t) => t.stop());
+    sgRecapSegmentStream = null;
   }
-  sgRecapRecorder = null;
-  $('sgRecapTimer').textContent = '00:00';
-  $('sgRecapRecordBtn').textContent = '🎙️ 开始录音';
-  $('sgRecapRecordStatus').textContent = '待录音';
+  $('sgRecapRecordBtn').textContent = '🎙️ 录制本句';
+  $('sgRecapRecordBtn').disabled = false;
+  $('sgRecapRecordStatus').textContent = '点击开始录制一句话';
   $('sgRecapSubmitBtn').classList.add('hidden');
+  updateSgRecapSegmentInfo();
   updateSgRecapTranscriptDisplay('');
-}
-
-function stopSgRecapTimer() {
-  if (sgRecapTimerId) {
-    clearInterval(sgRecapTimerId);
-    sgRecapTimerId = null;
-  }
-}
-
-function formatSgRecapTime(sec) {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
-}
-
-function updateSgRecapTimerDisplay() {
-  const elapsed = Math.floor((Date.now() - sgRecapStartedAt) / 1000);
-  $('sgRecapTimer').textContent = formatSgRecapTime(elapsed);
-  if (elapsed >= SG_RECAP_MIN_SEC) {
-    $('sgRecapSubmitBtn').classList.remove('hidden');
-  }
-  if (elapsed >= SG_RECAP_MAX_SEC) {
-    stopSgRecapRecording(true);
-  }
 }
 
 function showSgRecap() {
@@ -3080,80 +3151,104 @@ function sgProceedToRecap() {
   showSgRecap();
 }
 
-async function toggleSgRecapRecording() {
-  if (sgRecapIsRecording) {
-    const elapsed = Math.floor((Date.now() - sgRecapStartedAt) / 1000);
-    if (elapsed < SG_RECAP_MIN_SEC) {
-      alert('请至少录音 ' + SG_RECAP_MIN_SEC + ' 秒后再停止。');
-      return;
-    }
-    stopSgRecapRecording(false);
+async function toggleSgRecapSegmentRecording() {
+  if (sgRecapSegmentRecording) {
+    finishSgRecapSegment();
+    return;
+  }
+  if (sgRecapSegments.length >= SG_RECAP_MAX_SEGMENTS) {
+    alert('最多录制 ' + SG_RECAP_MAX_SEGMENTS + ' 句，请提交或删除后重试。');
+    return;
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    alert('当前浏览器不支持语音转文字，请使用 Chrome 或 Edge 浏览器。');
     return;
   }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    alert('当前浏览器不支持录音功能');
+    alert('当前浏览器不支持麦克风');
     return;
   }
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    sgRecapChunks = [];
-    try {
-      sgRecapRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-    } catch (_) {
-      sgRecapRecorder = new MediaRecorder(stream);
-    }
-    sgRecapRecorder.ondataavailable = (e) => {
-      if (e.data && e.data.size) sgRecapChunks.push(e.data);
-    };
-    sgRecapRecorder.onstop = () => {
-      stream.getTracks().forEach((t) => t.stop());
-      $('sgRecapRecordBtn').textContent = '🎙️ 开始录音';
-      $('sgRecapRecordStatus').textContent = '录音已结束，可提交';
-    };
-    sgRecapRecorder.start();
-    sgRecapIsRecording = true;
-    sgRecapStartedAt = Date.now();
-    sgRecapTranscript = '';
-    updateSgRecapTranscriptDisplay('');
-    stopSgRecapSpeechRecognition();
-    sgRecapSpeechRec = createSgRecapSpeechRecognition();
-    if (sgRecapSpeechRec) {
-      try { sgRecapSpeechRec.start(); } catch (_) {}
-    } else {
-      $('sgRecapRecordStatus').textContent = '录音中（本浏览器不支持实时转录）';
-    }
-    $('sgRecapRecordBtn').textContent = '⏹️ 停止录音';
-    if (sgRecapSpeechRec) {
-      $('sgRecapRecordStatus').textContent = '录音中…';
-    }
-    stopSgRecapTimer();
-    sgRecapTimerId = setInterval(updateSgRecapTimerDisplay, 200);
-    updateSgRecapTimerDisplay();
+    sgRecapSegmentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (err) {
-    alert('无法启动录音：' + err.message);
+    alert('无法使用麦克风：' + err.message);
+    return;
   }
+  sgRecapSegmentInterim = '';
+  const rec = new SR();
+  rec.lang = 'zh-CN';
+  rec.continuous = false;
+  rec.interimResults = true;
+  rec.onresult = (event) => {
+    let interim = '';
+    let finalText = '';
+    for (let i = 0; i < event.results.length; i++) {
+      const t = event.results[i][0].transcript;
+      if (event.results[i].isFinal) finalText += t;
+      else interim += t;
+    }
+    sgRecapSegmentInterim = finalText || interim;
+    const preview = sgRecapSegments.map((s) => s.text).join('') + sgRecapSegmentInterim;
+    updateSgRecapTranscriptDisplay(preview);
+  };
+  rec.onerror = () => {
+    $('sgRecapRecordStatus').textContent = '识别出错，请重试本句';
+  };
+  rec.onend = () => {
+    if (sgRecapSegmentRecording) finishSgRecapSegment();
+  };
+  sgRecapSegmentRec = rec;
+  sgRecapSegmentRecording = true;
+  try {
+    rec.start();
+  } catch (err) {
+    sgRecapSegmentRecording = false;
+    stopSgRecapSegmentRecognition();
+    alert('无法开始语音识别：' + err.message);
+    return;
+  }
+  $('sgRecapRecordBtn').textContent = '⏹️ 完成本句';
+  $('sgRecapRecordStatus').textContent = '正在听您说一句话…说完后点击「完成本句」';
+  $('sgRecapSubmitBtn').classList.add('hidden');
 }
 
-function stopSgRecapRecording(autoMax) {
-  stopSgRecapTimer();
-  if (!sgRecapIsRecording) return;
-  sgRecapIsRecording = false;
-  stopSgRecapSpeechRecognition();
-  if (sgRecapRecorder && sgRecapRecorder.state !== 'inactive') {
-    try { sgRecapRecorder.stop(); } catch (_) {}
+function finishSgRecapSegment() {
+  if (!sgRecapSegmentRecording) return;
+  sgRecapSegmentRecording = false;
+  stopSgRecapSegmentRecognition();
+  if (sgRecapSegmentStream) {
+    sgRecapSegmentStream.getTracks().forEach((t) => t.stop());
+    sgRecapSegmentStream = null;
   }
-  if (autoMax) {
-    $('sgRecapRecordStatus').textContent = '已达最长 1 分钟，请提交';
-    $('sgRecapSubmitBtn').classList.remove('hidden');
+  const text = (sgRecapSegmentInterim || '').trim();
+  sgRecapSegmentInterim = '';
+  if (!text) {
+    alert('未识别到语音内容，请重新录制本句。');
+    $('sgRecapRecordBtn').textContent = '🎙️ 录制本句';
+    $('sgRecapRecordStatus').textContent = '未识别到内容，请再试一次';
+    rebuildSgRecapTranscript();
+    return;
+  }
+  sgRecapSegments.push({ text });
+  rebuildSgRecapTranscript();
+  updateSgRecapSegmentInfo();
+  $('sgRecapRecordBtn').textContent = '🎙️ 录制本句';
+  if (sgRecapSegments.length >= SG_RECAP_MAX_SEGMENTS) {
+    $('sgRecapRecordBtn').disabled = true;
+    $('sgRecapRecordStatus').textContent = '已达 20 句上限，请提交复述';
+  } else {
+    $('sgRecapRecordStatus').textContent = '本句已保存，可继续录制下一句';
   }
 }
 
 async function submitSgRecap() {
-  const elapsed = sgRecapStartedAt
-    ? Math.floor((Date.now() - sgRecapStartedAt) / 1000)
-    : 0;
-  if (elapsed < SG_RECAP_MIN_SEC && !sgRecapChunks.length) {
-    alert('请先完成至少 ' + SG_RECAP_MIN_SEC + ' 秒的录音。');
+  if (sgRecapSegmentRecording) {
+    alert('请先点击「完成本句」结束当前录制。');
+    return;
+  }
+  if (!sgRecapSegments.length) {
+    alert('请至少录制一句话后再提交。');
     return;
   }
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -3161,15 +3256,13 @@ async function submitSgRecap() {
     alert('当前浏览器不支持语音转文字，请使用 Chrome 或 Edge 浏览器完成复述。');
     return;
   }
-  stopSgRecapSpeechRecognition();
-  await new Promise((r) => setTimeout(r, 600));
+  rebuildSgRecapTranscript();
   const charCount = countSgRecapChars(sgRecapTranscript);
   if (charCount < SG_RECAP_MIN_CHARS) {
     alert(
       '系统判断您的复述不够详细（识别文字约 ' + charCount + ' 字，需至少 ' + SG_RECAP_MIN_CHARS + ' 字）。\n'
-      + '请重新进行更详细、连贯的口头复述。'
+      + '请继续点击「录制本句」补充内容。'
     );
-    resetSgRecapUI();
     return;
   }
   $('sgAiReviewModal').classList.add('show');
