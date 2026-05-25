@@ -58,6 +58,8 @@
   .btn-danger { background: var(--accent); color: white; }
   .btn-danger:hover { background: #df4a3b; }
   .btn-reset { background: #f3f4f6; color: #1f2937; border: 1px solid var(--border); }
+  .btn-outline { background: white; color: var(--primary); border: 1px solid var(--primary); }
+  .btn-outline:hover { background: #eef4fa; }
   .count { font-size: 13px; color: var(--text-light); margin-bottom: 8px; }
   .empty { text-align: center; padding: 24px; color: var(--text-light); }
   .badge {
@@ -254,6 +256,7 @@
   <button class="btn btn-refresh" onclick="loadData()">刷新数据</button>
   <button class="btn btn-danger" onclick="purgeUnbookedParticipants()">清理超时未预约</button>
   <span class="count" id="purgeHint">参与者再次登录时，若注册超 24 小时仍未预约将被拒绝；也可点击下方按钮手动批量清理。</span>
+  <span class="count" id="groupAssignHint" style="margin-left:8px;"></span>
 </div>
 
 <div class="card">
@@ -406,6 +409,8 @@ const APP = {
   questionnaires: [],
   questionnaireOverrides: [],
   participantByPhone: new Map(),
+  maxGroupNumber: 0,
+  nextGroupNumber: null,
 };
 
 function getAuthHeaders() {
@@ -729,7 +734,10 @@ function renderParticipantTable(participants) {
         <td>${Number(p.completed) === 1 ? '<span class="badge badge-ok">已完成</span>' : '<span class="badge badge-warn">未完成</span>'}</td>
         <td>${qHtml}</td>
         <td class="profile-cell">${profileStr}</td>
-        <td><button class="btn btn-danger" onclick="deleteParticipant(${p.id})">删除</button></td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-outline" style="font-size:11px;padding:3px 8px;margin-bottom:4px;" onclick="editParticipantGroup('${(p.phone || '').replace(/'/g, "\\'")}', '${p.group_name || ''}', '${(p.full_id || '').replace(/'/g, "\\'")}')">改组别</button>
+          <button class="btn btn-danger" style="font-size:11px;padding:3px 8px;" onclick="deleteParticipant(${p.id})">删除</button>
+        </td>
       </tr>
     `;
   }).join('');
@@ -921,11 +929,55 @@ async function loadData() {
     APP.questionnaireOverrides = data.questionnaire_overrides || [];
     APP.participantByPhone = new Map();
     APP.participants.forEach(p => APP.participantByPhone.set(p.phone, p));
+    APP.maxGroupNumber = data.max_group_number || 0;
+    APP.nextGroupNumber = data.next_group_number || null;
+    const gh = document.getElementById('groupAssignHint');
+    if (gh) {
+      gh.textContent = APP.nextGroupNumber
+        ? `当前已用最大组别：${String(APP.maxGroupNumber).padStart(3, '0')}；新预约将自动分配 ${APP.nextGroupNumber}`
+        : '组别编号已达上限';
+    }
     applyFiltersAndRender();
     loadSlotConfig();
   } catch (err) {
     console.error('loadData error:', err);
     document.getElementById('groupGrid').innerHTML = `<div class="empty" style="grid-column:1/-1;color:var(--accent);">加载失败：${err.message}</div>`;
+  }
+}
+
+async function editParticipantGroup(phone, currentGroup, currentFullId) {
+  if (!phone) { alert('无手机号'); return; }
+  const hint = APP.nextGroupNumber
+    ? `\n（新预约自动编号为 ${APP.nextGroupNumber}；此处仅修改该参与者当前组别）`
+    : '';
+  const raw = prompt(
+    `手机号：${phone}\n当前组别：${currentGroup || '无'}\n当前编号：${currentFullId || '无'}\n\n请输入新的三位数字组别（如 001、012）：${hint}`,
+    currentGroup || ''
+  );
+  if (raw === null) return;
+  const normalized = String(raw).trim();
+  if (!/^\d{1,3}$/.test(normalized)) {
+    alert('组别须为 1–999 的数字（保存为三位，如 001）');
+    return;
+  }
+  const syncSlot = confirm(
+    '若该参与者已预约，是否将同一预约时段内的所有参与者改为相同组别？\n\n确定 = 是（推荐，保持配对一致）\n取消 = 否（仅改此人）'
+  );
+  try {
+    const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
+    if (!headers.Authorization) { promptForPassword(); return; }
+    const resp = await fetch('/api/admin/participants/group', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ phone, group_name: normalized, sync_slot: syncSlot }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '修改失败');
+    const lines = (data.updated || []).map(u => `${u.phone} → ${u.full_id}`).join('\n');
+    alert(`已更新组别为 ${data.group_name}\n\n${lines}${data.slot_updated ? '\n\n已同步时段：' + data.slot_updated : ''}`);
+    loadData();
+  } catch (err) {
+    alert('修改失败：' + err.message);
   }
 }
 

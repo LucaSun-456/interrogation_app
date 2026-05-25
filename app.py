@@ -2396,14 +2396,101 @@ def _set_slot_group_map(slot_map):
     store.set_meta(META_SLOT_GROUPS, json.dumps(slot_map, ensure_ascii=False))
 
 
+def _parse_group_number(group_name):
+    """Parse AAA group number; returns 0 if invalid."""
+    s = str(group_name or "").strip()
+    if not s.isdigit():
+        return 0
+    try:
+        return int(s)
+    except ValueError:
+        return 0
+
+
+def _normalize_group_name(raw):
+    """Three-digit group string (001–999) or None."""
+    n = _parse_group_number(raw)
+    if n < 1 or n > 999:
+        return None
+    return f"{n:03d}"
+
+
+def _max_assigned_group_number():
+    """Highest numeric group already used (meta, participants, groups sheet)."""
+    nums = []
+    for gn in _get_slot_group_map().values():
+        nums.append(_parse_group_number(gn))
+    for p in store.get_all_participants():
+        nums.append(_parse_group_number(p.get("group_name")))
+    nums = [n for n in nums if n > 0]
+    return max(nums) if nums else 0
+
+
 def _next_slot_group_number(slot_map):
-    """Lowest 001–112 not yet assigned to any booked time slot."""
-    used = set(slot_map.values())
-    for i in range(1, MAX_GROUPS + 1):
-        candidate = f"{i:03d}"
-        if candidate not in used:
-            return candidate
-    raise ValueError(f"Maximum group count ({MAX_GROUPS}) reached")
+    """Next group = max(assigned globally) + 1 (not lowest gap). slot_map kept for API compat."""
+    _ = slot_map
+    next_n = _max_assigned_group_number() + 1
+    if next_n > MAX_GROUPS:
+        raise ValueError(f"Maximum group count ({MAX_GROUPS}) reached")
+    return f"{next_n:03d}"
+
+
+def admin_apply_participant_group(phone, new_group_raw, sync_slot=True):
+    """
+    Set three-digit group for participant(s); rebuild full_id from role/attrs.
+    If sync_slot and participant has a confirmed booking, updates slot meta and
+    all participants on that time_slot to the same group.
+    """
+    new_group = _normalize_group_name(new_group_raw)
+    if not new_group:
+        raise ValueError("组别须为 1–999 的三位数字（如 001、012）")
+
+    p = store.get_participant(phone)
+    if not p:
+        raise ValueError("未找到参与者")
+
+    phones = {phone}
+    slot_updated = None
+    if sync_slot:
+        booking = store.get_my_booking(phone)
+        if booking and booking.get("status") == "confirmed":
+            slot = (booking.get("time_slot") or "").strip()
+            if slot:
+                slot_map = _get_slot_group_map()
+                slot_map[slot] = new_group
+                _set_slot_group_map(slot_map)
+                slot_updated = slot
+                for appt in store.get_appointments():
+                    if (
+                        appt.get("status") == "confirmed"
+                        and (appt.get("time_slot") or "").strip() == slot
+                    ):
+                        ph = (appt.get("phone") or "").strip()
+                        if ph:
+                            phones.add(ph)
+
+    updated = []
+    for ph in sorted(phones):
+        p2 = store.get_participant(ph)
+        if not p2:
+            continue
+        suffix = participant_id_suffix(p2)
+        full_id = make_full_id(new_group, p2["role"], suffix)
+        store.update_participant(ph, group_name=new_group, full_id=full_id)
+        _sync_group_record(new_group, p2["id"], p2["role"])
+        updated.append({
+            "phone": ph,
+            "role": p2["role"],
+            "group_name": new_group,
+            "full_id": full_id,
+        })
+    return {
+        "group_name": new_group,
+        "slot_updated": slot_updated,
+        "sync_slot": sync_slot,
+        "updated": updated,
+        "next_auto_group": f"{_max_assigned_group_number() + 1:03d}",
+    }
 
 
 def assign_group_for_time_slot(time_slot):
@@ -2890,7 +2977,7 @@ def _iter_slot_times(start_hm, end_hm, step_minutes=BOOKING_SLOT_STEP_MINUTES):
 
 
 def _booking_slot_bounds(role=None):
-    """Suspects: earliest slot 24h ahead; interviewers: from now."""
+    """Suspects: earliest slot 24h ahead; interviewers: from now to 7 days."""
     now = datetime.now()
     if role == "I":
         min_dt = now
@@ -2900,13 +2987,44 @@ def _booking_slot_bounds(role=None):
     return min_dt, max_dt
 
 
-def _is_valid_booking_slot(slot_dt, role=None):
+def _interviewer_24h_cutoff():
+    return datetime.now() + timedelta(hours=BOOKING_MIN_HOURS)
+
+
+def _slot_within_interviewer_24h_window(slot_dt):
+    """True if slot starts within the next BOOKING_MIN_HOURS (default 24h)."""
+    return slot_dt < _interviewer_24h_cutoff()
+
+
+def _is_valid_booking_slot(slot_dt, role=None, time_slot=None):
     min_dt, max_dt = _booking_slot_bounds(role)
-    return min_dt <= slot_dt <= max_dt
+    if not (min_dt <= slot_dt <= max_dt):
+        return False
+    if role == "I" and time_slot and _slot_within_interviewer_24h_window(slot_dt):
+        if "S" not in store.get_slot_bookings().get(time_slot, set()):
+            return False
+    return True
+
+
+def _interviewer_booking_error(slot_dt, time_slot):
+    """Human-readable error when interviewer cannot book this slot."""
+    _, max_dt = _booking_slot_bounds("I")
+    now = datetime.now()
+    if slot_dt > max_dt:
+        return f"预约时间须在 {BOOKING_MAX_DAYS} 天以内"
+    if slot_dt < now:
+        return "不能预约已过去的时间"
+    if _slot_within_interviewer_24h_window(slot_dt):
+        if "S" not in store.get_slot_bookings().get(time_slot, set()):
+            return (
+                "未来 24 小时内仅可预约已有嫌疑人预约的时间段。"
+                "请优先选择「嫌疑人已约」的时段，或选择 24 小时之后的空闲时段。"
+            )
+    return f"预约时间须在现在起至 {BOOKING_MAX_DAYS} 天以内"
 
 
 def _candidate_booking_slots(role=None):
-    """Bookable slots; suspect from 24h ahead, interviewer from now, up to one week."""
+    """Suspect slots from 24h ahead; interviewer slots from now, up to one week."""
     now = datetime.now()
     min_dt, max_dt = _booking_slot_bounds(role)
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -3916,7 +4034,7 @@ def generate_results_docx():
 # ====== Appointment APIs ======
 
 def generate_time_slots(role=None):
-    """Role-aware slots (S: 24h+; I: now+), minus admin-disabled."""
+    """Role-aware slots (S: 24h+; I: now+ with 24h-in-window suspect-only rule at book time)."""
     disabled = store.get_disabled_slots()
     return [s for s in _candidate_booking_slots(role) if s not in disabled]
 
@@ -3948,12 +4066,29 @@ def api_slots():
 
     # Build slot info: for each slot, show which roles are booked
     slot_info = {}
+    cutoff_24h = _interviewer_24h_cutoff() if role == "I" else None
     for s in all_slots:
         roles_booked = list(slot_bookings.get(s, set()))
-        slot_info[s] = {
+        info = {
             "roles_booked": roles_booked,
             "fully_booked": s in fully_booked,
         }
+        if role == "I":
+            try:
+                slot_dt = datetime.strptime(s, "%Y-%m-%d %H:%M")
+            except ValueError:
+                slot_dt = None
+            within_24h = bool(slot_dt and slot_dt < cutoff_24h)
+            suspect_booked = "S" in roles_booked
+            interviewer_taken = "I" in roles_booked
+            info["within_24h"] = within_24h
+            info["suspect_booked"] = suspect_booked
+            info["interviewer_bookable"] = (
+                s not in fully_booked
+                and not interviewer_taken
+                and (not within_24h or suspect_booked)
+            )
+        slot_info[s] = info
 
     resp = jsonify({
         "all_slots": all_slots,
@@ -3961,7 +4096,8 @@ def api_slots():
         "slot_info": slot_info,
         "groups": groups,
         "role": role,
-        "booking_min_hours": 0 if role == "I" else BOOKING_MIN_HOURS,
+        "booking_min_hours": BOOKING_MIN_HOURS if role == "I" else BOOKING_MIN_HOURS,
+        "interviewer_24h_suspect_only": role == "I",
     })
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     resp.headers["Pragma"] = "no-cache"
@@ -3986,9 +4122,9 @@ def api_book_appointment():
 
     try:
         slot_dt = datetime.strptime(time_slot, "%Y-%m-%d %H:%M")
-        if not _is_valid_booking_slot(slot_dt, role):
+        if not _is_valid_booking_slot(slot_dt, role, time_slot):
             if role == "I":
-                err = f"预约时间须在当前时间之后至 {BOOKING_MAX_DAYS} 天以内"
+                err = _interviewer_booking_error(slot_dt, time_slot)
             else:
                 err = f"预约时间须在 {BOOKING_MIN_HOURS} 小时之后至 {BOOKING_MAX_DAYS} 天以内"
             return jsonify({"error": err}), 400
@@ -5449,13 +5585,35 @@ def admin_results():
     for a in availabilities:
         a["slots"] = parse_slots(a.get("slots", "[]"))
 
+    max_g = _max_assigned_group_number()
     return jsonify({
         "participants": participants,
         "availabilities": availabilities,
         "appointments": appointments,
         "interview_questionnaires": interview_questionnaires,
         "questionnaire_overrides": questionnaire_overrides,
+        "max_group_number": max_g,
+        "next_group_number": f"{max_g + 1:03d}" if max_g < MAX_GROUPS else None,
     })
+
+
+@app.route("/api/admin/participants/group", methods=["POST"])
+@admin_required
+def admin_set_participant_group():
+    """Manually set three-digit experiment group; rebuilds full_id. Optionally syncs slot mates."""
+    data = request.get_json() or {}
+    phone = (data.get("phone") or "").strip()
+    if not phone:
+        return jsonify({"error": "请提供手机号 phone"}), 400
+    try:
+        result = admin_apply_participant_group(
+            phone,
+            data.get("group_name"),
+            sync_slot=data.get("sync_slot", True),
+        )
+        return jsonify({"success": True, **result})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
 
 
 @app.route("/api/admin/purge-unbooked", methods=["POST"])

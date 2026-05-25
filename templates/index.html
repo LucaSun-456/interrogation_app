@@ -1500,6 +1500,32 @@
   请选择您<strong>确定有空</strong>的时段，建议前后各预留 <strong>30 分钟</strong>。需与审讯者配对同一时段，<strong>预约后不可改期</strong>。
 </div>
 
+<!-- Interviewer: prefer slots with suspect already booked -->
+<div class="number-reminder-overlay" id="interviewerBookingReminderModal">
+  <div class="number-reminder-modal" style="text-align:left;max-width:440px;">
+    <div class="warning-icon" style="text-align:center;">🟠</div>
+    <h3 style="color:var(--primary);border:none;margin-bottom:8px;text-align:center;">请优先选择已有嫌疑人的时段</h3>
+    <p style="font-size:13px;color:var(--text);margin-bottom:12px;line-height:1.8;">
+      正式访谈需与<strong>嫌疑人预约同一时段</strong>才能配对。若您选择无人预约的时段，可能长期无法配对，从而<strong>无法完成实验</strong>。
+    </p>
+    <p style="font-size:13px;color:var(--text);margin-bottom:12px;line-height:1.8;">
+      <strong>24 小时后至一周内</strong>的时段：可自由选择空闲时间。<br>
+      <strong>未来 24 小时内</strong>的时段：仅可选择<strong>已有嫌疑人预约</strong>的时间（界面中以橙色标注）。
+    </p>
+    <p style="font-size:13px;color:#856404;margin-bottom:20px;line-height:1.8;background:#fff8e1;padding:10px;border-radius:8px;">
+      🔒 预约成功后无法取消或更改时间，请慎重选择。
+    </p>
+    <button class="btn-primary" onclick="closeInterviewerBookingReminderModal()" style="padding:12px 40px;font-size:15px;width:100%;">
+      我已了解，开始选择时间
+    </button>
+  </div>
+</div>
+
+<div id="interviewerBookingFloatHint" class="booking-float-hint hidden" role="note">
+  <div class="hint-title">💡 审讯者预约提示</div>
+  请<strong>优先选择已有嫌疑人预约</strong>的时段（橙色标注），以确保能够配对并完成实验。
+</div>
+
 <!-- D group: suspect not booked yet -->
 <div class="number-reminder-overlay" id="dGroupBookingWaitModal">
   <div class="number-reminder-modal">
@@ -2543,6 +2569,35 @@ function updateSuspectBookingFloatHint(role, hasBooking) {
   } else {
     el.classList.add('hidden');
   }
+}
+
+function showInterviewerBookingReminderModal() {
+  const m = $('interviewerBookingReminderModal');
+  if (m) m.classList.add('show');
+}
+
+function closeInterviewerBookingReminderModal() {
+  const m = $('interviewerBookingReminderModal');
+  if (m) m.classList.remove('show');
+}
+
+function updateInterviewerBookingFloatHint(role, hasBooking) {
+  const el = $('interviewerBookingFloatHint');
+  if (!el) return;
+  if (role === 'I' && !hasBooking) {
+    el.classList.remove('hidden');
+  } else {
+    el.classList.add('hidden');
+  }
+}
+
+function isInterviewerSlotBookable(slot, info) {
+  if (!info) return true;
+  if (info.interviewer_bookable !== undefined) return !!info.interviewer_bookable;
+  const slotDt = new Date(slot.replace(' ', 'T'));
+  const within24h = slotDt.getTime() < Date.now() + 24 * 3600 * 1000;
+  const suspectBooked = (info.roles_booked || []).includes('S');
+  return !within24h || suspectBooked;
 }
 
 function showDGroupBookingWaitModal() {
@@ -5190,6 +5245,7 @@ function renderBookingSlotsForInterviewer() {
         `;
       }
     }
+    updateInterviewerBookingFloatHint('I', true);
     return;
   }
 
@@ -5200,8 +5256,32 @@ function renderBookingSlotsForInterviewer() {
   const { allSlots, slotInfo, role } = bookingState;
   const roleLabel = role === 'S' ? '嫌疑人' : '审讯者';
 
+  let waitingSuspectSlots = 0;
+  allSlots.forEach(s => {
+    const info = slotInfo[s] || {};
+    if ((info.roles_booked || []).includes('S') && !(info.roles_booked || []).includes('I')
+        && isInterviewerSlotBookable(s, info)) {
+      waitingSuspectSlots++;
+    }
+  });
+
   let html = '<h3>请选择一个时间段预约</h3>';
-  html += `<p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">您的角色：<strong>${roleLabel}</strong></p>`;
+  html += `<p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">您的角色：<strong>${roleLabel}</strong></p>`;
+  html += `<p style="font-size:12px;color:var(--text-light);margin-bottom:12px;line-height:1.6;">
+    <strong>24 小时后至一周内</strong>可自由选择；<strong>未来 24 小时内</strong>仅可预约<strong>已有嫌疑人预约</strong>的时段。
+  </p>`;
+  if (waitingSuspectSlots > 0) {
+    html += `
+      <div style="background:#fff8e1;border:1px solid #ffc107;border-radius:8px;padding:12px;margin-bottom:12px;">
+        <div style="font-weight:700;font-size:13px;color:#e65100;">🔥 建议优先选择已有嫌疑人预约的时段</div>
+        <div style="font-size:12px;color:#856404;margin-top:4px;">当前有 <strong>${waitingSuspectSlots}</strong> 个时段已有嫌疑人等待配对，选择这些时段可确保参与实验。</div>
+      </div>`;
+  } else {
+    html += `
+      <div style="background:#fff8e1;border:1px solid #ffc107;border-radius:8px;padding:12px;margin-bottom:12px;">
+        <div style="font-size:12px;color:#856404;line-height:1.6;">请留意标注「嫌疑人已约」的时段；若选择无人预约的时段，可能无法配对完成实验。</div>
+      </div>`;
+  }
 
   const slotGroups = {};
   allSlots.forEach(s => {
@@ -5224,6 +5304,7 @@ function renderBookingSlotsForInterviewer() {
       const myRoleBooked = role === 'S' ? suspectBooked : interviewerBooked;
       const otherRoleBooked = role === 'S' ? interviewerBooked : suspectBooked;
 
+      const bookable = isInterviewerSlotBookable(s, info);
       let statusClass = 'avail';
       let statusLabel = '可预约';
       let onclick = `bookSlotForInterviewer('${s}')`;
@@ -5234,15 +5315,25 @@ function renderBookingSlotsForInterviewer() {
         statusLabel = '已被预约';
         onclick = '';
         disabled = 'disabled';
-      } else if (otherRoleBooked) {
+      } else if (!bookable) {
+        statusClass = 'locked';
+        statusLabel = '需嫌疑人已约';
+        onclick = '';
+        disabled = 'disabled';
+      } else if (suspectBooked) {
         statusClass = 'other-avail';
-        statusLabel = '对方已约';
+        statusLabel = '⭐ 嫌疑人已约';
+      } else if (interviewerBooked) {
+        statusClass = 'taken';
+        statusLabel = '审讯者已约';
+        onclick = '';
+        disabled = 'disabled';
       }
 
       html += `<button class="slot-btn ${statusClass}" onclick="${onclick}" ${disabled} style="font-size:11px;padding:6px 4px;text-align:center;border-radius:6px;border:2px solid ${
-        otherRoleBooked && !myRoleBooked ? '#e65100' : 'var(--border)'
+        suspectBooked && bookable && !myRoleBooked ? '#e65100' : 'var(--border)'
       };cursor:${disabled ? 'not-allowed' : 'pointer'};background:${
-        myRoleBooked ? '#fde8e8' : otherRoleBooked ? '#fff8e1' : '#f0fdf4'
+        myRoleBooked ? '#fde8e8' : (!bookable ? '#f5f5f5' : (suspectBooked ? '#fff8e1' : '#f0fdf4'))
       };">
         ${s.substring(11, 16)}
         <br><span style="font-size:10px;color:var(--text-light);">${statusLabel}</span>
@@ -5255,18 +5346,30 @@ function renderBookingSlotsForInterviewer() {
   $('bookingSlotList').innerHTML = html;
   $('bookingSlotList').classList.remove('hidden');
   $('bookingResult').classList.add('hidden');
+  updateInterviewerBookingFloatHint('I', false);
+  showInterviewerBookingReminderModal();
 }
 
 async function bookSlotForInterviewer(slot) {
   const { phone } = bookingState;
   if (!phone) { alert('请先输入手机号'); return; }
 
-  if (!confirm(`确认预约 ${slot}？\n\n预约后将无法取消或更改时间。\n\n您确定要预约吗？`)) return;
+  const info = (bookingState.slotInfo || {})[slot] || {};
+  if (!isInterviewerSlotBookable(slot, info)) {
+    alert('未来 24 小时内仅可预约已有嫌疑人预约的时间段。请优先选择标注「嫌疑人已约」的时段，或选择 24 小时之后的空闲时段。');
+    return;
+  }
+
+  const suspectHint = (info.roles_booked || []).includes('S')
+    ? '\n\n该时段已有嫌疑人预约，配对后可顺利开展实验。'
+    : '\n\n提示：该时段尚无嫌疑人预约，可能无法及时配对。建议优先选择「嫌疑人已约」的时段。';
+  if (!confirm(`确认预约 ${slot}？\n\n预约后将无法取消或更改时间。${suspectHint}\n\n您确定要预约吗？`)) return;
 
   showLoading('正在预约...');
   try {
     const result = await api('/api/appointments/book', { phone, time_slot: slot });
     hideLoading();
+    updateInterviewerBookingFloatHint('I', true);
     bookingState.myBooking = { 
       time_slot: slot, 
       is_matched: result.is_matched, 
@@ -6304,7 +6407,7 @@ function renderBookingUI() {
   const hintEl = $('bookingTimeRangeHint');
   if (hintEl) {
     if (role === 'I') {
-      hintEl.innerHTML = '可预约时间范围：<strong>从现在起</strong>至<strong>一周内</strong>（<strong>审讯者</strong>，无 24 小时限制）。';
+      hintEl.innerHTML = '审讯者：<strong>24 小时后至一周内</strong>可自由选择；<strong>未来 24 小时内</strong>仅可预约<strong>已有嫌疑人预约</strong>的时段。请优先选择橙色标注时段。';
     } else {
       hintEl.innerHTML = '可预约时间范围：<strong>从现在起 24 小时之后</strong>至<strong>一周内</strong>（<strong>嫌疑人</strong>）。';
     }
@@ -6373,14 +6476,14 @@ function renderBookingUI() {
       </div>`;
   }
 
-  // Count how many slots have complementary role waiting
+  // Count how many slots have complementary role waiting (bookable for this role)
   let waitingSlots = 0;
   allSlots.forEach(s => {
     const info = slotInfo[s] || {};
     const rolesBooked = info.roles_booked || [];
-    if (rolesBooked.includes(complementaryRole) && !rolesBooked.includes(role)) {
-      waitingSlots++;
-    }
+    if (!rolesBooked.includes(complementaryRole) || rolesBooked.includes(role)) return;
+    if (role === 'I' && !isInterviewerSlotBookable(s, info)) return;
+    waitingSlots++;
   });
 
   // Group slots by date
@@ -6399,12 +6502,23 @@ function renderBookingUI() {
   } else {
     // Show pairing hint if there are slots waiting for complementary role
     if (waitingSlots > 0 && !myBooking) {
+      const extraI = role === 'I'
+        ? '<div style="font-size:12px;color:#856404;margin-top:4px;">未来 24 小时内仅可预约这些时段；24 小时之后也可选择其他空闲时段。</div>'
+        : '';
       slotsHtml += `
         <div style="background:#fff8e1;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
           <span style="font-size:24px;">🔥</span>
           <div>
             <div style="font-weight:700;font-size:13px;color:#e65100;">建议优先选择已有${complementaryRoleLabel}预约的时间段</div>
-            <div style="font-size:12px;color:#856404;">目前有 <strong>${waitingSlots}</strong> 个时间段已有${complementaryRoleLabel}预约，选择这些时间段可以尽快完成配对，开展正式访谈。</div>
+            <div style="font-size:12px;color:#856404;">目前有 <strong>${waitingSlots}</strong> 个时间段已有${complementaryRoleLabel}预约，选择这些时间段可以尽快完成配对，确保能够参与实验。${extraI}</div>
+          </div>
+        </div>`;
+    } else if (role === 'I' && !myBooking) {
+      slotsHtml += `
+        <div style="background:#fff8e1;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
+          <div style="font-weight:700;font-size:13px;color:#e65100;">💡 审讯者预约提示</div>
+          <div style="font-size:12px;color:#856404;margin-top:4px;line-height:1.6;">
+            请<strong>优先选择已有嫌疑人预约</strong>的时段（橙色标注），以免无法配对。24 小时后至一周内可自由选择；未来 24 小时内仅可预约嫌疑人已约时段。
           </div>
         </div>`;
     }
@@ -6448,6 +6562,7 @@ function renderBookingUI() {
         else if (isRecommended) cardExtraClass = ' recommended';
 
         let actionBtn = '';
+        const iBookable = role !== 'I' || isInterviewerSlotBookable(slot, info);
         if (fullyBooked && !isMySlot) {
           actionBtn = `<button class="book-btn" disabled>已满</button>`;
         } else if (isMySlot) {
@@ -6458,11 +6573,16 @@ function renderBookingUI() {
           const sameRoleBooked = role === 'S' ? suspectBooked : interviewerBooked;
           if (sameRoleBooked) {
             actionBtn = `<button class="book-btn" disabled>已有${roleLabel}</button>`;
+          } else if (role === 'I' && !iBookable) {
+            actionBtn = `<button class="book-btn" disabled title="未来24小时内需嫌疑人已约">需嫌疑人已约</button>`;
           } else if (isRecommended) {
             actionBtn = `<button class="book-btn book-btn-recommend" onclick="bookSlot('${slot}')">🔥 预约配对</button>`;
           } else {
             actionBtn = `<button class="book-btn" onclick="bookSlot('${slot}')">预约</button>`;
           }
+        }
+        if (role === 'I' && info.within_24h && !suspectBooked && !isMySlot) {
+          cardExtraClass += ' within-24h-locked';
         }
 
         slotsHtml += `<div class="slot-card${cardExtraClass}">
@@ -6504,8 +6624,11 @@ function renderBookingUI() {
   }
   $('bookingSlotList').classList.remove('hidden');
   updateSuspectBookingFloatHint(role, !!myBooking);
+  updateInterviewerBookingFloatHint(role, !!myBooking);
   if (role === 'S' && !myBooking) {
     showSuspectBookingReminderModal();
+  } else if (role === 'I' && !myBooking) {
+    showInterviewerBookingReminderModal();
   }
 
   const actionArea = document.getElementById('bookingActionArea');
@@ -6540,10 +6663,24 @@ async function bookSlot(slot) {
   const { phone } = bookingState;
   if (!phone) { alert('请先输入手机号'); return; }
 
-  const extraSuspectHint = bookingState.role === 'S'
-    ? '\n\n请确认该时段您确实有空，并建议前后各预留约 30 分钟。'
-    : '';
-  if (!confirm(`确认预约 ${slot}？\n\n预约后将无法取消或更改时间。${extraSuspectHint}\n\n您确定要预约吗？`)) return;
+  if (bookingState.role === 'I') {
+    const info = (bookingState.slotInfo || {})[slot] || {};
+    if (!isInterviewerSlotBookable(slot, info)) {
+      alert('未来 24 小时内仅可预约已有嫌疑人预约的时间段。请优先选择标注「嫌疑人已约」的时段，或选择 24 小时之后的空闲时段。');
+      return;
+    }
+  }
+
+  let extraHint = '';
+  if (bookingState.role === 'S') {
+    extraHint = '\n\n请确认该时段您确实有空，并建议前后各预留约 30 分钟。';
+  } else if (bookingState.role === 'I') {
+    const info = (bookingState.slotInfo || {})[slot] || {};
+    extraHint = (info.roles_booked || []).includes('S')
+      ? '\n\n该时段已有嫌疑人预约，配对后可顺利开展实验。'
+      : '\n\n提示：该时段尚无嫌疑人预约，可能无法及时配对。建议优先选择「嫌疑人已约」的时段。';
+  }
+  if (!confirm(`确认预约 ${slot}？\n\n预约后将无法取消或更改时间。${extraHint}\n\n您确定要预约吗？`)) return;
 
   showLoading('正在预约...');
   try {
