@@ -476,6 +476,31 @@
     margin: 0 0 12px;
   }
   .guided-body p { margin: 0 0 10px; }
+  .guided-body .efm-matrix-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 16px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .guided-body .efm-matrix-table th,
+  .guided-body .efm-matrix-table td {
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    text-align: center;
+    vertical-align: middle;
+  }
+  .guided-body .efm-matrix-table thead th {
+    background: #eef4fb;
+    color: var(--primary);
+    font-weight: 600;
+  }
+  .guided-body .efm-matrix-table tbody th {
+    background: #f8f9fb;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+  }
   .guided-footer {
     display: flex;
     gap: 10px;
@@ -3241,41 +3266,129 @@ async function showSUEMaterial(source) {
   $('interviewerCompleteBtn').classList.add('hidden');
   $('avatarChatArea').classList.add('hidden');
   showScreen('screen-interviewer');
-  await showMaterialGuidedReader('theory_sue', stepTitle, '我已阅读完毕，进入测试', () => {
+  await showMaterialGuidedReader('theory_sue', stepTitle, '我已阅读完毕，进入测试', async () => {
     $('trainingContent').innerHTML = `
       <p style="font-size:13px;color:var(--text-light);">SUE 理论材料已阅读完毕。</p>
+      <div id="sueDownloadArea"></div>
       <button class="btn btn-outline" onclick="downloadInterviewerMaterials()" style="margin-top:8px;">📥 下载培训材料</button>
-      <button class="btn btn-primary" id="btnSueMaterialDone" onclick="showSueAttentionCheck()" style="margin-top:12px;">进入 EFM 注意力检测 →</button>
+      <button class="btn btn-primary" id="btnSueMaterialDone" onclick="showSuePrincipleAttention()" style="margin-top:12px;">进入注意力检测 →</button>
     `;
-    startReadingTimer('btnSueMaterialDone', 5, '进入 EFM 注意力检测 →');
+    await renderInterviewerDownloadLinks('sueDownloadArea');
+    startReadingTimer('btnSueMaterialDone', 5, '进入注意力检测 →');
   });
 }
 
 let sueAttempt = 0;
+let sueAttentionConfig = null;
 
-function showSueAttentionCheck() {
+async function ensureSueAttentionConfig() {
+  if (sueAttentionConfig) return sueAttentionConfig;
+  const res = await fetch('/api/sue-attention-config');
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '检测题加载失败');
+  sueAttentionConfig = data;
+  return sueAttentionConfig;
+}
+
+function sueCategoryLabelMap() {
+  const cats = (sueAttentionConfig && sueAttentionConfig.efm && sueAttentionConfig.efm.categories) || [];
+  const map = {};
+  cats.forEach(c => { map[c.id] = c.label; });
+  return map;
+}
+
+function suePrincipleStepNum() {
+  return sueSource === 'theory_sue' ? '第二步' : '第三步';
+}
+
+function sueEfmStepNum() {
+  return sueSource === 'theory_sue' ? '第三步' : '第四步';
+}
+
+async function showSuePrincipleAttention() {
+  showLoading('正在加载检测题...');
+  try {
+    await ensureSueAttentionConfig();
+    hideLoading();
+    renderSuePrincipleAttention();
+  } catch (err) {
+    hideLoading();
+    showError(err.message);
+  }
+}
+
+function renderSuePrincipleAttention() {
+  const p = (sueAttentionConfig && sueAttentionConfig.principle) || {};
+  const step = suePrincipleStepNum();
+  let html = `<h3>${step}：SUE 原则注意力检测</h3>`;
+  html += `<p style="font-size:13px;color:var(--text-light);margin-bottom:12px;">${escapeHtml(p.prompt || '请选择您认为正确的选项来回答下列问题：')} <strong>仅有一次作答机会</strong>，答错将无法继续参与实验。</p>`;
+  html += '<div class="attention-question" id="sue-principle-q">';
+  html += `<div class="q-title">${escapeHtml(p.statement || '')}</div>`;
+  (p.options || ['a) 是', 'b) 否']).forEach((opt, i) => {
+    html += `<label style="display:block;margin:6px 0;font-size:13px;cursor:pointer;"><input type="radio" name="sue-principle" value="${i}"> ${escapeHtml(opt)}</label>`;
+  });
+  html += '</div>';
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">';
+  html += `<button class="btn btn-outline" onclick="showSUEMaterial('${sueSource}')">← 返回重新阅读材料</button>`;
+  html += '<button class="btn btn-primary" id="suePrincipleSubmitBtn" onclick="submitSuePrincipleAttention()" style="flex:1;">提交答案</button>';
+  html += '</div>';
+  $('trainingContent').innerHTML = html;
+}
+
+async function submitSuePrincipleAttention() {
+  const el = document.querySelector('input[name="sue-principle"]:checked');
+  if (!el) {
+    alert('请选择一个选项后再提交。');
+    return;
+  }
+  showLoading('正在验证答案...');
+  try {
+    const result = await api('/api/verify-sue-principle-attention', {
+      phone: APP.phone,
+      answer: parseInt(el.value, 10),
+    });
+    hideLoading();
+    if (result.terminated || !result.correct) {
+      showScreen('screen-attention-terminated');
+      const msg = $('attentionTerminatedMsg');
+      if (msg) msg.textContent = result.message || '回答不正确，无法参与正式实验。';
+      return;
+    }
+    $('trainingContent').innerHTML = '<p style="color:#27ae60;font-weight:600;">✓ 回答正确，即将进入 EFM 检测…</p>';
+    setTimeout(() => showSueAttentionCheck(), 800);
+  } catch (err) {
+    hideLoading();
+    showError(err.message);
+  }
+}
+
+async function showSueAttentionCheck() {
   sueAttempt = 0;
-  renderSueEFMCheck();
+  showLoading('正在加载检测题...');
+  try {
+    await ensureSueAttentionConfig();
+    hideLoading();
+    renderSueEFMCheck();
+  } catch (err) {
+    hideLoading();
+    showError(err.message);
+  }
 }
 
 function renderSueEFMCheck(feedbackResults) {
-  const categories = [
-    { id: 'low-low', label: '低来源低具体', desc: '不透露来源，不透露具体内容' },
-    { id: 'low-high', label: '低来源高具体', desc: '不透露来源，但透露具体内容' },
-    { id: 'high-high', label: '高来源高具体', desc: '既透露来源，也透露具体内容' },
-  ];
+  const efm = (sueAttentionConfig && sueAttentionConfig.efm) || {};
+  const categories = efm.categories || [];
+  const statements = (efm.statements || []).map((s, idx) => ({ text: s.text, idx }));
 
-  const statements = [
-    { text: '证据陈述 A："我们掌握了一些关于案发当天犯罪现场的信息"', idx: 0 },
-    { text: '证据陈述 B："我们从现场提取到了一枚指纹"', idx: 1 },
-    { text: '证据陈述 C："我们在案发当天中午被抢商铺的柜台上提取到了你的指纹"', idx: 2 },
-  ];
-
-  const efmStepNum = (sueSource === 'theory_sue') ? '第二步' : '第三步';
+  const efmStepNum = sueEfmStepNum();
   let html = `<h3>${efmStepNum}：EFM 证据框架分类检测</h3>`;
   html += '<div class="context-box" style="font-size:13px;line-height:1.8;margin-bottom:16px;background:#fffdf0;border-left:3px solid #e6a817;">';
-  html += '<strong>场景：</strong>您已经在一家中午被抢劫的商铺的柜台上获取了指纹。这个证据表明您将要审讯的嫌疑人当日某时曾去过犯罪现场。<br><br>';
-  html += '<strong>问题：</strong>您将如何应用EFM（证据框架矩阵）、在审讯中使用这则证据以最大化嫌疑人陈述之间的不一致及陈述与证据之间的不一致？';
+  if (efm.scenario) {
+    html += `<strong>场景：</strong>${escapeHtml(efm.scenario).replace(/\n/g, '<br>')}<br><br>`;
+  }
+  if (efm.question) {
+    html += `<strong>问题：</strong>${escapeHtml(efm.question)}`;
+  }
   html += '</div>';
   html += '<p style="font-size:13px;color:var(--text-light);margin-bottom:16px;">请为以下三条证据陈述分别选择正确的EFM分类（每条对应一个类别，不可重复）：</p>';
 
@@ -3283,7 +3396,7 @@ function renderSueEFMCheck(feedbackResults) {
     const prevResult = feedbackResults ? feedbackResults[stmt.idx] : null;
     const prevAnswer = prevResult ? prevResult.user_answer : '';
     html += `<div class="attention-question" id="sue-aq-${stmt.idx}">`;
-    html += `<div class="q-title">${stmt.text}</div>`;
+    html += `<div class="q-title">证据陈述 ${stmt.idx + 1}：${escapeHtml(stmt.text)}</div>`;
     categories.forEach((cat) => {
       const checked = prevAnswer === cat.id ? 'checked' : '';
       const disabled = prevResult && prevResult.correct ? 'disabled' : '';
@@ -3325,16 +3438,17 @@ function renderSueEFMCheck(feedbackResults) {
 }
 
 async function submitSueAttention() {
+  const stmtCount = ((sueAttentionConfig && sueAttentionConfig.efm && sueAttentionConfig.efm.statements) || []).length || 3;
   const answers = {};
   let allAnswered = true;
-  [0, 1, 2].forEach(i => {
+  for (let i = 0; i < stmtCount; i++) {
     const el = document.querySelector(`input[name="sue-aq-${i}"]:checked`);
     if (el) {
       answers[i] = el.value;
     } else {
       allAnswered = false;
     }
-  });
+  }
 
   if (!allAnswered) {
     alert('请为所有三条证据陈述选择对应的EFM分类。');
@@ -3361,7 +3475,7 @@ async function submitSueAttention() {
     result.results.forEach((r) => {
       const aq = document.getElementById(`sue-aq-${r.statement_index}`);
       const fb = document.getElementById(`sue-fb-${r.statement_index}`);
-      const catLabels = { 'low-low': '低来源低具体', 'low-high': '低来源高具体', 'high-high': '高来源高具体' };
+      const catLabels = sueCategoryLabelMap();
       if (aq) {
         aq.classList.remove('correct', 'wrong');
         if (r.correct) {
@@ -3645,9 +3759,59 @@ function retryControlAttention() {
   if (retryBtn) retryBtn.classList.add('hidden');
 }
 
-function downloadInterviewerMaterials() {
-  const links = document.querySelectorAll('#trainingContent a[download]');
-  links.forEach(link => { link.click(); });
+async function renderInterviewerDownloadLinks(areaId) {
+  const area = document.getElementById(areaId);
+  if (!area) return;
+  const tt = getInterviewerTrainingType() || sueSource || 'theory_sue';
+  try {
+    const resp = await fetch(`/api/training-material/${tt}`);
+    const matInfo = await resp.json();
+    APP.interviewerMaterialFiles = matInfo.files || [];
+    if (!APP.interviewerMaterialFiles.length) {
+      area.innerHTML = '';
+      return;
+    }
+    let html = '<div style="margin-top:8px;padding:12px;background:#f0f7ff;border-radius:6px;">';
+    html += '<div style="font-weight:600;font-size:13px;margin-bottom:8px;">📂 可下载的材料：</div>';
+    APP.interviewerMaterialFiles.forEach(f => {
+      html += `<a href="${f.url}" download="${escapeHtml(f.name || '')}" style="display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;background:white;border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--primary);text-decoration:none;">📥 ${escapeHtml(f.name || '材料')}</a>`;
+    });
+    html += '</div>';
+    area.innerHTML = html;
+  } catch (_) {
+    area.innerHTML = '';
+  }
+}
+
+async function downloadInterviewerMaterials() {
+  let files = APP.interviewerMaterialFiles;
+  if (!files || !files.length) {
+    const tt = getInterviewerTrainingType() || sueSource || 'theory_sue';
+    try {
+      const resp = await fetch(`/api/training-material/${tt}`);
+      const matInfo = await resp.json();
+      files = matInfo.files || [];
+      APP.interviewerMaterialFiles = files;
+    } catch (e) {
+      alert('下载失败：' + e.message);
+      return;
+    }
+  }
+  if (!files.length) {
+    alert('暂无可下载的培训材料文件，请联系研究人员。');
+    return;
+  }
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    const a = document.createElement('a');
+    a.href = f.url;
+    a.setAttribute('download', f.name || '培训材料');
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    if (i < files.length - 1) await sleep(400);
+  }
 }
 
 function buildChatInterface() {

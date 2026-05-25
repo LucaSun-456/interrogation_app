@@ -55,67 +55,6 @@
 
 联系方式 如有任何问题，请联系研究人员孙永杰（ys6261@nyu.edu）。如需咨询参与者权利，请联系上纽大研究合规办公室（RCOinfo@nyu.edu）。
 
-若您对参与本研究有兴趣，请回复：“我确认已了解上述说明并同意参与本研究”。
-
-English Version: Informed Consent Form (Suspect/Encoder)
-
-<Research on Investigative Interviewing: Application of Case-Specific Avatars - Suspect Version>
-
-This research is conducted by Dr. Pekka Santtila, Faculty of Arts and Sciences, New York University Shanghai.
-
-Purpose of the Study The purpose of this study is to evaluate the effectiveness of AI-generated avatars (based on real case contexts and individual profiles) in training investigative interviewing skills, such as the Strategic Use of Evidence (SUE).
-
-Potential Benefits You may not directly benefit from this study, but the information gathered from this research may help improve investigative interviewing training methods and contribute to the advancement of forensic psychology education and practice.
-
-Research Procedures As a participant playing the role of a "Suspect," your involvement consists of two phases:
-
-Phase 1: Online Interaction & Profile Collection (Approx. 20 min)
-
-You will watch a simulated crime scenario video (e.g., theft or arson). You may be assigned to the guilty or not guilty group. At key points in the video, you will make autonomous decisions (e.g., choosing a main road vs. a side path, or deciding where to hide an item).
-
-After the video, you will complete a memory and attention check regarding the scenario.
-
-You will complete a profile questionnaire covering your occupation, lifestyle, financial overview, and social habits. This data will be used to generate six AI avatars that mimic your background to train interviewers in later stages.
-
-Phase 2: Live Video Interview (2-3 days later, Approx. 20 min)
-
-You will participate in a live video interview via Tencent Meeting with a "Trainee Interviewer."
-
-Your task is to defend yourself based on your actions in Phase 1. Regardless of whether you were "guilty" or "innocent" in the scenario, your goal is to convince the interviewer of your innocence.
-
-Total Duration The total estimated time is 40 minutes (20 minutes for Phase 1 and 20 minutes for Phase 2).
-
-Eligibility Criteria
-
-Aged 18 years or older;
-
-Fluent in Mandarin;
-
-Access to a computer with a camera and microphone for video calls.
-
-Compensation Upon completion of both phases, you will receive a base payment of 50 RMB. If you are found innocent during the second-stage interview, you will also receive a 50-yuan bonus, for a total of 100 yuan. 
-
-If you answer any question incorrectly in the attention test during the first stage, you will not be able to proceed to the second stage (the in-person interview) and will not receive compensation.
-
-No payment will be made if you withdraw voluntarily before completion.
-
-Right to Withdraw Your participation in this study is entirely voluntary. You have the right to withdraw from the study at any time without providing a reason, and it will not result in any penalty or loss of benefits to which you are otherwise entitled. If you decide to withdraw, please notify researcher Yongjie Sun (ys6261@nyu.edu) via WeChat or email. 
-If you withdraw before data collection is complete, we will ask whether you consent to retain the data already collected for analysis. If you do not agree, we will delete all your research data (including audio/video recordings, questionnaire responses, and text transcripts) with no adverse consequences. If you withdraw after data has been de-identified, your data can no longer be traced to your identity and therefore cannot be removed from the research dataset.
-
-Risks and Confidentiality
-
-Risks: The probability of harm or discomfort is no greater than those encountered in daily life. Playing a "suspect" role may cause mild social stress, which is considered minimal risk.
-
-Data Protection: Your profile data is used solely to prompt the AI and will not be disclosed directly. The interview will be recorded for research purposes.
-
-Anonymization: We will transcribe the recorded videos. Your personal information will not appear in the research data. The anonymized data may be used for future research or academic exchange without requiring your further consent.
-
-Storage: Data will be stored in a password-protected NYU Box drive to ensure confidentiality.
-
-Contact Information For questions, contact researcher Yongjie Sun (ys6261@nyu.edu). For rights as a participant, contact the NYU Shanghai Research Compliance Office (RCOinfo@nyu.edu).
-
-If you are interested in participating, please respond with: "I confirm that I have understood the above instructions and agree to participate in this study."
-
 
 ---
 
@@ -180,64 +119,6 @@ If you are interested in participating, please respond with: "I confirm that I h
 
 若您对参与本研究有兴趣，请回复：“我确认已了解上述说明并同意参与本研究”。
 
-English Version: Informed Consent Form (Trainee/Interviewer)
-
-<Research on Investigative Interviewing: Application of Case-Specific Avatars - Trainee Version>
-
-This research is conducted by Dr. Pekka Santtila, Faculty of Arts and Sciences, New York University Shanghai.
-
-Purpose of the Study The purpose of this study is to evaluate how different forms of training—including theoretical learning and AI avatar practice—enhance an interviewer's ability to apply the Strategic Use of Evidence (SUE) during investigative interviews.
-
-Potential Benefits You may not directly benefit from this study, but the information gathered from this research may help improve investigative interviewing training methods and contribute to the advancement of forensic psychology education and practice.
-
-Research Procedures As a participant playing the role of a "Trainee Interviewer," your involvement consists of two phases:
-
-Phase 1: Online Training & Practice (Approx. 30-60 min)
-
-You will receive online training on investigative interviewing strategies, which includes reading materials or watching instructional videos.
-
-During the training, you must complete attention checks and comprehension assessments based on the instructional content.
-
-Depending on your assigned group, you may be asked to conduct one or six brief practice interviews with AI-generated avatars. The system will provide immediate automated feedback based on your questioning techniques.
-
-Phase 2: Live Video Interview (2-3 days later, Approx. 20-30 min)
-
-You will participate in a live video interview via Tencent Meeting with a human "Mock Suspect."
-
-You will apply the techniques learned to interview the suspect and subsequently submit a judgment report regarding their guilt or innocence.
-
-Total Duration The total estimated time is 80-90 minutes (60 minutes for Phase 1 and 20-30 minutes for Phase 2).
-
-Eligibility Criteria
-
-Aged 18 years or older;
-
-Fluent in Mandarin;
-
-Access to a computer with a camera and microphone for video calls.
-
-Compensation Upon completion of both phases, you will receive a base payment of 100 RMB. If you can accurately determine whether the suspect is guilty or innocent in the second phase of the study, you will receive an additional 50 yuan, for a total of 150 yuan.
-
-If you answer any question incorrectly in the attention test during the first stage, you will not be able to proceed to the second stage (the in-person interview) and will not receive compensation. No payment will be made if you withdraw voluntarily before completion.
-
-Right to Withdraw Your participation in this study is entirely voluntary. You have the right to withdraw from the study at any time without providing a reason, and it will not result in any penalty or loss of benefits to which you are otherwise entitled. If you decide to withdraw, please notify researcher Yongjie Sun (ys6261@nyu.edu) via WeChat or email. 
-If you withdraw before data collection is complete, we will ask whether you consent to retain the data already collected for analysis. If you do not agree, we will delete all your research data (including audio/video recordings, questionnaire responses, and text transcripts) with no adverse consequences. If you withdraw after data has been de-identified, your data can no longer be traced to your identity and therefore cannot be removed from the research dataset.
-
-Risks and Confidentiality
-
-Risks: The probability of harm or discomfort is no greater than those encountered in daily life. Making decisions and asking questions in a live interview may cause mild psychological stress, which is considered minimal risk within simulated professional interactions.
-
-Data Protection: Your text, audio, and video records from the practice and interview sessions will be used solely for research analysis.
-
-Anonymization: We will transcribe the recorded videos. Your personal information will not appear in the research data. The anonymized data may be used for future research or academic exchange without requiring your further consent.
-
-Storage: Data will be stored in a password-protected NYU Box drive to ensure confidentiality.
-
-Contact Information For questions, contact researcher Yongjie Sun (ys6261@nyu.edu). For rights as a participant, contact the NYU Shanghai Research Compliance Office (RCOinfo@nyu.edu).
-
-If you are interested in participating, please respond with: "I confirm that I have understood the above instructions and agree to participate in this study."
-
-
 ---
 
 <!-- section:theory_sue -->
@@ -246,7 +127,7 @@ If you are interested in participating, please respond with: "I confirm that I h
 
 “有策略地使用证据法”Strategic Use of Evidence (SUE)是一个能帮助审讯者更好区分受审者是否在说谎的审讯技巧。SUE技巧通过诱发受审者陈述之间的不一致（即受审者后续陈述与前期陈述不一致）以及陈述与证据之间的不一致（即受审者的陈述与已有证据不一致)来达成上述目标。以上两种不一致均经研究证实为说谎的可靠标志。审讯者需在审讯中尽可能隐瞒已有证据，并使用漏斗型提问框架来诱发上述两种不一致。尽管在审讯中说谎者和诚实者都试图说服审讯者他们是清白的，SUE技巧的一个基本前提是两者会使用不同策略来达成以上目的。研究表明，说谎者如有机会，会回避重要信息，而诚实者在审讯中会乐于提供信息且实话实说。例如，在回答一个开放性问题（“你上周四做了什么？”）的时候，说谎者会避免说出他曾经接近过犯罪现场（定罪细节），而一个诚实者不会回避说出他在犯罪现场（是定罪细节，但不会定罪于无辜者，所以他们没有理由避免揭露这个信息）。这意味着说谎者与诚实者之间的区别在于说谎者会有所回避。
 
-如果说谎者无法回避定罪信息，他们则会否认它。例如，在回答一个具体问题“你当时是否去过Johnson的家里（犯罪现场）？”时，说谎者会否认他去过那里，而诚实者不会否认。这类问题会使说谎者否认事实，而这清晰地体现了陈述与证据之间的不一致（即审讯者有证据证明说谎者的陈述是错误的），从而可以判断受审者在说谎。具体问题也可以用来尽可能多地获得对证据的其他解释（包括可以使受审者排除嫌疑的解释）。
+如果说谎者无法回避定罪信息，他们则会否认它。例如，在回答一个具体问题“你当时是否去过张三的家里（犯罪现场）？”时，说谎者会否认他去过那里，而诚实者不会否认。这类问题会使说谎者否认事实，而这清晰地体现了陈述与证据之间的不一致（即审讯者有证据证明说谎者的陈述是错误的），从而可以判断受审者在说谎。具体问题也可以用来尽可能多地获得对证据的其他解释（包括可以使受审者排除嫌疑的解释）。
 
 综上所述，说谎者在审讯中会有所回避及否认，而诚实者会乐于提供信息并实话实说。使用开放性问题可以反映出两者回答中省略的不同，而使用具体问题可以使说谎者否认事实或改变原来的口供。
 
@@ -260,15 +141,23 @@ If you are interested in participating, please respond with: "I confirm that I h
 
 在构建审讯时，使用“证据框架矩阵”Evidence Framing Matrix (EFM)可以帮助将漏斗型提问结构实际应用于审讯过程中。
 
-“证据框架矩阵”Evidence Framing Matrix (EFM)：任何一种证据都能以不同形式被出示。例如，证明嫌疑人在现场的DNA证据可以直接被出示（“我们有DNA证据表明你曾在Turku的中央图书馆”）或以一种更笼统的方式被出示（“我们有信息表明你曾在Turku”）。证据框架矩阵阐释了可能的出示证据的方法。这个矩阵有2个维度：证据来源的强度（由弱至强）以及证据的具体程度（由低至高）。
+“证据框架矩阵”Evidence Framing Matrix (EFM)：任何一种证据都能以不同形式被出示。例如，证明嫌疑人在现场的DNA证据可以直接被出示（“我们有DNA证据表明你曾在上海市图书馆”）或以一种更笼统的方式被出示（“我们有信息表明你曾在上海市”）。证据框架矩阵阐释了可能的出示证据的方法。这个矩阵有2个维度：证据来源的强度（由弱至强）以及证据的具体程度（由低至高）。
+
+来源这个维度可以指来自于谁，也可以指来自于哪里。这可以是一个路人的证词，也可以是一段监控录像。
+
+可以这样理解：来源这个维度指的是证据本身的可信性。比如，如果我只说“我有【证据】表明你做了某件事”，那么这个陈述的【可信度】就比我说“我有【监控证据】表明你做了某件事”要低一些。
+
+具体程度可以理解为能够将这个证据锁定到当前嫌疑人身上的程度。比如我说“我有证据表明你去过【上海市】”，那么这条证据就不太能够指向当前嫌疑人。但是如果我说“我有证据表明你去过【上海市图书馆】”。这两个地区涉及的总人流量是不同的，那么后者的具体程度就比前者要高，也就更容易锁定到当前嫌疑人身上。
+
+同时还需要注意来源维度和具体程度的高低都是【相对】的，你需要在实际案件中根据具体情况来拟定如何呈现这些证据。比如，在一种情况下，我们有监控证据表明嫌疑人去过【上海市普陀区】，在这种情况下，一个具体性比较低的证据可以是“我们有证据表明你去过【上海市】”，而具体性比较高的证据可以是“我们有证据表明你去过【上海市普陀区】”。但可能在另一种情况下，我们有证据表明嫌疑人去过【华东师范大学】。在这种情况下，一个具体性比较低的证据可能是“我们有证据表明你去过【上海市普陀区】”，而具体性比较高的证据则是“我们有证据表明你去过【华东师范大学】”。因此，即使是同一种证据呈现方式，也就是“我们有证据表明你去过【上海市普陀区】”，在你前期获得的证据不同的情况下，它的重要性和呈现的方式也是不同的。
 
 使用EFM矩阵及SUE审讯技巧的典型审讯结构是：由宽泛笼统的问题开始（例如，你上周五[案发日]曾去过哪里、做了什么？），然后顺着矩阵的方向由“弱来源、低具体程度”至“强来源、低具体程度”，最终至“强来源、高具体程度”的方式出示证据。使用逐步揭露证据的技巧的目的是诱使有罪的嫌疑人面对出示的证据改变口供，从而使疑人的陈述之间产生不一致。
 
-例如，如果审讯者已经掌握了一个毛发样本，它可以证明嫌疑人曾到过MaryDover谋杀案案发的同一房间，审讯者可以使用EFM来构建审讯如下：审讯开始时，审讯者应宽泛地询问嫌疑人在案发日的活动。如果嫌疑人开始告诉审讯者他一整天都在他姐妹的房子里，一个陈述与证据之间的不一致已经产生了。如果嫌疑人有对证据的解释能够排除其嫌疑的，此时解释应该已经出现了。接着，审讯者应表示他有信息（弱来源）表明嫌疑人当时在案发的相同地区（低具体程度）。在第一个问题中说谎的嫌疑人要么会否认这个信息，要么会改变口供来匹配这个新出现的证据，而这对于无辜者来说是另一个回忆当日活动的机会。
+例如，如果审讯者已经掌握了一个毛发样本，它可以证明嫌疑人曾到过张三谋杀案案发的同一房间，审讯者可以使用EFM来构建审讯如下：审讯开始时，审讯者应宽泛地询问嫌疑人在案发日的活动。如果嫌疑人开始告诉审讯者他一整天都在他朋友的房子里，一个陈述与证据之间的不一致已经产生了。接着，审讯者应表示他有信息（弱来源）表明嫌疑人当时在案发的相同地区（低具体程度）。在第一个问题中说谎的嫌疑人要么会否认这个信息，要么会改变口供来匹配这个新出现的证据，而这对于无辜者来说是另一个回忆当日活动的机会。
 
 下一步，审讯者应以强来源、低具体程度的方式出示证据。审讯者可告诉嫌疑人他已经在那个区域获得了与嫌疑人匹配的毛发样本。如果嫌疑人否认了上一个问题中的证据，他的陈述则再次与证据不一致。此时，他可能会承认曾去过那个区域，并作出一些其他的解释。而这种情况下，嫌疑人陈述之间的不一致也产生了。
 
-将矩阵应用于本案例的最后一步是以强来源、高具体程度的方式出示证据。审讯者可告诉嫌疑人：“我们在Mary的房间里发现了你的毛发样本。”一个说谎的嫌疑人会再次改变口供来匹配这个证据，而诚实者的陈述则全程保持一致。
+将矩阵应用于本案例的最后一步是以强来源、高具体程度的方式出示证据。审讯者可告诉嫌疑人：“我们在张三的房间里发现了你的毛发样本。”一个说谎的嫌疑人会再次改变口供来匹配这个证据，而诚实者的陈述则全程保持一致。
 
 
 ---
@@ -297,25 +186,6 @@ If you are interested in participating, please respond with: "I confirm that I h
 
 准备好了吗？深呼吸，拿好您的证据清单。调查现在开始。
 
-🕵️‍♂️ AI Suspect Interview Simulation — Interviewer Instructions
-
-Welcome to the investigative interview training. The core objective of this training is to help you learn and master the application of the Strategic Use of Evidence (SUE) and apply it in a subsequent interview with an actual suspect. To achieve this goal, this exercise consists of 6 consecutive interview tasks. Across these 6 tasks, you will conduct one-on-one online practice sessions with the same AI-driven "virtual suspect."
-
-1. Facing a "Real" Suspect Please note that the AI you are engaging with is not a simple Q&A bot. Its background story, financial status, social relationships, and personality profile are fully constructed based on a real-world human suspect’s psychological profile and you are later going to interview this actual human suspect. In addition, the case background and evidence you are going to have during your practice sessions with the AI suspect will be identical to those of the actual suspect you will later interview; therefore, you will be able to employ the same strategies in your subsequent interview with the actual human suspect as you learned during the practice phase. 
-
-Although you are interacting with the same AI avatar, during these six interviews, the suspect is sometimes portrayed as guilty and sometimes as innocent; at the same time, their attitude toward the investigation also changes (for example, they may be cooperative, guarded, or confrontational). Whether the suspect is guilty or innocent, their verbal responses, defense mechanisms, and emotional fluctuations will be highly consistent with real suspects. This should help you to prepare for the various behavioral patterns of the actual suspect you will later interview. Please treat this interview as seriously as a real criminal investigation.
-
-2. Focus on Verbal Cues, Ignore Non-verbal Cues While body language is often important in real interrogations, non-verbal cues (such as micro-expressions or physical movements) are not involved and do not require your attention in this specific training simulation. Please focus entirely on the suspect's verbal content. You need to be highly observant of their logical loopholes, information avoidance, vague phrasing, and how their story shifts when they are confronted with evidence.
-
-3. Your Task & SUE Strategy Please apply the Strategic Use of Evidence (SUE) techniques you have learned. It is recommended to first allow the suspect to provide a free narrative to lock in their "commitments" regarding the timeline. Subsequently, gradually present your evidence to produce contradictions. Ultimately, you must determine whether the suspect is "Guilty" or "Innocent."
-
-4. Post-Interview Feedback After Every Session The simulation does not end after you conclude the interview and submit your verdict. After every interview session, you will receive detailed feedback. This feedback will review your performance: Was your timing for presenting evidence appropriate? Where did the suspect actually expose their flaws? And how can you optimize your questioning strategies for future real-world cases?
-
-Ready? Take a deep breath and grab your evidence file. The investigation begins now
-
-
----
-
 <!-- section:avatar_general -->
 
 # C组 通用 Avatar 培训说明
@@ -343,31 +213,6 @@ Ready? Take a deep breath and grab your evidence file. The investigation begins 
 请充分利用这6次与 AI 嫌疑人练习的机会打磨您的技巧。因为在完成所有 AI 模拟演练后，您将亲自对一位真实的“人类嫌疑人”进行实战访谈。
 
 准备好了吗？深呼吸，拿好您的证据清单。调查现在开始。
-
-🕵️‍♂️ AI Suspect Interview Exercise — Instructions for Interviewers
-
-Welcome to the investigative interview training. The core objective of this training is to help you learn and master the application of the Strategic Use of Evidence (SUE) and applied in a subsequent interview with an actual human suspect. To achieve this goal, this exercise consists of 6 consecutive interview tasks. Across these 6 tasks, you will conduct one-on-one online practice sessions with the same AI-driven "virtual suspect."
-
-1. Facing a "Real" Suspect
-
-Although you are facing the same AI avatar, across these 6 interviews, the suspect will sometimes be guilty and sometimes innocent. Meanwhile, their attitude toward the investigation may also vary (e.g., cooperative, defensive, or confrontational). Regardless of their state, their verbal responses and defense mechanisms will be highly consistent with those of real-world suspects. Although the case details and evidence in the practice interviews with AI suspects will not be identical to those in the interview with the real suspect, the SUE techniques you learn during these online practice sessions can be applied in the subsequent interview with the real-world human suspect. Please treat every interview as seriously as you would a real case.
-
-2. Focus on Verbal Cues, No Non-Verbal Cues Needed
-
-In real interrogations, body language is often important. However, in this exercise, you do not need to focus on non-verbal cues (such as micro-expressions, body movements, etc.). Please concentrate all your attention entirely on the suspect's verbal content. You need to keenly capture their logical loopholes, information avoidance, vague wording, and how their narrative changes when you confront them with evidence.
-
-3. Your Task and the SUE Strategy
-
-Please apply the Strategic Use of Evidence (SUE) techniques you have learned. It is recommended that you first ask the suspect for a free narrative to lock down their account of the timeline. Subsequently, gradually disclose the evidence you hold to produce inconsistencies. Ultimately, you must determine whether the suspect is "Guilty" or "Innocent."
-
-4. Exclusive Feedback After Each Interview
-
-After you conclude the interview and submit your guilty/innocent verdict, the session is not over. Following each interview, you will receive a detailed feedback report. This feedback will review your performance: Was your timing in disclosing evidence appropriate? Where did the suspect actually expose their flaws? And how can you optimize your questioning strategy in future real-world cases?
-
-Please make the most of these 6 practice opportunities with the AI suspect to hone your skills. This is because, upon completing all the AI simulations, you will conduct a live, practical interview with a real "human suspect."
-
-Are you ready? Take a deep breath, and grab your evidence checklist. The investigation begins now.
-
 
 ---
 

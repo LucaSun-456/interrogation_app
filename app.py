@@ -303,6 +303,13 @@ CONTROL_ATTENTION_CHECKS = [
     },
 ]
 
+SUE_PRINCIPLE_ATTENTION = {
+    "prompt": "请选择您认为正确的选项来回答下列问题：",
+    "statement": "您应该尽早在审讯中出示您已掌握的证据来给潜在的无辜者一个为自己辩解的机会。",
+    "options": ["a) 是", "b) 否"],
+    "answer": 1,
+}
+
 SUE_EFM_CHECK = {
     "scenario": "您已经在一家中午被抢劫的幸福商铺的柜台上（位于上海市普陀区长寿路）获取了指纹。这个证据表明您将要审讯的嫌疑人当日某时曾去过犯罪现场。您将如何应用EFM（证据框架矩阵）、在审讯中使用这则证据以最大化嫌疑人陈述之间的不一致及陈述与证据之间的不一致？",
     "question": "请将以下三条证据陈述分别归类到正确的EFM类别中（每条证据对应一个类别）：",
@@ -1942,6 +1949,49 @@ def _split_document_into_slides(text, max_chars=950):
     ]
 
 
+def _efm_matrix_slide_html():
+    """EFM 2×2 matrix (Turku example) — shown as a dedicated slide in SUE materials."""
+    return (
+        '<p style="margin-bottom:12px;">'
+        "下图展示了<strong>证据框架矩阵（EFM）</strong>的四个象限示例"
+        "（纵轴：证据来源强度；横轴：证据具体程度）："
+        "</p>"
+        '<table class="efm-matrix-table">'
+        "<thead><tr><th scope=\"col\"></th>"
+        "<th scope=\"col\">低具体程度</th>"
+        "<th scope=\"col\">高具体程度</th></tr></thead>"
+        "<tbody>"
+        "<tr><th scope=\"row\">强来源</th>"
+        "<td>我们有DNA证据表明你曾在上海市</td>"
+        "<td>我们有DNA证据表明你曾在上海市图书馆</td></tr>"
+        "<tr><th scope=\"row\">弱来源</th>"
+        "<td>我们有信息表明你曾在上海市</td>"
+        "<td>我们有信息表明你曾在上海市图书馆</td></tr>"
+        "</tbody></table>"
+    )
+
+
+def _insert_efm_matrix_slide(slides):
+    """Insert the EFM matrix table slide after the EFM introduction text."""
+    matrix_slide = {
+        "html": _efm_matrix_slide_html(),
+        "min_seconds": 10,
+    }
+    insert_at = None
+    for i, slide in enumerate(slides):
+        html = slide.get("html") or ""
+        if "证据框架矩阵" in html or "Evidence Framing Matrix" in html:
+            insert_at = i + 1
+            break
+    if insert_at is None:
+        insert_at = min(3, len(slides))
+    merged = slides[:insert_at] + [matrix_slide] + slides[insert_at:]
+    return [
+        {**slide, "index": idx, "min_seconds": slide.get("min_seconds", 6)}
+        for idx, slide in enumerate(merged)
+    ]
+
+
 def _build_combined_materials_md():
     sections = []
     for section_id, title, filenames, search_dirs in MATERIAL_SECTION_SPECS:
@@ -3029,9 +3079,12 @@ def material_slides(section_id):
         "avatar_general": "通用 Avatar 组培训说明",
         "control": "对照组培训材料",
     }
+    slides = _split_document_into_slides(text_content)
+    if section_id == "theory_sue":
+        slides = _insert_efm_matrix_slide(slides)
     return jsonify({
         "title": titles.get(section_id, "培训材料"),
-        "slides": _split_document_into_slides(text_content),
+        "slides": slides,
     })
 
 
@@ -3066,6 +3119,40 @@ def sue_training_text():
                 pass
 
     return jsonify({"text": text_content or "", "source": "combined_materials.md"})
+
+
+@app.route("/api/sue-attention-config")
+def sue_attention_config():
+    """Expose SUE principle + EFM attention check content for the interviewer UI."""
+    return jsonify({
+        "principle": SUE_PRINCIPLE_ATTENTION,
+        "efm": SUE_EFM_CHECK,
+    })
+
+
+@app.route("/api/verify-sue-principle-attention", methods=["POST"])
+def verify_sue_principle_attention():
+    """Single-item SUE principle check after reading theory materials (B/C/D groups). One wrong answer terminates."""
+    data = request.get_json()
+    phone = (data.get("phone") or "").strip()
+    try:
+        answer = int(data.get("answer"))
+    except (TypeError, ValueError):
+        answer = -1
+
+    p = store.get_participant(phone)
+    if not p:
+        return jsonify({"error": "未找到参与者"}), 404
+
+    if answer == SUE_PRINCIPLE_ATTENTION["answer"]:
+        return jsonify({"correct": True})
+
+    store.blacklist_phone(phone, reason="sue_principle_attention_failed")
+    return jsonify({
+        "correct": False,
+        "terminated": True,
+        "message": "回答不正确，无法参与正式实验。您的手机号已被记录，无法再次参与。",
+    })
 
 
 @app.route("/api/verify-sue-attention", methods=["POST"])
