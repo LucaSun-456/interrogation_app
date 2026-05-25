@@ -586,6 +586,18 @@ TRAINING_GROUP_LABELS = {
 }
 TRAINING_TARGET_PER_TYPE = 28
 
+# Round-robin assignment order (registration sequence, not random)
+SUSPECT_ATTR_CYCLE = [
+    ("arson", "Innocent"),
+    ("arson", "Guilty"),
+    ("theft", "Innocent"),
+    ("theft", "Guilty"),
+]
+TRAINING_TYPE_CYCLE = ["control", "theory_sue", "avatar_general", "avatar_specific"]
+NON_SPECIFIC_TRAINING_TYPES = ["control", "theory_sue", "avatar_general"]
+META_SLOT_GROUPS = "appointment_slot_groups"
+META_INTERVIEWER_NON_SPECIFIC_SEQ = "interviewer_non_specific_seq"
+
 
 def training_group_label(training_type):
     return TRAINING_GROUP_LABELS.get(training_type or "", "")
@@ -2346,18 +2358,226 @@ def build_session_body(avatar_id, voice_id, context_id, language, opening_text=N
 
 # ====== Route Helpers ======
 
-def next_group_name():
-    """Lowest unused group number 001–112 among active participants."""
-    used = set()
-    for p in store.get_all_participants():
-        gn = (p.get("group_name") or "").strip()
-        if gn:
-            used.add(gn)
+def _get_slot_group_map():
+    """time_slot -> group_name (001–112). Bootstraps from existing bookings if meta empty."""
+    raw = store.get_meta(META_SLOT_GROUPS, None)
+    if raw is not None:
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+            if isinstance(data, dict):
+                return {str(k): str(v) for k, v in data.items()}
+        except Exception:
+            pass
+
+    slot_map = {}
+    for appt in store.get_appointments():
+        if appt.get("status") != "confirmed":
+            continue
+        slot = (appt.get("time_slot") or "").strip()
+        if not slot:
+            continue
+        p = store.get_participant(appt.get("phone", ""))
+        gn = (p.get("group_name") or "").strip() if p else ""
+        if not gn:
+            continue
+        if slot in slot_map and slot_map[slot] != gn:
+            logger.warning(
+                "Slot %s has conflicting group numbers %s vs %s; keeping first",
+                slot, slot_map[slot], gn,
+            )
+            continue
+        slot_map[slot] = gn
+    if slot_map:
+        store.set_meta(META_SLOT_GROUPS, json.dumps(slot_map, ensure_ascii=False))
+    return slot_map
+
+
+def _set_slot_group_map(slot_map):
+    store.set_meta(META_SLOT_GROUPS, json.dumps(slot_map, ensure_ascii=False))
+
+
+def _next_slot_group_number(slot_map):
+    """Lowest 001–112 not yet assigned to any booked time slot."""
+    used = set(slot_map.values())
     for i in range(1, MAX_GROUPS + 1):
         candidate = f"{i:03d}"
         if candidate not in used:
             return candidate
     raise ValueError(f"Maximum group count ({MAX_GROUPS}) reached")
+
+
+def assign_group_for_time_slot(time_slot):
+    """First booker on a slot gets the next group number; second booker shares it."""
+    slot = (time_slot or "").strip()
+    if not slot:
+        raise ValueError("预约时段无效")
+    slot_map = _get_slot_group_map()
+    if slot in slot_map:
+        return slot_map[slot]
+    # Legacy rows: slot already has one booking with a group_name but no meta entry yet
+    for appt in store.get_appointments():
+        if appt.get("status") != "confirmed":
+            continue
+        if (appt.get("time_slot") or "").strip() != slot:
+            continue
+        p = store.get_participant(appt.get("phone", ""))
+        gn = (p.get("group_name") or "").strip() if p else ""
+        if gn:
+            slot_map[slot] = gn
+            _set_slot_group_map(slot_map)
+            return gn
+    group_name = _next_slot_group_number(slot_map)
+    slot_map[slot] = group_name
+    _set_slot_group_map(slot_map)
+    return group_name
+
+
+def _sync_group_record(group_name, participant_id, role):
+    """Link suspect/interviewer IDs to the shared experiment group."""
+    pid = str(participant_id)
+    g = store.get_group_by_name(group_name)
+    if role == "S":
+        if g:
+            store.update_group(group_name, suspect_id=pid)
+        else:
+            store.add_group(group_name, suspect_id=pid)
+    else:
+        if g:
+            store.update_group(group_name, interviewer_id=pid)
+        else:
+            store.add_group(group_name, suspect_id="", interviewer_id=pid)
+
+
+def assign_participant_group_on_booking(phone, time_slot):
+    """Assign shared AAA group + full_id when a participant books a slot."""
+    p = store.get_participant(phone)
+    if not p:
+        raise ValueError("未找到参与者")
+    group_name = assign_group_for_time_slot(time_slot)
+    suffix = participant_id_suffix(p)
+    full_id = make_full_id(group_name, p["role"], suffix)
+    store.update_participant(phone, group_name=group_name, full_id=full_id)
+    _sync_group_record(group_name, p["id"], p["role"])
+    return group_name, full_id
+
+
+def pick_register_role():
+    """Alternate S/I by registration count so roles stay balanced."""
+    n_s = sum(1 for p in store.get_all_participants() if p.get("role") == "S")
+    n_i = sum(1 for p in store.get_all_participants() if p.get("role") == "I")
+    return "I" if n_i < n_s else "S"
+
+
+def _suspect_combo_key(case_type, guilt):
+    return f"{case_type or 'arson'}:{guilt or 'Innocent'}"
+
+
+def _parse_suspect_combo_key(key):
+    parts = (key or "").split(":", 1)
+    if len(parts) == 2:
+        return parts[0], parts[1]
+    return "arson", "Innocent"
+
+
+def _suspect_combo_on_slot(time_slot):
+    """Return (case_type, guilt) of suspect already booked on this slot, or None."""
+    slot = (time_slot or "").strip()
+    if not slot:
+        return None
+    for appt in store.get_appointments():
+        if appt.get("status") != "confirmed" or appt.get("role") != "S":
+            continue
+        if (appt.get("time_slot") or "").strip() != slot:
+            continue
+        p = store.get_participant(appt.get("phone", ""))
+        if p and p.get("case_type"):
+            return p.get("case_type"), p.get("guilt") or "Innocent"
+    return None
+
+
+def _count_suspect_combos():
+    counts = {_suspect_combo_key(c, g): 0 for c, g in SUSPECT_ATTR_CYCLE}
+    for p in store.get_all_participants():
+        if p.get("role") != "S":
+            continue
+        key = _suspect_combo_key(p.get("case_type"), p.get("guilt"))
+        if key in counts:
+            counts[key] += 1
+    return counts
+
+
+def _count_interviewer_training_types():
+    counts = {t: 0 for t in TRAINING_TYPE_CYCLE}
+    for p in store.get_all_participants():
+        if p.get("role") != "I":
+            continue
+        tt = p.get("training_type")
+        if tt in counts:
+            counts[tt] += 1
+    return counts
+
+
+def pick_sequential_suspect_attrs():
+    """Fixed round-robin across 4 suspect scenarios (registration order)."""
+    n = sum(1 for p in store.get_all_participants() if p.get("role") == "S")
+    case_type, guilt = SUSPECT_ATTR_CYCLE[n % len(SUSPECT_ATTR_CYCLE)]
+    return guilt, case_type
+
+
+def _pick_non_specific_training_rotating(counts):
+    """Round-robin among A/B/C groups; each capped at TRAINING_TARGET_PER_TYPE."""
+    idx = int(store.get_meta(META_INTERVIEWER_NON_SPECIFIC_SEQ, 0) or 0)
+    for step in range(len(NON_SPECIFIC_TRAINING_TYPES)):
+        tt = NON_SPECIFIC_TRAINING_TYPES[(idx + step) % len(NON_SPECIFIC_TRAINING_TYPES)]
+        if counts.get(tt, 0) < TRAINING_TARGET_PER_TYPE:
+            store.set_meta(META_INTERVIEWER_NON_SPECIFIC_SEQ, idx + step + 1)
+            return tt
+    min_c = min(counts.get(t, 0) for t in NON_SPECIFIC_TRAINING_TYPES)
+    for tt in NON_SPECIFIC_TRAINING_TYPES:
+        if counts.get(tt, 0) == min_c:
+            return tt
+    return NON_SPECIFIC_TRAINING_TYPES[0]
+
+
+def pick_training_type_on_booking(time_slot):
+    """
+    Assign interviewer training at booking time only.
+    - Slot already has a suspect → avatar_specific (D), unless D is full (28).
+    - No suspect on slot, or D full → rotate among control / theory_sue / avatar_general (max 28 each).
+    """
+    counts = _count_interviewer_training_types()
+    if _suspect_combo_on_slot(time_slot):
+        if counts.get("avatar_specific", 0) < TRAINING_TARGET_PER_TYPE:
+            return "avatar_specific"
+        return _pick_non_specific_training_rotating(counts)
+    return _pick_non_specific_training_rotating(counts)
+
+
+def _interviewer_training_locked(p):
+    """After attention checks, training group must not change."""
+    return (
+        int(p.get("sue_attention_passed") or 0) == 1
+        or int(p.get("control_attention_passed") or 0) == 1
+    )
+
+
+def assign_interviewer_training_type(phone, time_slot=None):
+    """
+    Set or update training_type for an interviewer (before attention checks pass).
+    Uses suspect on slot when known so 4×4 pairings stay decoupled.
+    """
+    p = store.get_participant(phone)
+    if not p or p.get("role") != "I":
+        return None
+    if _interviewer_training_locked(p):
+        return p.get("training_type")
+    training_type = pick_training_type_on_booking(time_slot)
+    store.update_participant(phone, training_type=training_type)
+    if p.get("group_name"):
+        suffix = participant_id_suffix({**p, "training_type": training_type})
+        full_id = make_full_id(p["group_name"], "I", suffix)
+        store.update_participant(phone, full_id=full_id)
+    return training_type
 
 
 def participant_id_suffix(participant):
@@ -2466,9 +2686,15 @@ def compute_participant_resume(p, booking=None):
     if int(p.get("completed") or 0) == 1:
         return "all_done", "实验已完成，可查看编号"
 
-    training_type = p.get("training_type", "")
     if booking is None:
         booking = store.get_my_booking(phone)
+
+    if not booking:
+        return "booking", "预约正式访谈时间"
+
+    training_type = p.get("training_type", "")
+    if not training_type:
+        return "booking", "请先预约时间段以确定培训条件"
 
     training_done = False
     if training_type == "control":
@@ -2478,9 +2704,6 @@ def compute_participant_resume(p, booking=None):
 
     if not training_done:
         return "interviewer_training", "继续培训材料与注意力检测"
-
-    if not booking:
-        return "booking", "预约正式访谈时间"
 
     time_slot = booking.get("time_slot", "")
     if not _booking_is_matched(time_slot):
@@ -2509,45 +2732,6 @@ def compute_participant_resume(p, booking=None):
     return "dashboard", "继续实验"
 
 
-def _count_training_assignments():
-    counts = {t: 0 for t in TRAINING_TYPES}
-    for p in store.get_all_participants():
-        if p.get("role") == "I" and p.get("training_type") in counts:
-            counts[p["training_type"]] += 1
-    return counts
-
-
-def pick_balanced_training_type(has_waiting_suspect):
-    """Assign training type with 28 per condition; avatar_specific only when a suspect is waiting."""
-    counts = _count_training_assignments()
-    available = [t for t in TRAINING_TYPES if counts[t] < TRAINING_TARGET_PER_TYPE]
-    if not available:
-        available = list(TRAINING_TYPES)
-    if not has_waiting_suspect:
-        available = [t for t in available if t != "avatar_specific"]
-    if not available:
-        available = [t for t in TRAINING_TYPES if t != "avatar_specific"]
-    min_count = min(counts[t] for t in available)
-    candidates = [t for t in available if counts[t] == min_count]
-    return random.choice(candidates)
-
-
-def pick_balanced_suspect_attrs():
-    """Balance guilty/innocent and arson/theft across suspects."""
-    guilt_counts = {"Guilty": 0, "Innocent": 0}
-    case_counts = {"arson": 0, "theft": 0}
-    for p in store.get_all_participants():
-        if p.get("role") != "S":
-            continue
-        g = p.get("guilt")
-        if g in guilt_counts:
-            guilt_counts[g] += 1
-        c = p.get("case_type")
-        if c in case_counts:
-            case_counts[c] += 1
-    guilt = min(guilt_counts, key=guilt_counts.get)
-    case_type = min(case_counts, key=case_counts.get)
-    return guilt, case_type
 
 
 # Semantic interpretations for profile fields (used in avatar/suspect prompts — not raw option labels)
@@ -2980,21 +3164,14 @@ def register():
             }), 403
         return jsonify({"error": "该手机号已注册", "participant": dict(existing)}), 409
 
-    waiting = store.get_waiting_group()
-    role = "I" if waiting else "S"
+    role = pick_register_role()
 
     if role == "S":
-        try:
-            group_name = next_group_name()
-        except ValueError:
-            return jsonify({"error": f"实验组别已达上限（{MAX_GROUPS} 组）"}), 503
-        guilt, case_type = pick_balanced_suspect_attrs()
-
+        guilt, case_type = pick_sequential_suspect_attrs()
         pid = store.add_participant(
-            phone=phone, role=role, group_name=group_name,
+            phone=phone, role="S", group_name="",
             guilt=guilt, case_type=case_type,
         )
-        store.add_group(group_name, suspect_id=pid)
 
         if case_type == "arson":
             context_text = ARSON_GUILTY_CONTEXT if guilt == "Guilty" else ARSON_INNOCENT_CONTEXT
@@ -3016,65 +3193,19 @@ def register():
             "consent_attention_required": True,
         })
 
-    else:
-        if waiting:
-            group_name = waiting["name"]
-            training_type = pick_balanced_training_type(has_waiting_suspect=True)
+    store.add_participant(
+        phone=phone, role="I", group_name="",
+        training_type="",
+    )
 
-            pid = store.add_participant(
-                phone=phone, role="I", group_name=group_name,
-                training_type=training_type,
-            )
-            store.update_group(group_name, interviewer_id=pid)
-
-            participant = store.get_participant(phone)
-
-            # Lookup suspect for response
-            suspect = store.get_participant_by_id(waiting["suspect_id"])
-
-            return jsonify({
-                "role": "I",
-                "full_id": "",
-                "group_name": "",
-                "training_type": participant["training_type"],
-                "paired": True,
-                "suspect_case": suspect["case_type"] if suspect else None,
-                "suspect_guilt": suspect["guilt"] if suspect else None,
-                "consent_attention_required": True,
-            })
-        else:
-            # No waiting suspect — register as new suspect (should not happen with role logic above)
-            try:
-                group_name = next_group_name()
-            except ValueError:
-                return jsonify({"error": f"实验组别已达上限（{MAX_GROUPS} 组）"}), 503
-            guilt, case_type = pick_balanced_suspect_attrs()
-
-            pid = store.add_participant(
-                phone=phone, role="S", group_name=group_name,
-                guilt=guilt, case_type=case_type,
-            )
-            store.add_group(group_name, suspect_id=pid)
-
-            if case_type == "arson":
-                context_text = ARSON_GUILTY_CONTEXT if guilt == "Guilty" else ARSON_INNOCENT_CONTEXT
-            else:
-                context_text = THEFT_GUILTY_CONTEXT if guilt == "Guilty" else THEFT_INNOCENT_CONTEXT
-
-            check_key = f"{case_type}_{guilt.lower()}"
-            attention_questions = ATTENTION_CHECKS[check_key]
-
-            return jsonify({
-                "role": "S",
-                "full_id": "",
-                "display_id": "",
-                "group_name": "",
-                "case_type": case_type,
-                "case_label": "纵火案 Arson" if case_type == "arson" else "盗窃案 Theft",
-                "context": context_text,
-                "attention_questions": attention_questions,
-                "consent_attention_required": True,
-            })
+    return jsonify({
+        "role": "I",
+        "full_id": "",
+        "group_name": "",
+        "training_type": "",
+        "paired": False,
+        "consent_attention_required": True,
+    })
 
 
 @app.route("/api/consent-attention/<role>")
@@ -3189,20 +3320,21 @@ def submit_profile():
     profile_json = json.dumps(profile, ensure_ascii=False)
     store.upsert_profile(p["id"], profile_json)
 
-    # Assign full_id now (at completion, not registration)
-    full_id = p.get("full_id", "") or ""
-    if not full_id:
-        suffix = participant_id_suffix(p)
-        full_id = make_full_id(p["group_name"], p["role"], suffix)
-        store.update_participant(phone, full_id=full_id)
-
     store.update_participant(phone, profile_completed=1, completed=1)
+    p = store.get_participant(phone)
+    full_id = p.get("full_id", "") or ""
+    group_name = p.get("group_name", "") or ""
+
+    if full_id and group_name:
+        message = f"编号 {full_id} (第 {group_name} 组) 个人信息已保存。请继续预约正式访谈时间。"
+    else:
+        message = "个人信息已保存。请继续预约正式访谈时间；实验编号将在预约成功后分配。"
 
     return jsonify({
         "success": True,
         "full_id": full_id,
-        "group_name": p["group_name"],
-        "message": f"编号 {full_id} (第 {p['group_name']} 组) 已完成。请截图此页面并发送给研究人员。",
+        "group_name": group_name,
+        "message": message,
     })
 
 
@@ -3869,7 +4001,7 @@ def api_book_appointment():
 
     # Each person can only book one slot
     if store.has_booking(phone):
-        return jsonify({"error": "您已有一个预约，每人只能预约一个时间段。请先取消现有预约。"}), 409
+        return jsonify({"error": "您已有一个预约，每人只能预约一个时间段，且预约成功后无法更改时间。"}), 409
 
     # Check if this slot already has this role booked
     slot_bookings = store.get_slot_bookings()
@@ -3883,27 +4015,48 @@ def api_book_appointment():
     if time_slot in fully_booked:
         return jsonify({"error": "该时间段已被预约满"}), 409
 
+    training_type = None
+    if role == "I":
+        training_type = assign_interviewer_training_type(phone, time_slot)
+    elif role == "S":
+        for appt in store.get_appointments():
+            if (
+                appt.get("status") == "confirmed"
+                and appt.get("role") == "I"
+                and (appt.get("time_slot") or "").strip() == time_slot
+            ):
+                assign_interviewer_training_type(appt.get("phone", ""), time_slot)
+
+    try:
+        group_name, full_id = assign_participant_group_on_booking(phone, time_slot)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 503
+
     aid = store.add_appointment(phone, role, time_slot)
 
     # Calculate is_matched
     slot_bookings = store.get_slot_bookings()
     booked_roles = slot_bookings.get(time_slot, set())
     is_matched = (len(booked_roles) == 2)
-    p = store.get_participant(phone)
-    full_id = _participant_display_id(p) if p else None
-    if p:
-        store.update_participant(
-            phone,
-            flow_step="booking_matched" if is_matched else "booking_wait",
-        )
+    store.update_participant(
+        phone,
+        flow_step="booking_matched" if is_matched else "booking_wait",
+    )
+
+    p_after = store.get_participant(phone)
+    if role == "I" and p_after:
+        training_type = p_after.get("training_type")
 
     return jsonify({
-        "success": True, 
-        "appointment_id": aid, 
-        "time_slot": time_slot, 
+        "success": True,
+        "appointment_id": aid,
+        "time_slot": time_slot,
         "role": role,
         "is_matched": is_matched,
-        "participant_id": full_id
+        "group_name": group_name,
+        "participant_id": full_id,
+        "training_type": training_type,
+        "training_group": training_group_label(training_type) if training_type else "",
     })
 
 
@@ -3933,63 +4086,16 @@ def api_my_appointment():
 
 @app.route("/api/appointments/modify", methods=["POST"])
 def api_modify_appointment():
-    data = request.get_json()
-    phone = (data.get("phone") or "").strip()
-    new_time_slot = (data.get("time_slot") or "").strip()
-
-    if not phone or not new_time_slot:
-        return jsonify({"error": "参数不完整"}), 400
-
-    p = store.get_participant(phone)
-    if not p:
-        return jsonify({"error": "未找到参与者"}), 404
-
-    role = p["role"]
-
-    try:
-        slot_dt = datetime.strptime(new_time_slot, "%Y-%m-%d %H:%M")
-        if not _is_valid_booking_slot(slot_dt, role):
-            if role == "I":
-                err = f"预约时间须在当前时间之后至 {BOOKING_MAX_DAYS} 天以内"
-            else:
-                err = f"预约时间须在 {BOOKING_MIN_HOURS} 小时之后至 {BOOKING_MAX_DAYS} 天以内"
-            return jsonify({"error": err}), 400
-    except ValueError:
-        return jsonify({"error": "时间格式无效"}), 400
-
-    all_slots = generate_time_slots(role)
-    if new_time_slot not in all_slots:
-        return jsonify({"error": "该时间段不在可选范围内"}), 400
-
-    # Check if this slot already has this role booked by someone else
-    slot_bookings = store.get_slot_bookings()
-    booked_roles = slot_bookings.get(new_time_slot, set())
-    if role in booked_roles:
-        # Check if it's the same person's booking
-        existing_booking = store.get_my_booking(phone)
-        if not (existing_booking and existing_booking["time_slot"] == new_time_slot):
-            role_label = "嫌疑人" if role == "S" else "审讯者"
-            return jsonify({"error": f"该时间段已有{role_label}预约"}), 409
-
-    # Fully booked check
-    fully_booked = store.get_confirmed_slot_set()
-    if new_time_slot in fully_booked:
-        return jsonify({"error": "该时间段已约满"}), 409
-
-    success = store.update_appointment(phone, time_slot=new_time_slot)
-    if success:
-        return jsonify({"success": True, "time_slot": new_time_slot})
-    return jsonify({"error": "未找到您的预约记录"}), 404
+    return jsonify({
+        "error": "预约成功后无法更改时间。如需协助请联系研究人员。",
+    }), 403
 
 
 @app.route("/api/appointments/cancel", methods=["POST"])
 def api_cancel_appointment():
-    data = request.get_json()
-    phone = (data.get("phone") or "").strip()
-    success = store.cancel_appointment(phone)
-    if success:
-        return jsonify({"success": True})
-    return jsonify({"error": "未找到您的预约记录"}), 404
+    return jsonify({
+        "error": "预约成功后无法取消或更改时间。如需协助请联系研究人员。",
+    }), 403
 
 
 # ====== Avatar APIs ======

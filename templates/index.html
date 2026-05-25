@@ -678,6 +678,38 @@
     justify-content: center;
   }
   .number-reminder-overlay.show { display: flex; }
+  .booking-float-hint {
+    position: fixed;
+    right: 16px;
+    bottom: 20px;
+    max-width: 340px;
+    width: calc(100% - 32px);
+    z-index: 900;
+    background: #fff8e1;
+    border: 2px solid #e65100;
+    border-radius: 12px;
+    padding: 14px 16px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text);
+  }
+  .booking-float-hint strong { color: #e65100; }
+  .booking-float-hint .hint-title {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 6px;
+    color: #e65100;
+  }
+  @media (max-width: 600px) {
+    .booking-float-hint {
+      right: 8px;
+      left: 8px;
+      width: auto;
+      max-width: none;
+      bottom: 12px;
+    }
+  }
   .number-reminder-modal {
     background: white;
     border-radius: 12px;
@@ -1044,7 +1076,7 @@
       <input type="text" id="phoneInput" placeholder="请输入手机号" maxlength="15">
     </div>
     <button class="btn btn-primary" onclick="register()">开始实验</button>
-    <button class="btn btn-outline" onclick="showBookingFromHome()" style="margin-top:10px;width:100%;">预约管理（查看/修改预约时间）</button>
+    <button class="btn btn-outline" onclick="showBookingFromHome()" style="margin-top:10px;width:100%;">预约管理（查看预约状态）</button>
     <p style="text-align:center;font-size:11px;color:var(--text-light);margin-top:8px;">
       您的手机号仅用于实验编号管理，不会泄露给第三方。
     </p>
@@ -1391,7 +1423,7 @@
       💡 <strong style="color:#e65100;">建议优先选择已有对方角色预约的时间段（橙色高亮）</strong>，这样可以快速完成配对，尽早开展正式访谈。
     </p>
     <div style="font-size:12px;color:var(--text-light);margin-bottom:16px;">
-      🟢 可预约 &nbsp;|&nbsp; 🔴 已被预约 &nbsp;|&nbsp; 🟠 橙色边框 = 已有对方预约 &nbsp;|&nbsp; ⭐ 每人仅可预约一个时间段
+      🟢 可预约 &nbsp;|&nbsp; 🔴 已被预约 &nbsp;|&nbsp; 🟠 橙色边框 = 已有对方预约 &nbsp;|&nbsp; ⭐ 每人仅可预约一个时间段 &nbsp;|&nbsp; 🔒 预约成功后<strong>不可更改</strong>时间
     </div>
 
     <!-- Phone input for booking lookup -->
@@ -1442,6 +1474,31 @@
   </div>
 </div>
 
+
+<!-- Suspect: choose time carefully before booking -->
+<div class="number-reminder-overlay" id="suspectBookingReminderModal">
+  <div class="number-reminder-modal" style="text-align:left;max-width:440px;">
+    <div class="warning-icon" style="text-align:center;">📅</div>
+    <h3 style="color:var(--primary);border:none;margin-bottom:8px;text-align:center;">请选择您确定有空的时间</h3>
+    <p style="font-size:13px;color:var(--text);margin-bottom:12px;line-height:1.8;">
+      正式访谈需要与<strong>另一位参与者（审讯者）</strong>预约<strong>同一时段</strong>才能配对。临时调换时间会给对方和研究人员带来很大麻烦。
+    </p>
+    <p style="font-size:13px;color:var(--text);margin-bottom:12px;line-height:1.8;">
+      请您只选择<strong>自己已确认有空</strong>的时间段，并建议在所选时段<strong>前后各预留约 30 分钟</strong>（用于登录、准备与可能的延时）。
+    </p>
+    <p style="font-size:13px;color:#856404;margin-bottom:20px;line-height:1.8;background:#fff8e1;padding:10px;border-radius:8px;">
+      ⚠️ <strong>预约成功后无法取消或更改时间。</strong>请慎重选择后再确认预约。
+    </p>
+    <button class="btn-primary" onclick="closeSuspectBookingReminderModal()" style="padding:12px 40px;font-size:15px;width:100%;">
+      我已了解，开始选择时间
+    </button>
+  </div>
+</div>
+
+<div id="suspectBookingFloatHint" class="booking-float-hint hidden" role="note">
+  <div class="hint-title">📌 预约前请确认</div>
+  请选择您<strong>确定有空</strong>的时段，建议前后各预留 <strong>30 分钟</strong>。需与审讯者配对同一时段，<strong>预约后不可改期</strong>。
+</div>
 
 <!-- D group: suspect not booked yet -->
 <div class="number-reminder-overlay" id="dGroupBookingWaitModal">
@@ -2357,28 +2414,38 @@ function showDashboard(data) {
     ];
   } else {
     const tt = data.training_type;
-    if (tt === 'theory_sue') {
+    if (!tt) {
       steps = [
+        { label: '预约正式访谈时间', desc: '先选择时间段；若该时段已有嫌疑人则分配 Specific Avatar（D 组）培训' },
+        { label: '完成培训与注意力检测', desc: '预约后按系统分配的阅读材料完成培训' },
+        { label: '等待与嫌疑人配对', desc: '嫌疑人预约同一时段后自动配对' },
+        { label: '阅读案件信息与证据', desc: '配对成功后查看对应案件背景与证据' },
+      ];
+    } else if (tt === 'theory_sue') {
+      steps = [
+        { label: '预约正式访谈时间', desc: '选择您和嫌疑人的可用时间段' },
         { label: '阅读培训材料（文字）', desc: '阅读 SUE 相关文字材料' },
         { label: '通过 EFM 注意力检测', desc: '完成证据框架矩阵分类练习' },
-        { label: '预约正式访谈时间', desc: '选择您和嫌疑人的可用时间段' },
+        { label: '等待与嫌疑人配对', desc: '嫌疑人预约同一时段后自动配对' },
         { label: '阅读案件信息与证据', desc: '配对成功后查看对应案件背景与证据' },
       ];
     } else if (tt === 'avatar_specific' || tt === 'avatar_general') {
       const g = trainingGroupLabel(tt);
       steps = [
+        { label: '预约正式访谈时间', desc: '选择您和嫌疑人的可用时间段' },
         { label: `阅读 ${g} 组培训说明`, desc: '阅读文字培训说明材料' },
         { label: '阅读 SUE 理论培训材料', desc: '阅读 SUE 相关文字材料' },
         { label: '通过 EFM 注意力检测', desc: '完成证据框架矩阵分类练习' },
-        { label: '预约正式访谈时间', desc: '选择您和嫌疑人的可用时间段' },
+        { label: '等待与嫌疑人配对', desc: '嫌疑人预约同一时段后自动配对' },
         { label: '阅读案件信息与证据', desc: '配对成功后查看对应案件背景与证据' },
         { label: '完成 6 次虚拟审讯训练', desc: '按顺序完成 6 次虚拟嫌疑人审讯（每次 3–10 分钟），提交判断并获取反馈' },
       ];
     } else {
       steps = [
+        { label: '预约正式访谈时间', desc: '选择您和嫌疑人的可用时间段' },
         { label: `阅读 ${trainingGroupLabel('control')} 组培训材料`, desc: '阅读文字培训材料' },
         { label: '通过注意力检测', desc: '完成注意力检测题' },
-        { label: '预约正式访谈时间', desc: '选择您和嫌疑人的可用时间段' },
+        { label: '等待与嫌疑人配对', desc: '嫌疑人预约同一时段后自动配对' },
         { label: '阅读案件信息与证据', desc: '配对成功后查看对应案件背景与证据' },
       ];
     }
@@ -2456,6 +2523,26 @@ function showBookingWaitModal() {
 function closeDGroupBookingWaitModal() {
   const m = $('dGroupBookingWaitModal');
   if (m) m.classList.remove('show');
+}
+
+function showSuspectBookingReminderModal() {
+  const m = $('suspectBookingReminderModal');
+  if (m) m.classList.add('show');
+}
+
+function closeSuspectBookingReminderModal() {
+  const m = $('suspectBookingReminderModal');
+  if (m) m.classList.remove('show');
+}
+
+function updateSuspectBookingFloatHint(role, hasBooking) {
+  const el = $('suspectBookingFloatHint');
+  if (!el) return;
+  if (role === 'S' && !hasBooking) {
+    el.classList.remove('hidden');
+  } else {
+    el.classList.add('hidden');
+  }
 }
 
 function showDGroupBookingWaitModal() {
@@ -3431,6 +3518,15 @@ async function submitProfile() {
 
 // ====== INTERVIEWER FLOW ======
 async function showInterviewerFlow(data) {
+  if (!data.training_type) {
+    bookingState.phone = APP.phone;
+    bookingState.role = 'I';
+    bookingState.fullId = data.full_id || '';
+    showBookingFromCaseInfo();
+    await loadBookingSlotsForInterviewer();
+    return;
+  }
+
   $('interviewerGroup').textContent = data.group_name ? '第 ' + data.group_name + ' 组' : '待分配';
 
   // Show number reminder for interviewer on this screen
@@ -3694,6 +3790,16 @@ async function submitSueAttention() {
 
 function needsSixAvatarSessions(trainingType) {
   return trainingType === 'avatar_specific' || trainingType === 'avatar_general';
+}
+
+function interviewerTrainingDone(p) {
+  if (!p) return false;
+  const tt = p.training_type || '';
+  if (tt === 'control') return parseInt(p.control_attention_passed, 10) === 1;
+  if (tt === 'theory_sue' || tt === 'avatar_specific' || tt === 'avatar_general') {
+    return parseInt(p.sue_attention_passed, 10) === 1;
+  }
+  return false;
 }
 
 function getInterviewerTrainingType() {
@@ -5061,7 +5167,15 @@ function renderBookingSlotsForInterviewer() {
     // Show action area
     if (actionArea) {
       const tt = APP.participant ? APP.participant.training_type : '';
-      if (!bookingState.myBooking.is_matched) {
+      const p = APP.participant || {};
+      const trainingDone = interviewerTrainingDone(p);
+      if (!trainingDone && tt) {
+        const groupLbl = trainingGroupLabel(tt);
+        actionArea.innerHTML = `
+          <button class="btn btn-primary" onclick="resumeInterviewerTraining(APP.participant)" style="width:100%;margin-top:12px;">继续 ${groupLbl} 组培训 →</button>
+          <button class="btn btn-outline" onclick="loadBookingSlotsForInterviewer()" style="width:100%;margin-top:8px;">刷新状态</button>
+        `;
+      } else if (!bookingState.myBooking.is_matched) {
         actionArea.innerHTML = `
           <button class="btn btn-outline" onclick="loadBookingSlotsForInterviewer()" style="width:100%;margin-top:12px;">刷新配对状态</button>
           <p style="font-size:12px;color:#856404;margin-top:8px;text-align:center;">嫌疑人预约同一时段并配对成功后，方可查看案件材料并继续</p>
@@ -5147,7 +5261,7 @@ async function bookSlotForInterviewer(slot) {
   const { phone } = bookingState;
   if (!phone) { alert('请先输入手机号'); return; }
 
-  if (!confirm(`确认预约 ${slot}？预约后将无法更改时间。`)) return;
+  if (!confirm(`确认预约 ${slot}？\n\n预约后将无法取消或更改时间。\n\n您确定要预约吗？`)) return;
 
   showLoading('正在预约...');
   try {
@@ -5158,6 +5272,23 @@ async function bookSlotForInterviewer(slot) {
       is_matched: result.is_matched, 
       participant_id: result.participant_id 
     };
+    if (result.training_type) {
+      APP.participant = APP.participant || {};
+      APP.participant.training_type = result.training_type;
+      APP.participant.group_name = result.group_name || APP.participant.group_name;
+      APP.participant.full_id = result.participant_id || APP.participant.full_id;
+    }
+    const lookup = await api('/api/lookup', { phone });
+    if (lookup.found && lookup.participant) {
+      APP.participant = { ...lookup.participant };
+    }
+    if (APP.participant && APP.participant.training_type && !interviewerTrainingDone(APP.participant)) {
+      const lbl = trainingGroupLabel(APP.participant.training_type);
+      if (confirm(`预约成功！您被分配为 ${lbl} 组。是否现在开始培训？`)) {
+        await resumeInterviewerTraining(APP.participant);
+        return;
+      }
+    }
     renderBookingSlotsForInterviewer();
   } catch (err) {
     hideLoading();
@@ -6236,7 +6367,9 @@ function renderBookingUI() {
           : (myBooking.is_matched
             ? '<button class="btn btn-outline" onclick="downloadInterviewerCasePdf()" style="margin-top:10px;width:100%;">📥 下载案件材料 (PDF)</button>'
             : '<p style="font-size:12px;color:#856404;margin-top:10px;line-height:1.6;">📂 案件 PDF 需在<strong>嫌疑人预约同一时段</strong>后下载。请过段时间重新登录查看。</p>')}
-        <button class="btn btn-outline" onclick="cancelMyBooking()" style="margin-top:12px;color:var(--accent);border-color:var(--accent);">取消预约</button>
+        <p style="font-size:12px;color:var(--text-light);margin-top:12px;line-height:1.6;padding:8px;background:#f7f9fc;border-radius:6px;">
+          🔒 预约成功后无法取消或更改时间。如需协助请联系研究人员。
+        </p>
       </div>`;
   }
 
@@ -6318,7 +6451,9 @@ function renderBookingUI() {
         if (fullyBooked && !isMySlot) {
           actionBtn = `<button class="book-btn" disabled>已满</button>`;
         } else if (isMySlot) {
-          actionBtn = `<button class="book-btn cancel-btn" onclick="cancelMyBooking()">取消</button>`;
+          actionBtn = `<button class="book-btn" disabled>已预约</button>`;
+        } else if (myBooking) {
+          actionBtn = `<button class="book-btn" disabled>—</button>`;
         } else {
           const sameRoleBooked = role === 'S' ? suspectBooked : interviewerBooked;
           if (sameRoleBooked) {
@@ -6359,8 +6494,19 @@ function renderBookingUI() {
 
   $('myBookingInfo').innerHTML = trainingHtml + myInfoHtml + myBookingHtml;
   $('myBookingInfo').classList.remove('hidden');
-  $('bookingSlotList').innerHTML = slotsHtml;
+  if (myBooking) {
+    $('bookingSlotList').innerHTML = `
+      <p style="text-align:center;color:var(--text-light);padding:24px 16px;line-height:1.7;font-size:13px;">
+        您已完成预约，无法选择其他时间段或更改时间。<br>如需协助请联系研究人员。
+      </p>`;
+  } else {
+    $('bookingSlotList').innerHTML = slotsHtml;
+  }
   $('bookingSlotList').classList.remove('hidden');
+  updateSuspectBookingFloatHint(role, !!myBooking);
+  if (role === 'S' && !myBooking) {
+    showSuspectBookingReminderModal();
+  }
 
   const actionArea = document.getElementById('bookingActionArea');
   if (actionArea && role === 'I' && myBooking && needsSixAvatarSessions(trainingInfo && trainingInfo.training_type)) {
@@ -6394,7 +6540,10 @@ async function bookSlot(slot) {
   const { phone } = bookingState;
   if (!phone) { alert('请先输入手机号'); return; }
 
-  if (!confirm(`确认预约 ${slot}？\n\n预约后将无法更改时间。您确定要预约吗？`)) return;
+  const extraSuspectHint = bookingState.role === 'S'
+    ? '\n\n请确认该时段您确实有空，并建议前后各预留约 30 分钟。'
+    : '';
+  if (!confirm(`确认预约 ${slot}？\n\n预约后将无法取消或更改时间。${extraSuspectHint}\n\n您确定要预约吗？`)) return;
 
   showLoading('正在预约...');
   try {
@@ -6507,19 +6656,8 @@ function confirmBookingScreenshot() {
   loadBookingSlots();
 }
 
-async function cancelMyBooking() {
-  if (!confirm('确定要取消您的预约吗？取消后需要重新选择时间段。')) return;
-
-  showLoading('正在取消...');
-  try {
-    await api('/api/appointments/cancel', { phone: bookingState.phone });
-    hideLoading();
-    bookingState.myBooking = null;
-    loadBookingSlots();
-  } catch (err) {
-    hideLoading();
-    alert('取消失败: ' + err.message);
-  }
+function cancelMyBooking() {
+  alert('预约成功后无法取消或更改时间。如需协助请联系研究人员。');
 }
 </script>
 </body>
