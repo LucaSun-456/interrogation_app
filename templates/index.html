@@ -446,13 +446,6 @@
     letter-spacing: 0.5px;
   }
   .footer-phone.hidden { display: none; }
-  .sg-recap-segment-list {
-    font-size: 12px;
-    color: var(--text-light);
-    margin-bottom: 10px;
-    line-height: 1.6;
-  }
-
   /* Guided document reader (consent / training materials) */
   .guided-progress {
     font-size: 12px;
@@ -762,39 +755,34 @@
     margin-bottom: 16px;
     line-height: 1.6;
   }
-  .sg-recap-transcript-box {
-    width: 100%;
-    min-height: 140px;
-    max-height: 220px;
-    margin-bottom: 12px;
-    padding: 12px 14px;
-    font-size: 14px;
-    line-height: 1.65;
-    color: var(--text);
-    background: #f7f9fc;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    resize: none;
-    overflow-y: auto;
-    cursor: default;
-  }
-  .sg-recap-transcript-box:read-only {
-    background: #f7f9fc;
-  }
-  .sg-recap-transcript-box::placeholder {
-    color: #9ca3af;
-  }
-  .sg-recap-transcript-label {
-    display: block;
-    font-size: 12px;
-    color: var(--text-light);
-    margin-bottom: 6px;
-  }
   .sg-recap-transcript-meta {
     font-size: 11px;
     color: var(--text-light);
-    margin-top: -6px;
+    margin-top: 8px;
     margin-bottom: 10px;
+    text-align: center;
+  }
+  .sg-recap-waveform-wrap {
+    width: 100%;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    background: #1a2332;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .sg-recap-waveform {
+    display: block;
+    width: 100%;
+    height: 100px;
+    border-radius: 4px;
+  }
+  .sg-recap-waveform-idle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100px;
+    color: #6b7280;
+    font-size: 12px;
   }
   .ai-review-progress {
     width: 72px;
@@ -1331,22 +1319,17 @@
     <p style="font-size:13px;line-height:1.8;margin-bottom:12px;">
       请用<strong>30秒至1分钟</strong>的时间，口头陈述您在模拟行动中的<strong>动机</strong>以及<strong>当晚的经历</strong>。请尽量具体、连贯地描述。
     </p>
-    <p class="sg-recap-hint">请分多次录制，<strong>每次录一句话</strong>后点击「完成本句」。系统会实时转写并拼接；最多 20 句，合计识别文字至少 100 字方可提交（建议使用 Chrome 或 Edge）。</p>
-    <div class="sg-recap-segment-list" id="sgRecapSegmentInfo">已录制 0/20 句</div>
+    <p class="sg-recap-hint">点击下方按钮开始录音，录音满 30 秒后可提交；最长 1 分钟将自动停止。系统将使用语音转文字校验复述内容，识别文字不足 100 字将要求重新复述。</p>
+    <div class="sg-recap-timer" id="sgRecapTimer">00:00</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
-      <button class="btn btn-primary" id="sgRecapRecordBtn" onclick="toggleSgRecapSegmentRecording()" style="flex:1;">🎙️ 录制本句</button>
-      <span id="sgRecapRecordStatus" style="font-size:12px;color:var(--text-light);">点击开始录制一句话</span>
+      <button class="btn btn-primary" id="sgRecapRecordBtn" onclick="toggleSgRecapRecording()" style="flex:1;">🎙️ 开始录音</button>
+      <span id="sgRecapRecordStatus" style="font-size:12px;color:var(--text-light);">待录音</span>
     </div>
-    <label class="sg-recap-transcript-label" for="sgRecapTranscriptBox">实时转录（仅供查看，不可编辑）</label>
-    <textarea
-      id="sgRecapTranscriptBox"
-      class="sg-recap-transcript-box"
-      readonly
-      tabindex="-1"
-      aria-readonly="true"
-      placeholder="开始录音后，此处将实时显示语音转文字内容…"
-    ></textarea>
-    <div class="sg-recap-transcript-meta" id="sgRecapTranscriptMeta">识别字数：0（提交需至少 100 字）</div>
+    <div class="sg-recap-waveform-wrap" id="sgRecapWaveformWrap">
+      <canvas id="sgRecapWaveform" class="sg-recap-waveform hidden"></canvas>
+      <div id="sgRecapWaveformIdle" class="sg-recap-waveform-idle">开始录音后将显示实时波形</div>
+    </div>
+    <div class="sg-recap-transcript-meta" id="sgRecapTranscriptMeta">识别字数：—（提交需至少 100 字）</div>
     <button class="btn btn-primary hidden" id="sgRecapSubmitBtn" onclick="submitSgRecap()" style="width:100%;margin-bottom:8px;">提交复述</button>
     <button class="btn btn-prev" onclick="showGameLink()" style="width:100%;">← 返回</button>
   </div>
@@ -3067,79 +3050,132 @@ function confirmSgWatchReminder() {
   showSgAiDisclaimer();
 }
 
-let sgRecapSegments = [];
-let sgRecapSegmentRecording = false;
-let sgRecapSegmentRec = null;
-let sgRecapSegmentInterim = '';
-let sgRecapSegmentStream = null;
-let sgRecapTranscript = '';
-const SG_RECAP_MAX_SEGMENTS = 20;
+let sgRecapRecording = false;
+let sgRecapMediaRecorder = null;
+let sgRecapStream = null;
+let sgRecapChunks = [];
+let sgRecapStartedAt = null;
+let sgRecapTimerInterval = null;
+let sgRecapTotalMs = 0;
+let sgRecapAudioCtx = null;
+let sgRecapAnalyser = null;
+let sgRecapWaveformRaf = null;
+const SG_RECAP_MIN_SEC = 30;
+const SG_RECAP_MAX_SEC = 60;
 const SG_RECAP_MIN_CHARS = 100;
 
-function countSgRecapChars(text) {
-  return (text || '').replace(/\s/g, '').length;
+function formatSgRecapTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
 }
 
-function rebuildSgRecapTranscript() {
-  sgRecapTranscript = sgRecapSegments.map((s) => s.text).join('');
-  updateSgRecapTranscriptDisplay(sgRecapTranscript);
-}
-
-function stopSgRecapSegmentRecognition() {
-  if (sgRecapSegmentRec) {
-    try { sgRecapSegmentRec.stop(); } catch (_) {}
-    sgRecapSegmentRec.onresult = null;
-    sgRecapSegmentRec.onend = null;
-    sgRecapSegmentRec.onerror = null;
-    sgRecapSegmentRec = null;
+function getSgRecapElapsedSec() {
+  let ms = sgRecapTotalMs;
+  if (sgRecapRecording && sgRecapStartedAt) {
+    ms += Date.now() - sgRecapStartedAt;
   }
+  return ms / 1000;
 }
 
-function updateSgRecapSegmentInfo() {
-  const el = $('sgRecapSegmentInfo');
-  if (el) {
-    el.textContent = '已录制 ' + sgRecapSegments.length + '/' + SG_RECAP_MAX_SEGMENTS + ' 句';
-  }
+function updateSgRecapTimerDisplay() {
+  const timer = $('sgRecapTimer');
+  if (timer) timer.textContent = formatSgRecapTime(getSgRecapElapsedSec());
 }
 
-function updateSgRecapTranscriptDisplay(text) {
-  const box = $('sgRecapTranscriptBox');
-  if (box) {
-    box.value = text || '';
-    box.scrollTop = box.scrollHeight;
-  }
+function updateSgRecapMeta() {
+  const elapsedSec = getSgRecapElapsedSec();
   const meta = $('sgRecapTranscriptMeta');
-  const n = countSgRecapChars(text);
   if (meta) {
-    meta.textContent = '识别字数：' + n + '（提交需至少 ' + SG_RECAP_MIN_CHARS + ' 字）';
-    meta.style.color = n >= SG_RECAP_MIN_CHARS ? 'var(--success)' : 'var(--text-light)';
+    meta.textContent = '识别字数：—（提交需至少 ' + SG_RECAP_MIN_CHARS + ' 字）';
+    meta.style.color = 'var(--text-light)';
   }
   const submitBtn = $('sgRecapSubmitBtn');
   if (submitBtn) {
-    if (n >= SG_RECAP_MIN_CHARS && sgRecapSegments.length > 0 && !sgRecapSegmentRecording) {
+    if (!sgRecapRecording && elapsedSec >= SG_RECAP_MIN_SEC) {
       submitBtn.classList.remove('hidden');
-    } else if (sgRecapSegmentRecording) {
+    } else {
       submitBtn.classList.add('hidden');
     }
   }
 }
 
-function resetSgRecapUI() {
-  stopSgRecapSegmentRecognition();
-  sgRecapSegmentRecording = false;
-  sgRecapSegmentInterim = '';
-  sgRecapSegments = [];
-  sgRecapTranscript = '';
-  if (sgRecapSegmentStream) {
-    sgRecapSegmentStream.getTracks().forEach((t) => t.stop());
-    sgRecapSegmentStream = null;
+function startSgRecapWaveform(stream) {
+  const canvas = $('sgRecapWaveform');
+  const idle = $('sgRecapWaveformIdle');
+  if (!canvas) return;
+  if (idle) idle.classList.add('hidden');
+  canvas.classList.remove('hidden');
+  const AC = window.AudioContext || window.webkitAudioContext;
+  sgRecapAudioCtx = new AC();
+  const source = sgRecapAudioCtx.createMediaStreamSource(stream);
+  sgRecapAnalyser = sgRecapAudioCtx.createAnalyser();
+  sgRecapAnalyser.fftSize = 256;
+  source.connect(sgRecapAnalyser);
+  drawSgRecapWaveform();
+}
+
+function drawSgRecapWaveform() {
+  const canvas = $('sgRecapWaveform');
+  if (!canvas || !sgRecapAnalyser) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  if (canvas.width !== w) canvas.width = w;
+  if (canvas.height !== h) canvas.height = h;
+  const bufferLength = sgRecapAnalyser.frequencyBinCount;
+  const dataArray = new Uint8Array(bufferLength);
+  sgRecapAnalyser.getByteTimeDomainData(dataArray);
+  ctx.fillStyle = '#1a2332';
+  ctx.fillRect(0, 0, w, h);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#4fc3f7';
+  ctx.beginPath();
+  const sliceWidth = w / bufferLength;
+  let x = 0;
+  for (let i = 0; i < bufferLength; i++) {
+    const v = dataArray[i] / 128.0;
+    const y = (v * h) / 2;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+    x += sliceWidth;
   }
-  $('sgRecapRecordBtn').textContent = '🎙️ 录制本句';
+  ctx.lineTo(w, h / 2);
+  ctx.stroke();
+  sgRecapWaveformRaf = requestAnimationFrame(drawSgRecapWaveform);
+}
+
+function stopSgRecapWaveform() {
+  if (sgRecapWaveformRaf) {
+    cancelAnimationFrame(sgRecapWaveformRaf);
+    sgRecapWaveformRaf = null;
+  }
+  if (sgRecapAudioCtx) {
+    sgRecapAudioCtx.close().catch(() => {});
+    sgRecapAudioCtx = null;
+  }
+  sgRecapAnalyser = null;
+  const canvas = $('sgRecapWaveform');
+  const idle = $('sgRecapWaveformIdle');
+  if (canvas) canvas.classList.add('hidden');
+  if (idle) idle.classList.remove('hidden');
+}
+
+function resetSgRecapUI() {
+  if (sgRecapRecording) stopSgRecapRecording(true);
+  stopSgRecapWaveform();
+  sgRecapChunks = [];
+  sgRecapTotalMs = 0;
+  if (sgRecapTimerInterval) {
+    clearInterval(sgRecapTimerInterval);
+    sgRecapTimerInterval = null;
+  }
+  $('sgRecapRecordBtn').textContent = '🎙️ 开始录音';
   $('sgRecapRecordBtn').disabled = false;
-  $('sgRecapRecordStatus').textContent = '点击开始录制一句话';
+  $('sgRecapRecordStatus').textContent = '待录音';
   $('sgRecapSubmitBtn').classList.add('hidden');
-  updateSgRecapSegmentInfo();
-  updateSgRecapTranscriptDisplay('');
+  updateSgRecapTimerDisplay();
+  updateSgRecapMeta();
 }
 
 function showSgRecap() {
@@ -3151,18 +3187,13 @@ function sgProceedToRecap() {
   showSgRecap();
 }
 
-async function toggleSgRecapSegmentRecording() {
-  if (sgRecapSegmentRecording) {
-    finishSgRecapSegment();
+async function toggleSgRecapRecording() {
+  if (sgRecapRecording) {
+    stopSgRecapRecording(false);
     return;
   }
-  if (sgRecapSegments.length >= SG_RECAP_MAX_SEGMENTS) {
-    alert('最多录制 ' + SG_RECAP_MAX_SEGMENTS + ' 句，请提交或删除后重试。');
-    return;
-  }
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    alert('当前浏览器不支持语音转文字，请使用 Chrome 或 Edge 浏览器。');
+  if (getSgRecapElapsedSec() >= SG_RECAP_MAX_SEC) {
+    alert('已达最长录音时间（1 分钟），请提交复述。');
     return;
   }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -3170,98 +3201,81 @@ async function toggleSgRecapSegmentRecording() {
     return;
   }
   try {
-    sgRecapSegmentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    sgRecapStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (err) {
     alert('无法使用麦克风：' + err.message);
     return;
   }
-  sgRecapSegmentInterim = '';
-  const rec = new SR();
-  rec.lang = 'zh-CN';
-  rec.continuous = false;
-  rec.interimResults = true;
-  rec.onresult = (event) => {
-    let interim = '';
-    let finalText = '';
-    for (let i = 0; i < event.results.length; i++) {
-      const t = event.results[i][0].transcript;
-      if (event.results[i].isFinal) finalText += t;
-      else interim += t;
+  sgRecapChunks = [];
+  sgRecapMediaRecorder = new MediaRecorder(sgRecapStream);
+  sgRecapMediaRecorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) sgRecapChunks.push(e.data);
+  };
+  sgRecapMediaRecorder.onstop = () => {
+    if (sgRecapStream) {
+      sgRecapStream.getTracks().forEach((t) => t.stop());
+      sgRecapStream = null;
     }
-    sgRecapSegmentInterim = finalText || interim;
-    const preview = sgRecapSegments.map((s) => s.text).join('') + sgRecapSegmentInterim;
-    updateSgRecapTranscriptDisplay(preview);
+    stopSgRecapWaveform();
   };
-  rec.onerror = () => {
-    $('sgRecapRecordStatus').textContent = '识别出错，请重试本句';
-  };
-  rec.onend = () => {
-    if (sgRecapSegmentRecording) finishSgRecapSegment();
-  };
-  sgRecapSegmentRec = rec;
-  sgRecapSegmentRecording = true;
-  try {
-    rec.start();
-  } catch (err) {
-    sgRecapSegmentRecording = false;
-    stopSgRecapSegmentRecognition();
-    alert('无法开始语音识别：' + err.message);
-    return;
-  }
-  $('sgRecapRecordBtn').textContent = '⏹️ 完成本句';
-  $('sgRecapRecordStatus').textContent = '正在听您说一句话…说完后点击「完成本句」';
+  sgRecapMediaRecorder.start(200);
+  sgRecapRecording = true;
+  sgRecapStartedAt = Date.now();
+  startSgRecapWaveform(sgRecapStream);
+  $('sgRecapRecordBtn').textContent = '⏹️ 停止录音';
+  $('sgRecapRecordStatus').textContent = '录音中…满 30 秒可停止并提交';
   $('sgRecapSubmitBtn').classList.add('hidden');
+  if (sgRecapTimerInterval) clearInterval(sgRecapTimerInterval);
+  sgRecapTimerInterval = setInterval(() => {
+    updateSgRecapTimerDisplay();
+    if (getSgRecapElapsedSec() >= SG_RECAP_MAX_SEC) {
+      stopSgRecapRecording(false);
+    }
+  }, 200);
 }
 
-function finishSgRecapSegment() {
-  if (!sgRecapSegmentRecording) return;
-  sgRecapSegmentRecording = false;
-  stopSgRecapSegmentRecognition();
-  if (sgRecapSegmentStream) {
-    sgRecapSegmentStream.getTracks().forEach((t) => t.stop());
-    sgRecapSegmentStream = null;
+function stopSgRecapRecording(silent) {
+  if (!sgRecapRecording) return;
+  sgRecapRecording = false;
+  if (sgRecapTimerInterval) {
+    clearInterval(sgRecapTimerInterval);
+    sgRecapTimerInterval = null;
   }
-  const text = (sgRecapSegmentInterim || '').trim();
-  sgRecapSegmentInterim = '';
-  if (!text) {
-    alert('未识别到语音内容，请重新录制本句。');
-    $('sgRecapRecordBtn').textContent = '🎙️ 录制本句';
-    $('sgRecapRecordStatus').textContent = '未识别到内容，请再试一次';
-    rebuildSgRecapTranscript();
-    return;
+  if (sgRecapStartedAt) {
+    sgRecapTotalMs += Date.now() - sgRecapStartedAt;
+    sgRecapStartedAt = null;
   }
-  sgRecapSegments.push({ text });
-  rebuildSgRecapTranscript();
-  updateSgRecapSegmentInfo();
-  $('sgRecapRecordBtn').textContent = '🎙️ 录制本句';
-  if (sgRecapSegments.length >= SG_RECAP_MAX_SEGMENTS) {
+  if (sgRecapMediaRecorder && sgRecapMediaRecorder.state !== 'inactive') {
+    try { sgRecapMediaRecorder.stop(); } catch (_) {}
+  }
+  sgRecapMediaRecorder = null;
+  const elapsedSec = getSgRecapElapsedSec();
+  $('sgRecapRecordBtn').textContent = '🎙️ 开始录音';
+  if (elapsedSec >= SG_RECAP_MAX_SEC) {
     $('sgRecapRecordBtn').disabled = true;
-    $('sgRecapRecordStatus').textContent = '已达 20 句上限，请提交复述';
+    $('sgRecapRecordStatus').textContent = '已达 1 分钟上限，请提交';
+  } else if (elapsedSec >= SG_RECAP_MIN_SEC) {
+    $('sgRecapRecordStatus').textContent = '录音已满 30 秒，可提交';
   } else {
-    $('sgRecapRecordStatus').textContent = '本句已保存，可继续录制下一句';
+    $('sgRecapRecordStatus').textContent = '已录 ' + Math.floor(elapsedSec) + ' 秒，需满 30 秒';
+    if (!silent && elapsedSec > 0) {
+      alert('录音未满 30 秒，请继续录音至满 30 秒后再提交。');
+    }
   }
+  updateSgRecapTimerDisplay();
+  updateSgRecapMeta();
 }
 
 async function submitSgRecap() {
-  if (sgRecapSegmentRecording) {
-    alert('请先点击「完成本句」结束当前录制。');
+  if (sgRecapRecording) {
+    alert('请先停止录音再提交。');
     return;
   }
-  if (!sgRecapSegments.length) {
-    alert('请至少录制一句话后再提交。');
-    return;
-  }
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    alert('当前浏览器不支持语音转文字，请使用 Chrome 或 Edge 浏览器完成复述。');
-    return;
-  }
-  rebuildSgRecapTranscript();
-  const charCount = countSgRecapChars(sgRecapTranscript);
-  if (charCount < SG_RECAP_MIN_CHARS) {
+  const elapsedSec = getSgRecapElapsedSec();
+  if (elapsedSec < SG_RECAP_MIN_SEC) {
     alert(
-      '系统判断您的复述不够详细（识别文字约 ' + charCount + ' 字，需至少 ' + SG_RECAP_MIN_CHARS + ' 字）。\n'
-      + '请继续点击「录制本句」补充内容。'
+      '系统判断您的复述不够详细（识别文字不足，需至少 ' + SG_RECAP_MIN_CHARS + ' 字）。\n'
+      + '请继续录音，复述满 30 秒后再提交。'
     );
     return;
   }
