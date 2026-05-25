@@ -137,6 +137,7 @@ def csrf_protect():
                 return jsonify({"error": "CSRF validation failed"}), 403
 
 MATERIALS_DIR = os.path.join(BASE_DIR, "materials")
+MATERIALS_PDF_DIR = os.path.join(MATERIALS_DIR, "pdf")
 MATERIALS_PROMPTS_DIR = os.path.join(MATERIALS_DIR, "prompts")
 COMBINED_MATERIALS_MD = os.path.join(MATERIALS_DIR, "combined_materials.md")
 COMBINED_MATERIALS_EXAMPLE = os.path.join(MATERIALS_DIR, "combined_materials.md.example")
@@ -367,7 +368,7 @@ CASE_INFO = {
             {
                 "id": "E3",
                 "title": "被盗游轮上的指纹",
-                "detail": "警方在被盗望远镜所在的邮轮上提取到了嫌疑人的指纹",
+                "detail": "警方在被盗望远镜所在的邮轮船身上提取到了嫌疑人的指纹",
             },
         ],
     },
@@ -1813,6 +1814,108 @@ TRAINING_TYPE_SECTION = {
     "control": "control",
 }
 
+# Participant-downloadable PDFs (place files under materials/pdf/)
+TRAINING_TYPE_PDFS = {
+    "control": "A组_培训材料.pdf",
+    "theory_sue": "B组_SUE理论培训.pdf",
+    "avatar_specific": "B组_SUE理论培训.pdf",
+    "avatar_general": "B组_SUE理论培训.pdf",
+}
+
+CASE_TYPE_PDFS = {
+    "arson": {
+        "interviewer": "纵火案_审讯者材料.pdf",
+        "scenario_guilty": "纵火案_有罪嫌疑人情景.pdf",
+        "scenario_innocent": "纵火案_无罪嫌疑人情景.pdf",
+    },
+    "theft": {
+        "interviewer": "盗窃案_审讯者材料.pdf",
+        "scenario_guilty": "盗窃案_有罪嫌疑人情景.pdf",
+        "scenario_innocent": "盗窃案_无罪嫌疑人情景.pdf",
+    },
+}
+
+
+def _pdf_download_entry(filename, display_name=None):
+    """Return {name, url} if materials/pdf/<filename> exists."""
+    safe = os.path.basename(filename or "")
+    if not safe or safe != filename:
+        return None
+    path = os.path.join(MATERIALS_PDF_DIR, safe)
+    if not os.path.isfile(path):
+        return None
+    return {
+        "name": display_name or safe,
+        "url": f"/api/download-material/{safe}",
+    }
+
+
+def _training_download_files(training_type):
+    fname = TRAINING_TYPE_PDFS.get(training_type)
+    if not fname:
+        return []
+    entry = _pdf_download_entry(fname)
+    return [entry] if entry else []
+
+
+def _interviewer_appointment_paired_suspect(phone):
+    """Return (case_type, guilt, slot_matched) from suspect on the same booked time_slot."""
+    p = store.get_participant(phone)
+    if not p or p.get("role") != "I":
+        return None, None, False
+    booking = store.get_my_booking(phone)
+    if not booking:
+        return None, None, False
+    time_slot = booking["time_slot"]
+    slot_bookings = store.get_slot_bookings()
+    if len(slot_bookings.get(time_slot, set())) < 2:
+        return None, None, False
+    suspect_phone = None
+    for appt in store.get_appointments():
+        if (
+            appt.get("time_slot") == time_slot
+            and appt.get("role") == "S"
+            and appt.get("status") == "confirmed"
+        ):
+            suspect_phone = appt.get("phone")
+            break
+    if not suspect_phone:
+        return None, None, True
+    suspect = store.get_participant(suspect_phone)
+    if not suspect:
+        return None, None, True
+    return suspect.get("case_type") or "arson", suspect.get("guilt") or "Innocent", True
+
+
+def _interviewer_case_download_files(case_type):
+    """One PDF per case: background + evidence for the interviewer."""
+    spec = CASE_TYPE_PDFS.get(case_type)
+    if not spec:
+        return []
+    entry = _pdf_download_entry(spec["interviewer"])
+    return [entry] if entry else []
+
+
+def _suspect_scenario_download_files(case_type, guilt):
+    """One PDF for suspect: guilty or innocent scenario text."""
+    spec = CASE_TYPE_PDFS.get(case_type)
+    if not spec:
+        return []
+    scenario_key = "scenario_guilty" if guilt == "Guilty" else "scenario_innocent"
+    entry = _pdf_download_entry(spec[scenario_key])
+    return [entry] if entry else []
+
+
+def _resolve_pdf_filepath(safe_name):
+    """Resolve a safe basename under materials/pdf/ (no path traversal)."""
+    if not safe_name or ".." in safe_name or safe_name != os.path.basename(safe_name):
+        return None
+    base = os.path.realpath(MATERIALS_PDF_DIR)
+    path = os.path.realpath(os.path.join(MATERIALS_PDF_DIR, safe_name))
+    if not path.startswith(base + os.sep) and path != base:
+        return None
+    return path if os.path.isfile(path) else None
+
 
 def _extract_text_from_file(path):
     ext = os.path.splitext(path)[1].lower()
@@ -2072,6 +2175,7 @@ def _ensure_combined_materials_from_example():
 def setup_materials_dir():
     """Organize materials/: merge legacy Word/PDF into combined_materials.md/.docx."""
     os.makedirs(MATERIALS_DIR, exist_ok=True)
+    os.makedirs(MATERIALS_PDF_DIR, exist_ok=True)
     os.makedirs(MATERIALS_PROMPTS_DIR, exist_ok=True)
 
     if os.path.isdir(TRAINING_SRC_DIR):
@@ -2247,15 +2351,18 @@ def next_group_name():
 
 
 def participant_id_suffix(participant):
-    """Third segment of AAA-B-C: suspect case (T/A) or interviewer training group (A–D)."""
+    """Third segment of AAA-B-C (suspect: case + guilt; interviewer: training group A–D)."""
     if participant.get("role") == "S":
-        return "T" if participant.get("case_type") == "theft" else "A"
+        case_letter = "T" if participant.get("case_type") == "theft" else "A"
+        guilt_letter = "G" if participant.get("guilt") == "Guilty" else "I"
+        return f"{case_letter}{guilt_letter}"
     if participant.get("role") == "I":
         return TRAINING_GROUP_LABELS.get(participant.get("training_type", ""), "X")
     return "X"
 
 
 def make_full_id(group_name, role, suffix_code):
+    """e.g. 001-S-AI (suspect arson innocent), 001-I-B (interviewer theory_sue)."""
     return f"{group_name}-{role}-{suffix_code}"
 
 
@@ -2472,20 +2579,26 @@ def _iter_slot_times(start_hm, end_hm, step_minutes=BOOKING_SLOT_STEP_MINUTES):
         cur += step_minutes
 
 
-def _booking_slot_bounds():
+def _booking_slot_bounds(role=None):
+    """Suspects: earliest slot 24h ahead; interviewers: from now."""
     now = datetime.now()
-    return now + timedelta(hours=BOOKING_MIN_HOURS), now + timedelta(days=BOOKING_MAX_DAYS)
+    if role == "I":
+        min_dt = now
+    else:
+        min_dt = now + timedelta(hours=BOOKING_MIN_HOURS)
+    max_dt = now + timedelta(days=BOOKING_MAX_DAYS)
+    return min_dt, max_dt
 
 
-def _is_valid_booking_slot(slot_dt):
-    min_dt, max_dt = _booking_slot_bounds()
+def _is_valid_booking_slot(slot_dt, role=None):
+    min_dt, max_dt = _booking_slot_bounds(role)
     return min_dt <= slot_dt <= max_dt
 
 
-def _candidate_booking_slots():
-    """Bookable slots from 24h after now through one week ahead."""
+def _candidate_booking_slots(role=None):
+    """Bookable slots; suspect from 24h ahead, interviewer from now, up to one week."""
     now = datetime.now()
-    min_dt, max_dt = _booking_slot_bounds()
+    min_dt, max_dt = _booking_slot_bounds(role)
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
     slots = []
     day = today
@@ -2969,17 +3082,8 @@ def submit_profile():
 
 @app.route("/api/training-material/<training_type>")
 def training_material(training_type):
-    available_files = []
-    if os.path.isfile(COMBINED_MATERIALS_DOCX):
-        available_files.append({
-            "name": COMBINED_DOWNLOAD_NAME,
-            "url": "/api/download-material/combined_materials.docx",
-        })
-    elif os.path.isfile(COMBINED_MATERIALS_MD):
-        available_files.append({
-            "name": "培训材料合集.md",
-            "url": "/api/download-material/combined_materials.md",
-        })
+    """Training PDFs only (A 组 or B 组 SUE); C/D 组说明不提供下载。"""
+    available_files = _training_download_files(training_type)
 
     materials = {
         "theory_sue": {
@@ -3010,11 +3114,88 @@ def training_material(training_type):
     return jsonify(materials.get(training_type, {"title": "未知", "description": "", "files": []}))
 
 
+@app.route("/api/interviewer-case-downloads", methods=["POST"])
+def interviewer_case_downloads():
+    """Case PDF for interviewer after booking, when same time_slot has both roles."""
+    data = request.get_json() or {}
+    phone = (data.get("phone") or "").strip()
+    p = store.get_participant(phone)
+    if not p or p.get("role") != "I":
+        return jsonify({"error": "未找到审讯者"}), 404
+
+    if not store.get_my_booking(phone):
+        return jsonify({
+            "paired": False,
+            "slot_matched": False,
+            "case_type": None,
+            "case_label": None,
+            "files": [],
+            "message": "请先完成时间预约后再下载案件材料。",
+        })
+
+    case_type, guilt, slot_matched = _interviewer_appointment_paired_suspect(phone)
+    if not slot_matched:
+        return jsonify({
+            "paired": False,
+            "slot_matched": False,
+            "case_type": None,
+            "case_label": None,
+            "files": [],
+            "message": (
+                "您所预约的时间段尚未有嫌疑人预约，暂无法下载案件 PDF。"
+                "请过段时间重新登录本系统，在「预约管理」中确认配对成功后再下载。"
+            ),
+        })
+
+    files = _interviewer_case_download_files(case_type)
+    case_label = "纵火案" if case_type == "arson" else "盗窃案"
+    return jsonify({
+        "paired": True,
+        "slot_matched": True,
+        "case_type": case_type,
+        "case_label": case_label,
+        "suspect_guilt": guilt,
+        "files": files,
+    })
+
+
+@app.route("/api/suspect-case-downloads", methods=["POST"])
+def suspect_case_downloads():
+    """One scenario PDF for suspect (guilty or innocent) by registration assignment."""
+    data = request.get_json() or {}
+    phone = (data.get("phone") or "").strip()
+    p = store.get_participant(phone)
+    if not p or p.get("role") != "S":
+        return jsonify({"error": "未找到嫌疑人"}), 404
+
+    case_type = p.get("case_type") or "arson"
+    guilt = p.get("guilt") or "Innocent"
+    files = _suspect_scenario_download_files(case_type, guilt)
+    case_label = "纵火案" if case_type == "arson" else "盗窃案"
+    guilt_label = "有罪" if guilt == "Guilty" else "无罪"
+    return jsonify({
+        "case_type": case_type,
+        "case_label": case_label,
+        "guilt": guilt,
+        "guilt_label": guilt_label,
+        "files": files,
+    })
+
+
 @app.route("/api/download-material/<path:filename>")
 def download_material(filename):
     safe_name = os.path.basename(filename)
     if safe_name != filename or ".." in filename:
         return jsonify({"error": "无效文件名"}), 400
+
+    pdf_path = _resolve_pdf_filepath(safe_name)
+    if pdf_path:
+        return send_file(
+            pdf_path,
+            as_attachment=True,
+            download_name=safe_name,
+            mimetype="application/pdf",
+        )
 
     allowed = {
         "combined_materials.docx": (COMBINED_MATERIALS_DOCX, COMBINED_DOWNLOAD_NAME),
@@ -3441,10 +3622,10 @@ def generate_results_docx():
 
 # ====== Appointment APIs ======
 
-def generate_time_slots():
-    """Slots from 24h ahead through 7 days, minus admin-disabled."""
+def generate_time_slots(role=None):
+    """Role-aware slots (S: 24h+; I: now+), minus admin-disabled."""
     disabled = store.get_disabled_slots()
-    return [s for s in _candidate_booking_slots() if s not in disabled]
+    return [s for s in _candidate_booking_slots(role) if s not in disabled]
 
 
 def get_available_slots():
@@ -3456,7 +3637,13 @@ def get_available_slots():
 
 @app.route("/api/appointments/slots")
 def api_slots():
-    all_slots = generate_time_slots()
+    phone = (request.args.get("phone") or "").strip()
+    role = None
+    if phone:
+        p = store.get_participant(phone)
+        if p:
+            role = p.get("role")
+    all_slots = generate_time_slots(role)
     slot_bookings = store.get_slot_bookings()
     fully_booked = store.get_confirmed_slot_set()
 
@@ -3480,6 +3667,8 @@ def api_slots():
         "fully_booked": list(fully_booked),
         "slot_info": slot_info,
         "groups": groups,
+        "role": role,
+        "booking_min_hours": 0 if role == "I" else BOOKING_MIN_HOURS,
     })
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     resp.headers["Pragma"] = "no-cache"
@@ -3496,26 +3685,26 @@ def api_book_appointment():
     if not phone or not time_slot:
         return jsonify({"error": "手机号和预约时间不能为空"}), 400
 
-    try:
-        slot_dt = datetime.strptime(time_slot, "%Y-%m-%d %H:%M")
-        if not _is_valid_booking_slot(slot_dt):
-            return jsonify({
-                "error": f"预约时间须在 {BOOKING_MIN_HOURS} 小时之后至 {BOOKING_MAX_DAYS} 天以内",
-            }), 400
-    except ValueError:
-        return jsonify({"error": "时间格式无效"}), 400
-
-    # Check if all valid slots
-    all_slots = generate_time_slots()
-    if time_slot not in all_slots:
-        return jsonify({"error": "该时间段不在可选范围内"}), 400
-
-    # Check participant exists and get role
     p = store.get_participant(phone)
     if not p:
         return jsonify({"error": "未找到参与者"}), 404
 
     role = p["role"]  # "S" or "I"
+
+    try:
+        slot_dt = datetime.strptime(time_slot, "%Y-%m-%d %H:%M")
+        if not _is_valid_booking_slot(slot_dt, role):
+            if role == "I":
+                err = f"预约时间须在当前时间之后至 {BOOKING_MAX_DAYS} 天以内"
+            else:
+                err = f"预约时间须在 {BOOKING_MIN_HOURS} 小时之后至 {BOOKING_MAX_DAYS} 天以内"
+            return jsonify({"error": err}), 400
+    except ValueError:
+        return jsonify({"error": "时间格式无效"}), 400
+
+    all_slots = generate_time_slots(role)
+    if time_slot not in all_slots:
+        return jsonify({"error": "该时间段不在可选范围内"}), 400
 
     # Each person can only book one slot
     if store.has_booking(phone):
@@ -3585,25 +3774,26 @@ def api_modify_appointment():
     if not phone or not new_time_slot:
         return jsonify({"error": "参数不完整"}), 400
 
-    try:
-        slot_dt = datetime.strptime(new_time_slot, "%Y-%m-%d %H:%M")
-        if not _is_valid_booking_slot(slot_dt):
-            return jsonify({
-                "error": f"预约时间须在 {BOOKING_MIN_HOURS} 小时之后至 {BOOKING_MAX_DAYS} 天以内",
-            }), 400
-    except ValueError:
-        return jsonify({"error": "时间格式无效"}), 400
-
-    # Check if slot is in valid range
-    all_slots = generate_time_slots()
-    if new_time_slot not in all_slots:
-        return jsonify({"error": "该时间段不在可选范围内"}), 400
-
     p = store.get_participant(phone)
     if not p:
         return jsonify({"error": "未找到参与者"}), 404
 
     role = p["role"]
+
+    try:
+        slot_dt = datetime.strptime(new_time_slot, "%Y-%m-%d %H:%M")
+        if not _is_valid_booking_slot(slot_dt, role):
+            if role == "I":
+                err = f"预约时间须在当前时间之后至 {BOOKING_MAX_DAYS} 天以内"
+            else:
+                err = f"预约时间须在 {BOOKING_MIN_HOURS} 小时之后至 {BOOKING_MAX_DAYS} 天以内"
+            return jsonify({"error": err}), 400
+    except ValueError:
+        return jsonify({"error": "时间格式无效"}), 400
+
+    all_slots = generate_time_slots(role)
+    if new_time_slot not in all_slots:
+        return jsonify({"error": "该时间段不在可选范围内"}), 400
 
     # Check if this slot already has this role booked by someone else
     slot_bookings = store.get_slot_bookings()
@@ -4184,8 +4374,9 @@ def api_lookup_participant():
         case_type = p.get("case_type", "arson")
         guilt = p.get("guilt", "Guilty")
         group_name = p.get("group_name", "")
-        case_code = "T" if case_type == "theft" else "A"
-        suspect_display_id = f"{group_name}-S-{case_code}" if group_name else ""
+        suspect_display_id = (
+            make_full_id(group_name, "S", participant_id_suffix(p)) if group_name else ""
+        )
         suspect_case_label = "纵火案 Arson" if case_type == "arson" else "盗窃案 Theft"
         if case_type == "arson":
             suspect_context = ARSON_GUILTY_CONTEXT if guilt == "Guilty" else ARSON_INNOCENT_CONTEXT

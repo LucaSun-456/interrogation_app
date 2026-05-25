@@ -7,12 +7,15 @@
 ```
 materials/
   README.md                 # 本说明
-  combined_materials.md     # 培训/知情同意合集（已纳入 Git，改后 push）
-  combined_materials.docx     # 自动生成，未纳入 Git（可选 scp 上传）
+  combined_materials.md     # 屏上阅读用合集（改文字只改此文件）
+  pdf/                      # 参与者下载用 PDF（见 pdf/README.md）
   prompts/
-    avatar_feedback.md      # Avatar 培训反馈 Prompt（由 Feedback prompts.docx 导出）
-  _legacy_sources/          # 可选：从外部 IRB 目录复制来的原始文件备份
+    avatar_feedback.md      # Avatar 培训反馈 Prompt
+  _legacy_sources/          # 可选：历史 Word 备份（程序不读取）
 ```
+
+**下载 PDF**：将文件放入 `materials/pdf/`（共 8 个：2 个培训 + 每种案件 3 个），文件名须与 `pdf/README.md` 一致。  
+**屏上阅读**：继续编辑 `combined_materials.md` 各 `<!-- section:... -->` 段落。
 
 ## 章节标记
 

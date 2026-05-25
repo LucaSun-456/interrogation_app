@@ -1159,7 +1159,7 @@
     <div class="info-row"><span class="label">所属组别</span><span class="value badge badge-blue" id="suspectGroupLabel"></span></div>
     <h3>案件背景（请仔细阅读）</h3>
     <div class="context-box" id="suspectContext"></div>
-    <button class="btn btn-outline" onclick="downloadSuspectContext()" style="margin-bottom:8px;">📥 下载案件背景</button>
+    <button class="btn btn-outline" onclick="downloadSuspectScenarioPdf()" style="margin-bottom:8px;">📥 下载情景材料 (PDF)</button>
     <div style="display:flex;gap:8px;">
       <button class="btn btn-prev" onclick="showPhoneScreen()">← 上一步</button>
       <button class="btn btn-primary" onclick="showAttentionCheck()" style="flex:1;">我已阅读完毕，进入测试</button>
@@ -1288,8 +1288,8 @@
     <h2 id="caseInfoTitle">案件信息</h2>
     <div id="caseInfoContent"></div>
     <div class="info-row" style="margin-top:12px;"><span class="label">您的组别</span><span class="value badge badge-blue" id="caseInfoGroup"></span></div>
+    <div id="caseInfoDownloads" style="margin-top:12px;"></div>
     <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
-      <button class="btn btn-outline" onclick="downloadCaseInfo()">📥 下载案件信息</button>
       <button class="btn btn-primary" id="caseInfoNextBtn" onclick="goToNextAfterCaseInfo()" style="flex:1;">我已阅读完毕，继续</button>
     </div>
   </div>
@@ -1373,6 +1373,7 @@
       <h2 style="color:var(--success);border:none;margin-top:8px;">实验完成</h2>
       <p style="margin-top:8px;font-size:14px;color:var(--text);" id="completionMsg"></p>
       <p style="margin-top:12px;font-size:12px;color:var(--text-light);">请截图此页面保存您的实验编号，并发送给研究人员确认。</p>
+      <div id="completionDownloads" style="margin-top:12px;"></div>
       <button class="btn btn-outline" onclick="downloadAllMaterials()" style="margin-top:12px;width:100%;">📥 下载全部材料</button>
     </div>
   </div>
@@ -1383,7 +1384,7 @@
     <p style="font-size:13px;color:var(--text-light);margin-bottom:4px;">
       每个时间段有<strong>两个名额</strong>：<span class="avail-tag suspect">嫌疑人</span> 和 <span class="avail-tag interviewer">审讯者</span>。
       当同一个时间段<strong>嫌疑人和审讯者都预约后</strong>，该时间段即配对成功。<br>
-      可预约时间范围：<strong>从现在起 24 小时之后</strong>至<strong>一周内</strong>。
+      <span id="bookingTimeRangeHint">可预约时间范围：<strong>从现在起 24 小时之后</strong>至<strong>一周内</strong>（嫌疑人）。</span>
     </p>
     <p style="font-size:12px;color:var(--text-light);margin-bottom:4px;">
       💡 <strong style="color:#e65100;">建议优先选择已有对方角色预约的时间段（橙色高亮）</strong>，这样可以快速完成配对，尽早开展正式访谈。
@@ -2532,7 +2533,7 @@ window.addEventListener('beforeunload', function(e) {
 });
 
 // ====== SUSPECT FLOW ======
-function showSuspectFlow(data) {
+async function showSuspectFlow(data) {
   $('suspectCase').textContent = data.case_label;
   const groupName = data.display_id ? data.display_id.split('-')[0] : '';
   $('suspectGroupLabel').textContent = groupName ? '第 ' + groupName + ' 组' : '待分配';
@@ -2541,6 +2542,14 @@ function showSuspectFlow(data) {
 
   // Store attention questions
   APP.attentionQuestions = data.attention_questions;
+
+  APP.suspectDownloadFiles = [];
+  if (APP.phone) {
+    try {
+      const dl = await api('/api/suspect-case-downloads', { phone: APP.phone });
+      APP.suspectDownloadFiles = dl.files || [];
+    } catch (_) { /* PDF optional until uploaded */ }
+  }
 
   showScreen('screen-suspect-context');
 }
@@ -3783,6 +3792,25 @@ async function renderInterviewerDownloadLinks(areaId) {
   }
 }
 
+async function triggerPdfDownloads(files, emptyMsg) {
+  let list = files;
+  if (!list || !list.length) {
+    alert(emptyMsg || '暂无可下载的 PDF 文件，请联系研究人员。');
+    return;
+  }
+  for (let i = 0; i < list.length; i++) {
+    const f = list[i];
+    const a = document.createElement('a');
+    a.href = f.url;
+    a.setAttribute('download', f.name || '材料.pdf');
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    if (i < list.length - 1) await sleep(400);
+  }
+}
+
 async function downloadInterviewerMaterials() {
   let files = APP.interviewerMaterialFiles;
   if (!files || !files.length) {
@@ -3797,21 +3825,7 @@ async function downloadInterviewerMaterials() {
       return;
     }
   }
-  if (!files.length) {
-    alert('暂无可下载的培训材料文件，请联系研究人员。');
-    return;
-  }
-  for (let i = 0; i < files.length; i++) {
-    const f = files[i];
-    const a = document.createElement('a');
-    a.href = f.url;
-    a.setAttribute('download', f.name || '培训材料');
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    if (i < files.length - 1) await sleep(400);
-  }
+  await triggerPdfDownloads(files, '暂无可下载的培训 PDF。请将文件放入 materials/pdf/ 目录。');
 }
 
 function buildChatInterface() {
@@ -4652,6 +4666,12 @@ async function showCaseInfo() {
 
     $('caseInfoContent').innerHTML = html;
 
+    const dlArea = $('caseInfoDownloads');
+    if (dlArea) {
+      dlArea.innerHTML = '<p style="font-size:12px;color:var(--text-light);padding:10px;background:#f7f9fc;border-radius:6px;">案件材料 PDF 请在<strong>完成时间预约且与嫌疑人配对成功</strong>后，在预约成功页面或「预约管理」中下载。</p>';
+    }
+    APP.caseDownloadFiles = [];
+
     // All interviewer groups go to scheduling after case info
     $('caseInfoNextBtn').textContent = '我已阅读完毕，进入时间预约 →';
     $('caseInfoNextBtn').onclick = showBookingFromCaseInfo;
@@ -4687,7 +4707,7 @@ async function loadBookingSlotsForInterviewer() {
 
   showLoading('正在加载预约信息...');
   try {
-    const slotResp = await fetch('/api/appointments/slots?_=' + Date.now());
+    const slotResp = await fetch('/api/appointments/slots?phone=' + encodeURIComponent(phone) + '&_=' + Date.now());
     if (!slotResp.ok) {
       const text = await slotResp.text();
       throw new Error('加载时间段失败: ' + (text.startsWith('{') ? JSON.parse(text).error : '服务器错误'));
@@ -4919,16 +4939,19 @@ async function goToCompletionFromCaseInfo() {
   }
 }
 
-function downloadCaseInfo() {
-  const title = $('caseInfoTitle').textContent;
-  const content = $('caseInfoContent').innerText;
-  const blob = new Blob([title + '\n\n' + content], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = '案件信息.txt';
-  a.click();
-  URL.revokeObjectURL(url);
+async function downloadInterviewerCasePdf() {
+  const phone = bookingState.phone || APP.phone;
+  try {
+    const caseDl = await api('/api/interviewer-case-downloads', { phone });
+    if (!caseDl.files || !caseDl.files.length) {
+      alert(caseDl.message || '暂无可下载的案件 PDF。');
+      return;
+    }
+    APP.caseDownloadFiles = caseDl.files;
+    await triggerPdfDownloads(caseDl.files, '暂无可下载的案件 PDF。');
+  } catch (e) {
+    alert('下载失败：' + e.message);
+  }
 }
 
 // ====== AVATAR TRAINING SESSIONS (6-session requirement) ======
@@ -5578,16 +5601,23 @@ async function cleanupTrainingAvatar() {
 }
 
 // ====== DOWNLOAD HELPERS ======
-function downloadSuspectContext() {
-  const context = $('suspectContext').textContent;
-  const title = $('suspectCase').textContent;
-  const blob = new Blob([`案件背景 - ${title}\n\n${context}`], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = '案件背景.txt';
-  a.click();
-  URL.revokeObjectURL(url);
+async function downloadSuspectScenarioPdf() {
+  const phone = bookingState.phone || APP.phone;
+  let files = APP.suspectDownloadFiles;
+  if (!files || !files.length) {
+    try {
+      const dl = await api('/api/suspect-case-downloads', { phone });
+      files = dl.files || [];
+      APP.suspectDownloadFiles = files;
+    } catch (e) {
+      alert('下载失败：' + e.message);
+      return;
+    }
+  }
+  await triggerPdfDownloads(
+    files,
+    '暂无可下载的情景 PDF。请将对应文件放入 materials/pdf/（见 pdf/README.md）。'
+  );
 }
 
 function downloadProfile() {
@@ -5668,12 +5698,81 @@ function remindScreenshot() {
 }
 
 // ====== COMPLETION ======
-function showCompletion(data) {
+async function showCompletion(data) {
   APP.completed = true;
   $('completionMsg').textContent = data.message || '';
+  const dlArea = $('completionDownloads');
+  if (dlArea && APP.role === 'S') {
+    try {
+      const dl = await api('/api/suspect-case-downloads', { phone: APP.phone });
+      APP.suspectDownloadFiles = dl.files || [];
+      if (APP.suspectDownloadFiles.length) {
+        let html = '<div style="padding:12px;background:#f0f7ff;border-radius:8px;text-align:left;">';
+        html += '<div style="font-weight:600;font-size:13px;margin-bottom:8px;">📂 再次下载情景材料</div>';
+        APP.suspectDownloadFiles.forEach(f => {
+          html += `<a href="${f.url}" download="${escapeHtml(f.name || '')}" style="display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;background:white;border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--primary);text-decoration:none;">📥 ${escapeHtml(f.name || 'PDF')}</a>`;
+        });
+        html += '</div>';
+        dlArea.innerHTML = html;
+      }
+    } catch (_) {
+      dlArea.innerHTML = '';
+    }
+  } else if (dlArea) {
+    dlArea.innerHTML = '';
+  }
   showScreen('screen-completion');
   document.querySelector('.completion-box').scrollIntoView({ behavior: 'smooth' });
 }
+
+function renderPdfDownloadLinksHtml(files, title) {
+  if (!files || !files.length) return '';
+  let html = '<div style="padding:12px;background:#f0f7ff;border-radius:8px;margin-top:12px;text-align:left;">';
+  if (title) html += `<div style="font-weight:600;font-size:13px;margin-bottom:8px;">${escapeHtml(title)}</div>`;
+  files.forEach(f => {
+    html += `<a href="${f.url}" download="${escapeHtml(f.name || '')}" style="display:inline-block;margin:4px 8px 4px 0;padding:6px 14px;background:white;border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--primary);text-decoration:none;">📥 ${escapeHtml(f.name || 'PDF')}</a>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+async function buildBookingDownloadSection(isMatched) {
+  if (bookingState.role === 'S') {
+    try {
+      const dl = await api('/api/suspect-case-downloads', { phone: bookingState.phone || APP.phone });
+      APP.suspectDownloadFiles = dl.files || [];
+      return renderPdfDownloadLinksHtml(APP.suspectDownloadFiles, '📂 下载情景材料 (PDF)');
+    } catch (_) {
+      return '';
+    }
+  }
+  if (bookingState.role === 'I') {
+    if (!isMatched) {
+      return '<div style="margin-top:12px;padding:12px;background:#fff8e1;border:1px solid #ffc107;border-radius:8px;font-size:13px;line-height:1.7;color:#856404;">'
+        + '📂 <strong>案件材料（背景+证据）</strong>需在您预约的时间段内<strong>已有嫌疑人预约</strong>后方可下载。'
+        + '请过段时间<strong>重新登录</strong>本系统，在「预约管理」中确认配对成功后再下载。'
+        + '</div>';
+    }
+    try {
+      const caseDl = await api('/api/interviewer-case-downloads', { phone: bookingState.phone || APP.phone });
+      APP.caseDownloadFiles = caseDl.files || [];
+      if (caseDl.files && caseDl.files.length) {
+        return renderPdfDownloadLinksHtml(caseDl.files, '📂 下载案件材料（背景+证据 PDF）');
+      }
+      return '<p style="margin-top:12px;font-size:12px;color:var(--text-light);">' + escapeHtml(caseDl.message || '') + '</p>';
+    } catch (_) {
+      return '';
+    }
+  }
+  return '';
+}
+
+const BOOKING_SCREENSHOT_NOTE = ''
+  + '<div class="screenshot-note" style="margin-top:16px;">'
+  + '⚠️ <strong>重要：请立即截图本页（含编号与预约信息），并发送给研究人员微信/邮箱。</strong><br>'
+  + '<strong style="color:var(--accent);">未将截图发给研究人员，视为预约未成功，不安排正式访谈。</strong>'
+  + '<br><small>截图将作为您完成预约的凭证。</small>'
+  + '</div>';
 
 // ====== ERROR ======
 function showError(msg) {
@@ -5729,7 +5828,7 @@ async function loadBookingSlots() {
   showLoading('正在加载预约信息...');
   try {
     // Get slots info (cache-busting via timestamp to ensure fresh data)
-    const slotResp = await fetch('/api/appointments/slots?_=' + Date.now());
+    const slotResp = await fetch('/api/appointments/slots?phone=' + encodeURIComponent(phone) + '&_=' + Date.now());
     if (!slotResp.ok) {
       const text = await slotResp.text();
       throw new Error('加载时间段失败: ' + (text.startsWith('{') ? JSON.parse(text).error : '服务器错误'));
@@ -5790,6 +5889,15 @@ function renderBookingUI() {
   const complementaryRoleLabel = role === 'S' ? '审讯者' : '嫌疑人';
   const complementaryRole = role === 'S' ? 'I' : 'S';
 
+  const hintEl = $('bookingTimeRangeHint');
+  if (hintEl) {
+    if (role === 'I') {
+      hintEl.innerHTML = '可预约时间范围：<strong>从现在起</strong>至<strong>一周内</strong>（<strong>审讯者</strong>，无 24 小时限制）。';
+    } else {
+      hintEl.innerHTML = '可预约时间范围：<strong>从现在起 24 小时之后</strong>至<strong>一周内</strong>（<strong>嫌疑人</strong>）。';
+    }
+  }
+
   $('bookingPhoneInput').classList.add('hidden');
 
   // Show training status for avatar groups
@@ -5842,6 +5950,11 @@ function renderBookingUI() {
           角色：${roleLabel}
         </div>
         ${matchStatusHtml}
+        ${role === 'S'
+          ? '<button class="btn btn-outline" onclick="downloadSuspectScenarioPdf()" style="margin-top:10px;width:100%;">📥 下载情景材料 (PDF)</button>'
+          : (myBooking.is_matched
+            ? '<button class="btn btn-outline" onclick="downloadInterviewerCasePdf()" style="margin-top:10px;width:100%;">📥 下载案件材料 (PDF)</button>'
+            : '<p style="font-size:12px;color:#856404;margin-top:10px;line-height:1.6;">📂 案件 PDF 需在<strong>嫌疑人预约同一时段</strong>后下载。请过段时间重新登录查看。</p>')}
         <button class="btn btn-outline" onclick="cancelMyBooking()" style="margin-top:12px;color:var(--accent);border-color:var(--accent);">取消预约</button>
       </div>`;
   }
@@ -6038,15 +6151,19 @@ async function bookSlot(slot) {
       participant_id: result.participant_id,
     };
 
+    const downloadSection = await buildBookingDownloadSection(result.is_matched);
+
     if (needsSix && !trainingDone) {
       $('bookingResult').innerHTML = `
         <div style="margin-top:16px;padding:16px;background:#fff8e1;border:1px solid #ffc107;border-radius:8px;">
           <h3 style="border:none;margin:0 0 8px;color:#856404;">预约成功</h3>
           <p style="font-size:14px;">预约时间：<strong>${slot}</strong>（角色：${roleLabel}）</p>
           ${matchStatusHtml}
+          ${downloadSection}
           <p style="font-size:13px;color:#856404;margin-top:12px;line-height:1.6;">
             接下来请完成 <strong>6 次</strong> 虚拟审讯训练（中性/回避/敌意 × 有罪/无罪）。
           </p>
+          ${BOOKING_SCREENSHOT_NOTE}
           <button class="btn btn-primary" onclick="proceedAfterBooking()" style="width:100%;margin-top:12px;">进入虚拟审讯训练（6次） →</button>
         </div>`;
       $('bookingResult').classList.remove('hidden');
@@ -6062,6 +6179,7 @@ async function bookSlot(slot) {
         <h2 style="color:var(--success);border:none;margin-top:8px;">预约成功！${needsSix && trainingDone ? '所有环节已完成' : '请继续后续步骤'}</h2>
         <p style="font-size:14px;">预约时间：<strong>${slot}</strong>（角色：${roleLabel}）</p>
         ${matchStatusHtml}
+        ${downloadSection}
         <div style="margin-top:16px;padding:16px;background:white;border-radius:10px;border:2px dashed var(--primary);">
           <div style="font-size:12px;color:var(--text-light);margin-bottom:6px;">您的实验研究编号：</div>
           <div class="id-display" style="margin:8px 0;">${fullId}</div>
@@ -6070,11 +6188,8 @@ async function bookSlot(slot) {
             相同分组编号的参与者属于同一实验组，将配对进行正式访谈。
           </div>
         </div>
-        <div class="screenshot-note" style="margin-top:16px;">
-          ⚠️ <strong>重要：请立即截图此页面（包含上方编号）！</strong>
-          <br><small>截图将作为您完成实验的凭证，请发送给研究人员确认。未截图将视为未完成实验。</small>
-        </div>
-        <button class="btn btn-primary" onclick="confirmBookingScreenshot()" style="margin-top:12px;width:100%;">确定，我已截图</button>
+        ${BOOKING_SCREENSHOT_NOTE}
+        <button class="btn btn-primary" onclick="confirmBookingScreenshot()" style="margin-top:12px;width:100%;">确定，我已截图并已发给研究人员</button>
       </div>
     `;
     $('bookingResult').classList.remove('hidden');
