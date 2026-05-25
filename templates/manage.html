@@ -106,6 +106,123 @@
     padding: 10px 12px;
     background: #fafcff;
   }
+  .group-card-clickable {
+    cursor: pointer;
+    transition: box-shadow 0.15s, border-color 0.15s;
+  }
+  .group-card-clickable:hover {
+    border-color: #93c5fd;
+    box-shadow: 0 4px 14px rgba(26, 58, 92, 0.12);
+  }
+
+  .admin-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .admin-modal-overlay.show { display: flex; }
+  .admin-modal {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    width: min(96vw, 1100px);
+  }
+  .admin-modal.slot-modal { width: min(96vw, 1200px); }
+  .admin-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .admin-modal-header h3 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--primary);
+  }
+  .admin-modal-body {
+    padding: 16px 18px;
+    overflow: auto;
+    flex: 1;
+  }
+  .admin-modal-close {
+    border: none;
+    background: #f3f4f6;
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .admin-modal-close:hover { background: #e5e7eb; }
+
+  .slot-modal-grid-5 {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+  @media (max-width: 1000px) {
+    .slot-modal-grid-5 { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 640px) {
+    .slot-modal-grid-5 { grid-template-columns: repeat(2, 1fr); }
+  }
+  .slot-config-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    background: #fafcff;
+    font-size: 12px;
+  }
+  .slot-config-card .slot-time-line {
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: #1f2937;
+  }
+
+  .participant-filters {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  @media (max-width: 900px) {
+    .participant-filters { grid-template-columns: repeat(2, 1fr); }
+  }
+  .detail-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  @media (max-width: 700px) {
+    .detail-grid-2 { grid-template-columns: 1fr; }
+  }
+  .member-detail-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 12px;
+    line-height: 1.75;
+    background: #fafcff;
+  }
+  .member-detail-card.s { border-left: 4px solid var(--suspect); }
+  .member-detail-card.i { border-left: 4px solid var(--interviewer); }
+  .member-detail-card h4 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    color: var(--primary);
+  }
+  .detail-row { display: flex; gap: 8px; margin-bottom: 2px; }
+  .detail-row .lbl { color: var(--text-light); min-width: 72px; flex-shrink: 0; }
   .group-title {
     font-weight: 700;
     color: var(--primary);
@@ -319,8 +436,8 @@
 
 <div class="card">
   <h2>预约时段管理</h2>
-  <p class="count" style="margin-bottom:10px;">默认时段：上午 9:30–11:00、下午 14:00–17:00、晚上 19:30–21:00（每 30 分钟一档），开放未来 24 小时至 7 天内。点击下方日期配置各时段是否开放预约。</p>
-  <div id="slotConfigWrap" class="calendar-wrap"></div>
+  <p class="count" style="margin-bottom:10px;">默认时段：上午 9:30–11:00、下午 14:00–17:00、晚上 19:30–21:00（每 30 分钟一档），开放未来 24 小时至 7 天内。</p>
+  <button type="button" class="btn btn-refresh" onclick="openSlotConfigModal()">打开预约时段管理</button>
 </div>
 
 <div class="card">
@@ -331,6 +448,75 @@
 
 <div class="card">
   <h2>参与者明细</h2>
+  <div class="participant-filters">
+    <div class="filter-item">
+      <label>手机号</label>
+      <input id="fpPhone" placeholder="片段匹配" oninput="applyParticipantTableFilter()">
+    </div>
+    <div class="filter-item">
+      <label>组别</label>
+      <input id="fpGroup" placeholder="如 001" oninput="applyParticipantTableFilter()">
+    </div>
+    <div class="filter-item">
+      <label>实验编号</label>
+      <input id="fpFullId" placeholder="如 001-S-AI" oninput="applyParticipantTableFilter()">
+    </div>
+    <div class="filter-item">
+      <label>角色</label>
+      <select id="fpRole" onchange="applyParticipantTableFilter()">
+        <option value="">全部</option>
+        <option value="S">嫌疑人</option>
+        <option value="I">审讯者</option>
+      </select>
+    </div>
+    <div class="filter-item">
+      <label>案件</label>
+      <select id="fpCase" onchange="applyParticipantTableFilter()">
+        <option value="">全部</option>
+        <option value="arson">纵火</option>
+        <option value="theft">盗窃</option>
+      </select>
+    </div>
+    <div class="filter-item">
+      <label>培训类型</label>
+      <select id="fpTraining" onchange="applyParticipantTableFilter()">
+        <option value="">全部</option>
+        <option value="control">A 组</option>
+        <option value="theory_sue">B 组</option>
+        <option value="avatar_general">C 组</option>
+        <option value="avatar_specific">D 组</option>
+      </select>
+    </div>
+    <div class="filter-item">
+      <label>完成状态</label>
+      <select id="fpCompleted" onchange="applyParticipantTableFilter()">
+        <option value="">全部</option>
+        <option value="1">已完成</option>
+        <option value="0">未完成</option>
+      </select>
+    </div>
+    <div class="filter-item">
+      <label>预约</label>
+      <select id="fpBooking" onchange="applyParticipantTableFilter()">
+        <option value="">全部</option>
+        <option value="confirmed">已确认预约</option>
+        <option value="none">未预约</option>
+        <option value="cancelled">仅已取消</option>
+      </select>
+    </div>
+    <div class="filter-item">
+      <label>有罪/无辜</label>
+      <select id="fpGuilt" onchange="applyParticipantTableFilter()">
+        <option value="">全部</option>
+        <option value="Guilty">有罪</option>
+        <option value="Innocent">无辜</option>
+      </select>
+    </div>
+    <div class="filter-item" style="display:flex;align-items:flex-end;">
+      <button type="button" class="btn btn-reset" style="width:100%;" onclick="resetParticipantFilters()">重置本表筛选</button>
+    </div>
+  </div>
+  <span class="count" id="participantTableHint" style="display:block;margin-bottom:8px;"></span>
   <div class="table-wrap">
     <table>
       <thead>
@@ -396,6 +582,30 @@
   </div>
 </div>
 
+<!-- 预约时段管理悬浮窗（5 列） -->
+<div class="admin-modal-overlay" id="slotConfigModal" onclick="if(event.target===this)closeSlotConfigModal()">
+  <div class="admin-modal slot-modal" onclick="event.stopPropagation()">
+    <div class="admin-modal-header">
+      <h3>预约时段管理</h3>
+      <button type="button" class="admin-modal-close" onclick="closeSlotConfigModal()">关闭</button>
+    </div>
+    <div class="admin-modal-body" id="slotConfigModalBody">
+      <div class="empty">加载中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- 组别详情悬浮窗 -->
+<div class="admin-modal-overlay" id="groupDetailModal" onclick="if(event.target===this)closeGroupDetailModal()">
+  <div class="admin-modal" onclick="event.stopPropagation()">
+    <div class="admin-modal-header">
+      <h3 id="groupDetailModalTitle">组别详情</h3>
+      <button type="button" class="admin-modal-close" onclick="closeGroupDetailModal()">关闭</button>
+    </div>
+    <div class="admin-modal-body" id="groupDetailModalBody"></div>
+  </div>
+</div>
+
 <div class="footer">
   <p>所有实验统计数据（参与者、预约、问卷、Avatar 培训、严肃游戏等）均保存在 <strong>experiment_data.xlsx</strong> 一个文件中，可直接用 Excel 打开各工作表查看。</p>
   <p>© IRB Research Project</p>
@@ -409,8 +619,11 @@ const APP = {
   questionnaires: [],
   questionnaireOverrides: [],
   participantByPhone: new Map(),
+  appointmentByPhone: new Map(),
+  groupDetailByName: new Map(),
   maxGroupNumber: 0,
   nextGroupNumber: null,
+  filteredParticipantsBase: [],
 };
 
 function getAuthHeaders() {
@@ -492,17 +705,86 @@ function questionnaireMatches(q, f) {
   return true;
 }
 
+function getParticipantTableFilters() {
+  return {
+    phone: (document.getElementById('fpPhone')?.value || '').trim(),
+    group: (document.getElementById('fpGroup')?.value || '').trim(),
+    fullId: (document.getElementById('fpFullId')?.value || '').trim(),
+    role: document.getElementById('fpRole')?.value || '',
+    caseType: document.getElementById('fpCase')?.value || '',
+    training: document.getElementById('fpTraining')?.value || '',
+    completed: document.getElementById('fpCompleted')?.value || '',
+    booking: document.getElementById('fpBooking')?.value || '',
+    guilt: document.getElementById('fpGuilt')?.value || '',
+  };
+}
+
+function getConfirmedAppointment(phone) {
+  return APP.appointmentByPhone.get(phone) || null;
+}
+
+function participantDetailMatches(p, pf) {
+  if (pf.phone && !String(p.phone || '').includes(pf.phone)) return false;
+  if (pf.group && !String(p.group_name || '').includes(pf.group)) return false;
+  if (pf.fullId && !String(p.full_id || '').toLowerCase().includes(pf.fullId.toLowerCase())) return false;
+  if (pf.role && String(p.role || '') !== pf.role) return false;
+  if (pf.caseType && String(p.case_type || '') !== pf.caseType) return false;
+  if (pf.training && String(p.training_type || '') !== pf.training) return false;
+  if (pf.completed && String(p.completed || 0) !== pf.completed) return false;
+  if (pf.guilt && String(p.guilt || '') !== pf.guilt) return false;
+  if (pf.booking) {
+    const appt = getConfirmedAppointment(p.phone);
+    if (pf.booking === 'confirmed' && (!appt || appt.status !== 'confirmed')) return false;
+    if (pf.booking === 'none') {
+      const any = APP.appointments.some(a => a.phone === p.phone);
+      if (any) return false;
+    }
+    if (pf.booking === 'cancelled') {
+      const hasCancelled = APP.appointments.some(a => a.phone === p.phone && a.status === 'cancelled');
+      const hasConfirmed = appt && appt.status === 'confirmed';
+      if (!hasCancelled || hasConfirmed) return false;
+    }
+  }
+  return true;
+}
+
+function resetParticipantFilters() {
+  ['fpPhone', 'fpGroup', 'fpFullId'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  ['fpRole', 'fpCase', 'fpTraining', 'fpCompleted', 'fpBooking', 'fpGuilt'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  applyParticipantTableFilter();
+}
+
+function applyParticipantTableFilter() {
+  const pf = getParticipantTableFilters();
+  const base = APP.filteredParticipantsBase.length
+    ? APP.filteredParticipantsBase
+    : APP.participants;
+  const rows = base.filter(p => participantDetailMatches(p, pf));
+  renderParticipantTable(rows);
+  const hint = document.getElementById('participantTableHint');
+  if (hint) {
+    hint.textContent = `本表显示 ${rows.length} / ${base.length} 位参与者（已应用上方筛选；顶部「查找与筛选」仍影响组别看板等）`;
+  }
+}
+
 function applyFiltersAndRender() {
   const f = getFilters();
   const participants = APP.participants.filter(p => participantMatches(p, f));
   const appointments = APP.appointments.filter(a => appointmentMatches(a, f));
   const questionnaires = APP.questionnaires.filter(q => questionnaireMatches(q, f));
+  APP.filteredParticipantsBase = participants;
   document.getElementById('filterHint').textContent =
     `当前显示：${participants.length} 位参与者，${appointments.length} 条预约，${questionnaires.length} 份问卷`;
   renderGroupGrid(participants, appointments);
   renderCompletedGroups(participants, appointments);
   renderCalendar(appointments);
-  renderParticipantTable(participants);
+  applyParticipantTableFilter();
   renderAppointmentTable(appointments);
   renderQuestionnaireTable(questionnaires);
   document.getElementById('participantCount').textContent = `共 ${participants.length} 位参与者`;
@@ -548,6 +830,19 @@ function renderGroupGrid(participants, appointments) {
     return;
   }
 
+  APP.groupDetailByName = new Map();
+  keys.forEach(g => {
+    const info = groupMap.get(g);
+    APP.groupDetailByName.set(g, {
+      members: info.participants.slice(),
+      apptConfirmedPhones: info.apptConfirmedPhones,
+      appointments: appointments.filter(a => {
+        const p = APP.participantByPhone.get(a.phone);
+        return p && String(p.group_name || '未分组') === g;
+      }),
+    });
+  });
+
   host.innerHTML = keys.map(g => {
     const info = groupMap.get(g);
     const members = info.participants;
@@ -557,9 +852,12 @@ function renderGroupGrid(participants, appointments) {
     const bookedCount = members.filter(p => info.apptConfirmedPhones.has(p.phone)).length;
     const bothReady = suspectCount >= 1 && interviewerCount >= 1 && bookedCount >= 2;
     const allCompleted = members.length > 0 && completedCount === members.length;
+    const gEsc = String(g).replace(/"/g, '&quot;');
     return `
-      <div class="group-card">
-        <div class="group-title">第 ${g} 组</div>
+      <div class="group-card group-card-clickable" role="button" tabindex="0"
+        data-group="${gEsc}" onclick="openGroupDetailModal(this.dataset.group)"
+        onkeydown="if(event.key==='Enter')openGroupDetailModal(this.dataset.group)">
+        <div class="group-title">第 ${g} 组 <span style="font-size:11px;font-weight:400;color:var(--text-light);">点击查看详情</span></div>
         <div class="group-row"><span>组内人数</span><strong>${members.length}</strong></div>
         <div class="group-row"><span>嫌疑人</span><span>${suspectCount}</span></div>
         <div class="group-row"><span>审讯者</span><span>${interviewerCount}</span></div>
@@ -572,6 +870,84 @@ function renderGroupGrid(participants, appointments) {
       </div>
     `;
   }).join('');
+}
+
+function buildMemberDetailCard(p, roleTitle, roleCls) {
+  const appt = getConfirmedAppointment(p.phone);
+  const allAppts = APP.appointments.filter(a => a.phone === p.phone);
+  const apptLines = allAppts.length
+    ? allAppts.map(a => `${a.time_slot || '-'}（${a.status === 'confirmed' ? '已确认' : a.status || '-'}）`).join('<br>')
+    : '无';
+  const qs = getQuestionnaireStatus(p.phone);
+  let extra = '';
+  if (p.role === 'S') {
+    extra = `
+      <div class="detail-row"><span class="lbl">案件</span><span>${caseLabel(p.case_type)} · ${guiltLabel(p.guilt)}</span></div>`;
+  } else {
+    extra = `
+      <div class="detail-row"><span class="lbl">培训</span><span>${trainingLabel(p.training_type)}</span></div>`;
+  }
+  return `
+    <div class="member-detail-card ${roleCls}">
+      <h4>${roleTitle}</h4>
+      <div class="detail-row"><span class="lbl">编号</span><span>${p.full_id || '-'}</span></div>
+      <div class="detail-row"><span class="lbl">手机号</span><span>${p.phone || '-'}</span></div>
+      <div class="detail-row"><span class="lbl">ID</span><span>${p.id}</span></div>
+      ${extra}
+      <div class="detail-row"><span class="lbl">完成</span><span>${Number(p.completed) === 1 ? '已完成' : '未完成'}</span></div>
+      <div class="detail-row"><span class="lbl">预约</span><span>${appt ? appt.time_slot + '（已确认）' : '未确认预约'}</span></div>
+      <div class="detail-row"><span class="lbl">全部预约</span><span>${apptLines}</span></div>
+      <div class="detail-row"><span class="lbl">问卷</span><span>前${qs.pre ? '✓' : '✗'} · 后${qs.post ? '✓' : '✗'}</span></div>
+      <div class="detail-row"><span class="lbl">流程</span><span>${p.flow_step || '-'}</span></div>
+    </div>`;
+}
+
+function openGroupDetailModal(groupName) {
+  const info = APP.groupDetailByName.get(String(groupName));
+  const titleEl = document.getElementById('groupDetailModalTitle');
+  const bodyEl = document.getElementById('groupDetailModalBody');
+  const modal = document.getElementById('groupDetailModal');
+  if (!info || !bodyEl || !modal) return;
+
+  if (titleEl) titleEl.textContent = `第 ${groupName} 组 · 详情`;
+
+  const suspects = info.members.filter(p => p.role === 'S');
+  const interviewers = info.members.filter(p => p.role === 'I');
+  const others = info.members.filter(p => p.role !== 'S' && p.role !== 'I');
+
+  let html = '<div class="detail-grid-2">';
+  if (suspects.length) {
+    html += suspects.map(p => buildMemberDetailCard(p, '嫌疑人', 's')).join('');
+  } else {
+    html += '<div class="member-detail-card s"><h4>嫌疑人</h4><p style="color:var(--text-light);">本组暂无嫌疑人记录</p></div>';
+  }
+  if (interviewers.length) {
+    html += interviewers.map(p => buildMemberDetailCard(p, '审讯者', 'i')).join('');
+  } else {
+    html += '<div class="member-detail-card i"><h4>审讯者</h4><p style="color:var(--text-light);">本组暂无审讯者记录</p></div>';
+  }
+  html += '</div>';
+
+  if (others.length) {
+    html += '<div style="margin-top:12px;">' + others.map(p => buildMemberDetailCard(p, '其他', '')).join('') + '</div>';
+  }
+
+  const slots = new Set();
+  info.appointments.filter(a => a.status === 'confirmed').forEach(a => {
+    if (a.time_slot) slots.add(a.time_slot);
+  });
+  const slotNote = slots.size
+    ? Array.from(slots).sort().join('、')
+    : '无已确认预约时段';
+  html += `<p class="completed-meta" style="margin-top:14px;">本组已确认预约时段：${slotNote}</p>`;
+
+  bodyEl.innerHTML = html;
+  modal.classList.add('show');
+}
+
+function closeGroupDetailModal() {
+  const modal = document.getElementById('groupDetailModal');
+  if (modal) modal.classList.remove('show');
 }
 
 function getAppointmentForPhone(phone, appointments) {
@@ -821,8 +1197,21 @@ function buildSlotDayMap(slots) {
   return dayMap;
 }
 
+function openSlotConfigModal() {
+  const modal = document.getElementById('slotConfigModal');
+  if (!modal) return;
+  slotConfigSelectedDay = null;
+  modal.classList.add('show');
+  loadSlotConfig();
+}
+
+function closeSlotConfigModal() {
+  const modal = document.getElementById('slotConfigModal');
+  if (modal) modal.classList.remove('show');
+}
+
 function renderSlotConfig() {
-  const wrap = document.getElementById('slotConfigWrap');
+  const wrap = document.getElementById('slotConfigModalBody');
   if (!wrap || !slotConfigCache) return;
   const slots = slotConfigCache.slots || [];
   const dayMap = buildSlotDayMap(slots);
@@ -834,14 +1223,16 @@ function renderSlotConfig() {
   }
 
   if (!slotConfigSelectedDay) {
-    let html = '<div class="slot-day-list">';
+    let html = '<p class="count" style="margin-bottom:12px;">选择日期后，以 5 列网格查看并配置各时段是否开放预约。</p>';
+    html += '<div class="slot-modal-grid-5">';
     days.forEach(day => {
       const items = dayMap.get(day);
       const enabledCount = items.filter(s => s.enabled).length;
       const bookedCount = items.filter(s => (s.roles_booked || []).length > 0).length;
       html += `<button type="button" class="slot-day-btn" onclick="openSlotDay('${day}')">
         <div style="font-weight:700;">${day}</div>
-        <div class="sub">开放 ${enabledCount}/${items.length} · 已有预约 ${bookedCount} 个时段</div>
+        <div class="sub">开放 ${enabledCount}/${items.length}</div>
+        <div class="sub">已有预约 ${bookedCount} 档</div>
       </button>`;
     });
     html += '</div>';
@@ -853,19 +1244,20 @@ function renderSlotConfig() {
   let html = `<div class="slot-detail-head">
     <button type="button" class="btn btn-outline" style="font-size:12px;padding:6px 12px;" onclick="backToSlotDayList()">← 返回日期列表</button>
     <strong style="font-size:14px;">${slotConfigSelectedDay}</strong>
+    <span class="count">共 ${items.length} 个时段</span>
   </div>`;
-  html += '<div class="day-col" style="max-width:420px;">';
+  html += '<div class="slot-modal-grid-5">';
   items.forEach(s => {
     const roles = (s.roles_booked || []).map(r => r === 'S' ? '嫌疑人' : '审讯者').join('、') || '无';
     const status = s.fully_booked ? '已满' : (roles !== '无' ? '部分预约' : '空');
     const slotEsc = s.slot.replace(/'/g, "\\'");
-    html += `<div class="slot-row">
-      <div class="slot-time">${s.time} <span style="font-weight:400;color:#6b7280;">(${status})</span></div>
+    html += `<div class="slot-config-card">
+      <div class="slot-time-line">${s.time}</div>
+      <div style="font-size:11px;color:#6b7280;margin-bottom:8px;">${status} · 已约：${roles}</div>
       <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;">
         <input type="checkbox" ${s.enabled ? 'checked' : ''} onchange="toggleSlot('${slotEsc}', this.checked)">
         开放预约
       </label>
-      <div style="font-size:11px;color:#6b7280;margin-top:4px;">已预约：${roles}</div>
     </div>`;
   });
   html += '</div>';
@@ -883,7 +1275,7 @@ function backToSlotDayList() {
 }
 
 async function loadSlotConfig() {
-  const wrap = document.getElementById('slotConfigWrap');
+  const wrap = document.getElementById('slotConfigModalBody');
   if (!wrap) return;
   try {
     const headers = getAuthHeaders();
@@ -928,7 +1320,13 @@ async function loadData() {
     APP.questionnaires = data.interview_questionnaires || [];
     APP.questionnaireOverrides = data.questionnaire_overrides || [];
     APP.participantByPhone = new Map();
+    APP.appointmentByPhone = new Map();
     APP.participants.forEach(p => APP.participantByPhone.set(p.phone, p));
+    APP.appointments.forEach(a => {
+      if (a.status === 'confirmed' && a.phone) {
+        APP.appointmentByPhone.set(a.phone, a);
+      }
+    });
     APP.maxGroupNumber = data.max_group_number || 0;
     APP.nextGroupNumber = data.next_group_number || null;
     const gh = document.getElementById('groupAssignHint');
@@ -938,7 +1336,6 @@ async function loadData() {
         : '组别编号已达上限';
     }
     applyFiltersAndRender();
-    loadSlotConfig();
   } catch (err) {
     console.error('loadData error:', err);
     document.getElementById('groupGrid').innerHTML = `<div class="empty" style="grid-column:1/-1;color:var(--accent);">加载失败：${err.message}</div>`;
