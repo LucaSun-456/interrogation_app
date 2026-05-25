@@ -5339,7 +5339,10 @@ async function loadBookingSlotsForInterviewer() {
     bookingState.myBooking = null;
     if (myResp.ok) {
       const myData = await myResp.json();
-      bookingState.myBooking = myData.appointment || null;
+      bookingState.myBooking = normalizeMyBookingPayload(myData);
+    }
+    if (!bookingState.myBooking && lookupData.appointment) {
+      bookingState.myBooking = lookupData.appointment;
     }
     bookingState.trainingInfo = participant.training_info || null;
     APP.phone = phone;
@@ -5627,7 +5630,7 @@ async function showAvatarTrainingSessions() {
       });
       if (myResp.ok) {
         const myData = await myResp.json();
-        bookingState.myBooking = myData.appointment || null;
+        bookingState.myBooking = normalizeMyBookingPayload(myData);
         if (bookingState.myBooking && !bookingState.myBooking.is_matched) {
           showDGroupBookingWaitModal();
           showBookingFromCaseInfo();
@@ -6475,6 +6478,19 @@ let bookingState = {
   myBooking: null,
 };
 
+/** Merge /api/appointments/my top-level fields onto appointment object. */
+function normalizeMyBookingPayload(myData) {
+  if (!myData || !myData.appointment) return null;
+  const appt = myData.appointment;
+  return {
+    ...appt,
+    is_matched: Boolean(
+      myData.is_matched !== undefined ? myData.is_matched : appt.is_matched
+    ),
+    participant_id: myData.participant_id || appt.participant_id || '',
+  };
+}
+
 const WEEKDAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
 function showPhoneScreen() {
@@ -6858,8 +6874,12 @@ async function bookSlot(slot) {
     hideLoading();
 
     // Show booking success with ID and screenshot reminder
-    const fullId = bookingState.fullId;
-    const groupNum = fullId ? fullId.split('-')[0] : '';
+    const displayId = result.participant_id || bookingState.fullId || '';
+    if (result.participant_id) {
+      bookingState.fullId = result.participant_id;
+      if (APP.participant) APP.participant.full_id = result.participant_id;
+    }
+    const groupNum = displayId ? displayId.split('-')[0] : '';
     const roleLabel = bookingState.role === 'S' ? '嫌疑人' : '审讯者';
 
     let matchStatusHtml = '';
@@ -6927,7 +6947,7 @@ async function bookSlot(slot) {
         ${downloadSection}
         <div style="margin-top:16px;padding:16px;background:white;border-radius:10px;border:2px dashed var(--primary);">
           <div style="font-size:12px;color:var(--text-light);margin-bottom:6px;">您的实验研究编号：</div>
-          <div class="id-display" style="margin:8px 0;">${fullId}</div>
+          <div class="id-display" style="margin:8px 0;">${escapeHtml(displayId) || '—'}</div>
           <div style="font-size:12px;color:var(--text-light);line-height:1.6;margin-top:8px;">
             📌 <strong>编号说明：</strong>第一段数字 <strong>${groupNum}</strong> 代表您的<strong>实验分组</strong>。<br>
             相同分组编号的参与者属于同一实验组，将配对进行正式访谈。

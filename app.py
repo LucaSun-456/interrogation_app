@@ -1890,7 +1890,7 @@ def _interviewer_appointment_paired_suspect(phone):
         return None, None, False
     time_slot = booking["time_slot"]
     slot_bookings = store.get_slot_bookings()
-    if len(slot_bookings.get(time_slot, set())) < 2:
+    if not _slot_has_both_roles(time_slot):
         return None, None, False
     suspect_phone = None
     for appt in store.get_appointments():
@@ -2723,11 +2723,36 @@ ALLOWED_FLOW_STEPS = frozenset({
 })
 
 
-def _booking_is_matched(time_slot):
+def _slot_has_both_roles(time_slot):
     if not time_slot:
         return False
     slot_bookings = store.get_slot_bookings()
-    return len(slot_bookings.get(time_slot, set())) >= 2
+    roles = slot_bookings.get(time_slot, set())
+    return "S" in roles and "I" in roles
+
+
+def _booking_is_matched(time_slot):
+    return _slot_has_both_roles(time_slot)
+
+
+def _sync_slot_participants_flow_step(time_slot, is_matched):
+    """When S+I both book the same slot, move waiting participants to booking_matched."""
+    if not is_matched or not time_slot:
+        return
+    for appt in store.get_appointments():
+        if appt.get("status") != "confirmed":
+            continue
+        if (appt.get("time_slot") or "").strip() != time_slot:
+            continue
+        ph = (appt.get("phone") or "").strip()
+        if not ph:
+            continue
+        p = store.get_participant(ph)
+        if not p:
+            continue
+        step = (p.get("flow_step") or "").strip()
+        if step in ("booking", "booking_wait", ""):
+            store.update_participant(ph, flow_step="booking_matched")
 
 
 def _participant_display_id(p):
@@ -4170,14 +4195,12 @@ def api_book_appointment():
 
     aid = store.add_appointment(phone, role, time_slot)
 
-    # Calculate is_matched
-    slot_bookings = store.get_slot_bookings()
-    booked_roles = slot_bookings.get(time_slot, set())
-    is_matched = (len(booked_roles) == 2)
+    is_matched = _slot_has_both_roles(time_slot)
     store.update_participant(
         phone,
         flow_step="booking_matched" if is_matched else "booking_wait",
     )
+    _sync_slot_participants_flow_step(time_slot, is_matched)
 
     p_after = store.get_participant(phone)
     if role == "I" and p_after:
@@ -4207,16 +4230,17 @@ def api_my_appointment():
     full_id = p["full_id"] if p else None
     if booking:
         time_slot = booking["time_slot"]
-        slot_bookings = store.get_slot_bookings()
-        booked_roles = slot_bookings.get(time_slot, set())
-        if len(booked_roles) == 2:
-            is_matched = True
-            
+        is_matched = _slot_has_both_roles(time_slot)
+        booking = dict(booking)
+        booking["is_matched"] = is_matched
+        if full_id:
+            booking["participant_id"] = _participant_display_id(p) or full_id
+
     return jsonify({
         "appointment": booking,
         "role": role,
         "is_matched": is_matched,
-        "participant_id": full_id
+        "participant_id": full_id,
     })
 
 
@@ -4757,9 +4781,11 @@ def api_lookup_participant():
     booking = store.get_my_booking(phone)
     if booking:
         time_slot = booking["time_slot"]
-        slot_bookings = store.get_slot_bookings()
-        booked_roles = slot_bookings.get(time_slot, set())
-        booking["is_matched"] = (len(booked_roles) == 2)
+        is_matched = _slot_has_both_roles(time_slot)
+        if is_matched:
+            _sync_slot_participants_flow_step(time_slot, True)
+            p = store.get_participant(phone) or p
+        booking["is_matched"] = is_matched
         booking["participant_id"] = display_id
 
     training_info = None
