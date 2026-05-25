@@ -262,9 +262,36 @@
 
   .calendar-wrap {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: 10px;
   }
+  .calendar-nav {
+    margin-bottom: 12px;
+    gap: 8px;
+  }
+  .calendar-nav input[type="date"] {
+    height: 34px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0 10px;
+    font-size: 13px;
+  }
+  .table-pager {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 10px 0;
+    font-size: 13px;
+  }
+  .table-pager select {
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+  .table-pager .pager-info { color: var(--text-light); min-width: 120px; }
   .day-col {
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -429,12 +456,6 @@
 </div>
 
 <div class="card">
-  <h2>已完成组别</h2>
-  <p class="count" style="margin-bottom:10px;">显示嫌疑人和审讯者均已完成线上实验流程的配对组（共 <span id="completedGroupCount">0</span> 组）。</p>
-  <div id="completedGroupsWrap"></div>
-</div>
-
-<div class="card">
   <h2>预约时段管理</h2>
   <p class="count" style="margin-bottom:10px;">默认时段：上午 9:30–11:00、下午 14:00–17:00、晚上 19:30–21:00（每 30 分钟一档），开放未来 24 小时至 7 天内。</p>
   <button type="button" class="btn btn-refresh" onclick="openSlotConfigModal()">打开预约时段管理</button>
@@ -443,6 +464,16 @@
 <div class="card">
   <h2>预约记录（日历视图）</h2>
   <div class="count" id="appointmentCount">加载中...</div>
+  <div class="toolbar calendar-nav">
+    <button type="button" class="btn btn-outline" id="calendarPrevBtn" onclick="calendarShiftDays(-3)">← 前三天</button>
+    <button type="button" class="btn btn-reset" onclick="calendarGoToday()">回到今天</button>
+    <label style="font-size:12px;display:flex;align-items:center;gap:6px;">
+      跳转日期
+      <input type="date" id="calendarJumpDate" onchange="calendarJumpToDate(this.value)">
+    </label>
+    <button type="button" class="btn btn-outline" id="calendarNextBtn" onclick="calendarShiftDays(3)">后三天 →</button>
+    <span class="count" id="calendarRangeHint" style="margin:0;"></span>
+  </div>
   <div id="calendarWrap" class="calendar-wrap"></div>
 </div>
 
@@ -517,6 +548,18 @@
     </div>
   </div>
   <span class="count" id="participantTableHint" style="display:block;margin-bottom:8px;"></span>
+  <div class="table-pager">
+    <label>每页显示</label>
+    <select id="participantPageSize" onchange="changeParticipantPageSize()">
+      <option value="5" selected>5</option>
+      <option value="10">10</option>
+      <option value="20">20</option>
+    </select>
+    <span>条</span>
+    <button type="button" class="btn btn-outline" id="participantPrevBtn" onclick="participantPagePrev()">上一页</button>
+    <span class="pager-info" id="participantPagerInfo">第 1 / 1 页</span>
+    <button type="button" class="btn btn-outline" id="participantNextBtn" onclick="participantPageNext()">下一页</button>
+  </div>
   <div class="table-wrap">
     <table>
       <thead>
@@ -542,6 +585,18 @@
 
 <div class="card">
   <h2>预约明细</h2>
+  <div class="table-pager">
+    <label>每页显示</label>
+    <select id="appointmentPageSize" onchange="changeAppointmentPageSize()">
+      <option value="5" selected>5</option>
+      <option value="10">10</option>
+      <option value="20">20</option>
+    </select>
+    <span>条</span>
+    <button type="button" class="btn btn-outline" id="appointmentPrevBtn" onclick="appointmentPagePrev()">上一页</button>
+    <span class="pager-info" id="appointmentPagerInfo">第 1 / 1 页</span>
+    <button type="button" class="btn btn-outline" id="appointmentNextBtn" onclick="appointmentPageNext()">下一页</button>
+  </div>
   <div class="table-wrap">
     <table>
       <thead>
@@ -624,6 +679,16 @@ const APP = {
   maxGroupNumber: 0,
   nextGroupNumber: null,
   filteredParticipantsBase: [],
+  filteredAppointments: [],
+  calendarWindowStart: null,
+  calendarAppointments: [],
+};
+
+const CALENDAR_DAYS_PER_VIEW = 3;
+
+const TABLE_PAGE = {
+  participant: { page: 1, size: 5, rows: [] },
+  appointment: { page: 1, size: 5, rows: [] },
 };
 
 function getAuthHeaders() {
@@ -760,16 +825,129 @@ function resetParticipantFilters() {
   applyParticipantTableFilter();
 }
 
+function todayYmd() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function addDaysYmd(ymd, days) {
+  const d = new Date(ymd + 'T12:00:00');
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function compareYmd(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function getPaginatedSlice(tableKey) {
+  const st = TABLE_PAGE[tableKey];
+  const rows = st.rows || [];
+  const total = rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / st.size) || 1);
+  if (st.page > totalPages) st.page = totalPages;
+  if (st.page < 1) st.page = 1;
+  const start = (st.page - 1) * st.size;
+  return {
+    slice: rows.slice(start, start + st.size),
+    page: st.page,
+    totalPages,
+    total,
+    start: total ? start + 1 : 0,
+    end: Math.min(start + st.size, total),
+  };
+}
+
+function updatePagerUi(tableKey, info) {
+  const prefix = tableKey === 'participant' ? 'participant' : 'appointment';
+  const infoEl = document.getElementById(prefix + 'PagerInfo');
+  const prevBtn = document.getElementById(prefix + 'PrevBtn');
+  const nextBtn = document.getElementById(prefix + 'NextBtn');
+  if (infoEl) {
+    infoEl.textContent = info.total
+      ? `第 ${info.page} / ${info.totalPages} 页（共 ${info.total} 条，当前 ${info.start}–${info.end}）`
+      : '暂无数据';
+  }
+  if (prevBtn) prevBtn.disabled = info.page <= 1;
+  if (nextBtn) nextBtn.disabled = info.page >= info.totalPages;
+}
+
+function participantPagePrev() {
+  if (TABLE_PAGE.participant.page > 1) {
+    TABLE_PAGE.participant.page -= 1;
+    renderParticipantTablePage();
+  }
+}
+
+function participantPageNext() {
+  const st = TABLE_PAGE.participant;
+  const totalPages = Math.max(1, Math.ceil(st.rows.length / st.size));
+  if (st.page < totalPages) {
+    st.page += 1;
+    renderParticipantTablePage();
+  }
+}
+
+function appointmentPagePrev() {
+  if (TABLE_PAGE.appointment.page > 1) {
+    TABLE_PAGE.appointment.page -= 1;
+    renderAppointmentTablePage();
+  }
+}
+
+function appointmentPageNext() {
+  const st = TABLE_PAGE.appointment;
+  const totalPages = Math.max(1, Math.ceil(st.rows.length / st.size));
+  if (st.page < totalPages) {
+    st.page += 1;
+    renderAppointmentTablePage();
+  }
+}
+
+function changeParticipantPageSize() {
+  const el = document.getElementById('participantPageSize');
+  TABLE_PAGE.participant.size = parseInt(el?.value || '5', 10) || 5;
+  TABLE_PAGE.participant.page = 1;
+  renderParticipantTablePage();
+}
+
+function changeAppointmentPageSize() {
+  const el = document.getElementById('appointmentPageSize');
+  TABLE_PAGE.appointment.size = parseInt(el?.value || '5', 10) || 5;
+  TABLE_PAGE.appointment.page = 1;
+  renderAppointmentTablePage();
+}
+
+function renderParticipantTablePage() {
+  const info = getPaginatedSlice('participant');
+  updatePagerUi('participant', info);
+  renderParticipantTable(info.slice);
+}
+
+function renderAppointmentTablePage() {
+  const info = getPaginatedSlice('appointment');
+  updatePagerUi('appointment', info);
+  renderAppointmentTable(info.slice);
+}
+
 function applyParticipantTableFilter() {
   const pf = getParticipantTableFilters();
   const base = APP.filteredParticipantsBase.length
     ? APP.filteredParticipantsBase
     : APP.participants;
   const rows = base.filter(p => participantDetailMatches(p, pf));
-  renderParticipantTable(rows);
+  TABLE_PAGE.participant.rows = rows;
+  TABLE_PAGE.participant.page = 1;
+  renderParticipantTablePage();
   const hint = document.getElementById('participantTableHint');
   if (hint) {
-    hint.textContent = `本表显示 ${rows.length} / ${base.length} 位参与者（已应用上方筛选；顶部「查找与筛选」仍影响组别看板等）`;
+    hint.textContent = `符合条件的共 ${rows.length} 位参与者（已应用本表筛选；顶部筛选仍影响组别看板等）`;
   }
 }
 
@@ -782,10 +960,14 @@ function applyFiltersAndRender() {
   document.getElementById('filterHint').textContent =
     `当前显示：${participants.length} 位参与者，${appointments.length} 条预约，${questionnaires.length} 份问卷`;
   renderGroupGrid(participants, appointments);
-  renderCompletedGroups(participants, appointments);
+  APP.filteredAppointments = appointments;
+  TABLE_PAGE.appointment.rows = appointments;
+  TABLE_PAGE.appointment.page = 1;
+  if (!APP.calendarWindowStart) APP.calendarWindowStart = todayYmd();
+  APP.calendarAppointments = appointments;
   renderCalendar(appointments);
   applyParticipantTableFilter();
-  renderAppointmentTable(appointments);
+  renderAppointmentTablePage();
   renderQuestionnaireTable(questionnaires);
   document.getElementById('participantCount').textContent = `共 ${participants.length} 位参与者`;
   document.getElementById('appointmentCount').textContent = `共 ${appointments.length} 条预约记录`;
@@ -950,76 +1132,7 @@ function closeGroupDetailModal() {
   if (modal) modal.classList.remove('show');
 }
 
-function getAppointmentForPhone(phone, appointments) {
-  const rows = appointments.filter(a => a.phone === phone && a.status === 'confirmed');
-  return rows.length ? rows[0] : null;
-}
-
-function questionnaireStatusLabel(phone) {
-  const qs = getQuestionnaireStatus(phone);
-  const parts = [];
-  parts.push('访谈前' + (qs.pre ? '✓' : '✗'));
-  parts.push('访谈后' + (qs.post ? '✓' : '✗'));
-  return parts.join(' · ');
-}
-
-function renderCompletedGroups(participants, appointments) {
-  const groupMap = new Map();
-  participants.forEach(p => {
-    const g = String(p.group_name || '').trim();
-    if (!g) return;
-    if (!groupMap.has(g)) groupMap.set(g, { S: null, I: null });
-    if (p.role === 'S') groupMap.get(g).S = p;
-    if (p.role === 'I') groupMap.get(g).I = p;
-  });
-
-  const completed = [];
-  groupMap.forEach((pair, g) => {
-    if (!pair.S || !pair.I) return;
-    if (Number(pair.S.completed) !== 1 || Number(pair.I.completed) !== 1) return;
-    completed.push({ group: g, suspect: pair.S, interviewer: pair.I });
-  });
-  completed.sort((a, b) => Number(a.group) - Number(b.group));
-
-  const host = document.getElementById('completedGroupsWrap');
-  const countEl = document.getElementById('completedGroupCount');
-  if (countEl) countEl.textContent = String(completed.length);
-
-  if (!completed.length) {
-    host.innerHTML = '<div class="empty">暂无双方均已完成实验的组别</div>';
-    return;
-  }
-
-  host.innerHTML = completed.map(({ group, suspect, interviewer }) => {
-    const sAppt = getAppointmentForPhone(suspect.phone, appointments);
-    const iAppt = getAppointmentForPhone(interviewer.phone, appointments);
-    const sSlot = sAppt ? sAppt.time_slot : '未预约';
-    const iSlot = iAppt ? iAppt.time_slot : '未预约';
-    const matchedSlot = sAppt && iAppt && sAppt.time_slot === iAppt.time_slot;
-    return `
-      <div class="completed-group-card">
-        <div class="group-title">第 ${group} 组 · 双方已完成</div>
-        <div class="completed-member s">
-          <strong>嫌疑人</strong> ${suspect.full_id || '-'}<br>
-          手机：${suspect.phone || '-'} · 案件：${caseLabel(suspect.case_type)} · ${guiltLabel(suspect.guilt)}<br>
-          预约：${sSlot} · 问卷：${questionnaireStatusLabel(suspect.phone)}
-        </div>
-        <div class="completed-member i">
-          <strong>审讯者</strong> ${interviewer.full_id || '-'}<br>
-          手机：${interviewer.phone || '-'} · 培训：${trainingLabel(interviewer.training_type)}<br>
-          预约：${iSlot} · 问卷：${questionnaireStatusLabel(interviewer.phone)}
-        </div>
-        <div class="completed-meta">
-          ${matchedSlot
-            ? '✓ 双方预约同一时段：' + sSlot
-            : '⚠ 双方预约时段不一致或未齐'}
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-function renderCalendar(appointments) {
+function buildAppointmentDayMap(appointments) {
   const dayMap = new Map();
   appointments.forEach(a => {
     const slot = String(a.time_slot || '');
@@ -1031,37 +1144,105 @@ function renderCalendar(appointments) {
     if (!daySlots.has(time)) daySlots.set(time, []);
     daySlots.get(time).push(a);
   });
+  return dayMap;
+}
 
-  const host = document.getElementById('calendarWrap');
-  const days = Array.from(dayMap.keys()).sort();
-  if (!days.length) {
-    host.innerHTML = '<div class="empty" style="grid-column:1/-1;">暂无符合条件的预约</div>';
-    return;
+function ensureCalendarWindowStart() {
+  const today = todayYmd();
+  if (!APP.calendarWindowStart || compareYmd(APP.calendarWindowStart, today) < 0) {
+    APP.calendarWindowStart = today;
   }
+}
 
-  host.innerHTML = days.map(day => {
-    const slots = Array.from(dayMap.get(day).keys()).sort();
-    const slotHtml = slots.map(time => {
-      const list = dayMap.get(day).get(time);
-      const suspectList = list.filter(x => x.role === 'S');
-      const interviewerList = list.filter(x => x.role === 'I');
-      return `
-        <div class="slot-row">
-          <div class="slot-time">${time}</div>
-          <div class="slot-roles">
-            <div class="role-box s">
-              <div class="role-title">嫌疑人</div>
-              ${renderRoleChips(suspectList)}
-            </div>
-            <div class="role-box i">
-              <div class="role-title">审讯者</div>
-              ${renderRoleChips(interviewerList)}
+function syncCalendarJumpInput() {
+  const inp = document.getElementById('calendarJumpDate');
+  if (inp) {
+    inp.min = todayYmd();
+    inp.value = APP.calendarWindowStart || todayYmd();
+  }
+}
+
+function updateCalendarNavUi() {
+  ensureCalendarWindowStart();
+  const today = todayYmd();
+  const start = APP.calendarWindowStart;
+  const end = addDaysYmd(start, CALENDAR_DAYS_PER_VIEW - 1);
+  const hint = document.getElementById('calendarRangeHint');
+  if (hint) {
+    hint.textContent = `当前显示：${start} 至 ${end}（共 ${CALENDAR_DAYS_PER_VIEW} 天）`;
+  }
+  const prevBtn = document.getElementById('calendarPrevBtn');
+  if (prevBtn) {
+    prevBtn.disabled = compareYmd(start, today) <= 0;
+  }
+  syncCalendarJumpInput();
+}
+
+function calendarGoToday() {
+  APP.calendarWindowStart = todayYmd();
+  renderCalendar(APP.calendarAppointments || []);
+}
+
+function calendarShiftDays(delta) {
+  ensureCalendarWindowStart();
+  const today = todayYmd();
+  let next = addDaysYmd(APP.calendarWindowStart, delta);
+  if (compareYmd(next, today) < 0) next = today;
+  APP.calendarWindowStart = next;
+  renderCalendar(APP.calendarAppointments || []);
+}
+
+function calendarJumpToDate(ymd) {
+  if (!ymd) return;
+  const today = todayYmd();
+  APP.calendarWindowStart = compareYmd(ymd, today) < 0 ? today : ymd;
+  renderCalendar(APP.calendarAppointments || []);
+}
+
+function renderCalendar(appointments) {
+  ensureCalendarWindowStart();
+  APP.calendarAppointments = appointments;
+  const dayMap = buildAppointmentDayMap(appointments);
+  const host = document.getElementById('calendarWrap');
+  if (!host) return;
+
+  const viewDays = [];
+  for (let i = 0; i < CALENDAR_DAYS_PER_VIEW; i++) {
+    viewDays.push(addDaysYmd(APP.calendarWindowStart, i));
+  }
+  updateCalendarNavUi();
+
+  host.innerHTML = viewDays.map(day => {
+    const isToday = day === todayYmd();
+    const daySlots = dayMap.get(day);
+    let slotHtml = '';
+    if (!daySlots || daySlots.size === 0) {
+      slotHtml = '<div class="slot-row"><div class="chip-empty" style="padding:12px;">该日暂无符合条件的预约</div></div>';
+    } else {
+      const times = Array.from(daySlots.keys()).sort();
+      slotHtml = times.map(time => {
+        const list = daySlots.get(time);
+        const suspectList = list.filter(x => x.role === 'S');
+        const interviewerList = list.filter(x => x.role === 'I');
+        return `
+          <div class="slot-row">
+            <div class="slot-time">${time}</div>
+            <div class="slot-roles">
+              <div class="role-box s">
+                <div class="role-title">嫌疑人</div>
+                ${renderRoleChips(suspectList)}
+              </div>
+              <div class="role-box i">
+                <div class="role-title">审讯者</div>
+                ${renderRoleChips(interviewerList)}
+              </div>
             </div>
           </div>
-        </div>
-      `;
-    }).join('');
-    return `<div class="day-col"><div class="day-head">${day}</div>${slotHtml}</div>`;
+        `;
+      }).join('');
+    }
+    const headLabel = isToday ? `${day}（今天）` : day;
+    return `<div class="day-col"><div class="day-head">${headLabel}</div>${slotHtml}</div>`;
   }).join('');
 }
 
@@ -1451,6 +1632,7 @@ async function deleteAppointment(id) {
 if (window.location.protocol === 'file:') {
   document.getElementById('fileProtocolWarning').style.display = 'block';
 } else {
+  APP.calendarWindowStart = todayYmd();
   bindFilters();
   loadData();
 }
