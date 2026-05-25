@@ -3123,14 +3123,24 @@ def interviewer_case_downloads():
     if not p or p.get("role") != "I":
         return jsonify({"error": "未找到审讯者"}), 404
 
-    if not store.get_my_booking(phone):
+    access = _interviewer_case_material_access(phone)
+    if access.get("status") == "no_booking":
         return jsonify({
             "paired": False,
             "slot_matched": False,
             "case_type": None,
             "case_label": None,
             "files": [],
-            "message": "请先完成时间预约后再下载案件材料。",
+            "message": access.get("message", "请先完成时间预约后再下载案件材料。"),
+        })
+    if access.get("status") == "waiting_match":
+        return jsonify({
+            "paired": False,
+            "slot_matched": False,
+            "case_type": None,
+            "case_label": None,
+            "files": [],
+            "message": access.get("message", ""),
         })
 
     case_type, guilt, slot_matched = _interviewer_appointment_paired_suspect(phone)
@@ -3141,10 +3151,7 @@ def interviewer_case_downloads():
             "case_type": None,
             "case_label": None,
             "files": [],
-            "message": (
-                "您所预约的时间段尚未有嫌疑人预约，暂无法下载案件 PDF。"
-                "请过段时间重新登录本系统，在「预约管理」中确认配对成功后再下载。"
-            ),
+            "message": access.get("message", "暂无法下载案件 PDF。"),
         })
 
     files = _interviewer_case_download_files(case_type)
@@ -4571,9 +4578,61 @@ def api_questionnaire_submit():
 
 # ====== Case Info (for interviewers) ======
 
+def _interviewer_case_material_access(phone):
+    """Whether interviewer may view case background (after booking + slot paired with suspect)."""
+    p = store.get_participant(phone)
+    if not p or p.get("role") != "I":
+        return {"status": "not_interviewer", "message": "未找到审讯者"}
+
+    booking = store.get_my_booking(phone)
+    if not booking:
+        return {
+            "status": "no_booking",
+            "message": "请先完成正式访谈时间预约，再查看案件背景与证据材料。",
+        }
+
+    time_slot = booking.get("time_slot", "")
+    case_type, guilt, slot_matched = _interviewer_appointment_paired_suspect(phone)
+    if not slot_matched:
+        return {
+            "status": "waiting_match",
+            "message": (
+                "您已预约该时间段，但尚未与嫌疑人配对成功，暂时无法查看案件材料。"
+                "请过一段时间后再登录本系统确认；配对成功后将显示与您配对嫌疑人对应的案件背景与证据。"
+            ),
+            "time_slot": time_slot,
+        }
+
+    training_type = p.get("training_type", "")
+    if training_type == "avatar_general":
+        info = GENERAL_TERRORISM_CASE_INFO
+        return {
+            "status": "ready",
+            "case_type": "terrorism",
+            "case_title": info["title"],
+            "overview": info["overview"],
+            "evidence": info["evidence"],
+            "efm_analysis": info.get("efm_analysis", ""),
+            "suspect_guilt": guilt or "",
+            "time_slot": time_slot,
+        }
+
+    info = CASE_INFO.get(case_type, CASE_INFO["arson"])
+    return {
+        "status": "ready",
+        "case_type": case_type,
+        "case_title": info["title"],
+        "overview": info["overview"],
+        "evidence": info["evidence"],
+        "efm_analysis": info.get("efm_analysis", ""),
+        "suspect_guilt": guilt or "",
+        "time_slot": time_slot,
+    }
+
+
 @app.route("/api/case-info", methods=["POST"])
 def api_case_info():
-    """Return case info for the interviewer based on their paired suspect's case type."""
+    """Return case info for interviewer after booking, when slot is paired with a suspect."""
     data = request.get_json()
     phone = (data.get("phone") or "").strip()
 
@@ -4581,34 +4640,34 @@ def api_case_info():
     if not p:
         return jsonify({"error": "未找到参与者"}), 404
 
-    training_type = p.get("training_type", "")
-    if p.get("role") == "I" and training_type == "avatar_general":
-        info = GENERAL_TERRORISM_CASE_INFO
+    if p.get("role") != "I":
+        return jsonify({"error": "仅审讯者可查看案件信息"}), 403
+
+    access = _interviewer_case_material_access(phone)
+    status = access.get("status")
+    if status != "ready":
         return jsonify({
-            "case_type": "terrorism",
-            "case_title": info["title"],
-            "overview": info["overview"],
-            "evidence": info["evidence"],
-            "efm_analysis": info.get("efm_analysis", ""),
+            "status": status,
+            "message": access.get("message", ""),
+            "time_slot": access.get("time_slot"),
+            "open_time": access.get("open_time"),
+            "case_type": None,
+            "case_title": None,
+            "overview": None,
+            "evidence": [],
+            "efm_analysis": "",
             "suspect_guilt": "",
         })
 
-    case_type = "arson"
-    suspect = None
-    group = store.get_group_by_interviewer(p["id"]) if p["role"] == "I" else None
-    if group and group.get("suspect_id"):
-        suspect = store.get_participant_by_id(group["suspect_id"])
-        if suspect:
-            case_type = suspect.get("case_type", "arson")
-
-    info = CASE_INFO.get(case_type, CASE_INFO["arson"])
     return jsonify({
-        "case_type": case_type,
-        "case_title": info["title"],
-        "overview": info["overview"],
-        "evidence": info["evidence"],
-        "efm_analysis": info.get("efm_analysis", ""),
-        "suspect_guilt": suspect.get("guilt", "") if suspect else "",
+        "status": "ready",
+        "case_type": access["case_type"],
+        "case_title": access["case_title"],
+        "overview": access["overview"],
+        "evidence": access["evidence"],
+        "efm_analysis": access.get("efm_analysis", ""),
+        "suspect_guilt": access.get("suspect_guilt", ""),
+        "time_slot": access.get("time_slot"),
     })
 
 

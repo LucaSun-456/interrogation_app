@@ -1374,7 +1374,7 @@
       <p style="margin-top:8px;font-size:14px;color:var(--text);" id="completionMsg"></p>
       <p style="margin-top:12px;font-size:12px;color:var(--text-light);">请截图此页面保存您的实验编号，并发送给研究人员确认。</p>
       <div id="completionDownloads" style="margin-top:12px;"></div>
-      <button class="btn btn-outline" onclick="downloadAllMaterials()" style="margin-top:12px;width:100%;">📥 下载全部材料</button>
+      <button class="btn btn-outline" onclick="downloadAllMaterials()" style="margin-top:12px;width:100%;">📥 下载全部材料 (PDF)</button>
     </div>
   </div>
 
@@ -2063,6 +2063,10 @@ function renderInterviewCaseSidebar(data) {
     body.innerHTML = '<p style="color:var(--accent);">' + escapeHtml((data && data.error) || '加载失败') + '</p>';
     return;
   }
+  if (data.status && data.status !== 'ready') {
+    body.innerHTML = '<p style="color:#856404;line-height:1.7;">' + escapeHtml(data.message || '案件材料暂不可用') + '</p>';
+    return;
+  }
   let html = '<h4 style="margin:0 0 8px;color:var(--primary);">' + escapeHtml(data.case_title || '案件信息') + '</h4>';
   html += '<h5 style="margin:12px 0 6px;">案件概述</h5>';
   html += '<div class="context-box" style="font-size:12px;">' + escapeHtml(data.overview || '').replace(/\n/g, '<br>') + '</div>';
@@ -2356,8 +2360,8 @@ function showDashboard(data) {
       steps = [
         { label: '阅读培训材料（文字）', desc: '阅读 SUE 相关文字材料' },
         { label: '通过 EFM 注意力检测', desc: '完成证据框架矩阵分类练习' },
-        { label: '阅读案件信息与证据', desc: '了解您将审讯的案件背景' },
         { label: '预约正式访谈时间', desc: '选择您和嫌疑人的可用时间段' },
+        { label: '阅读案件信息与证据', desc: '配对成功后查看对应案件背景与证据' },
       ];
     } else if (tt === 'avatar_specific' || tt === 'avatar_general') {
       const g = trainingGroupLabel(tt);
@@ -2365,16 +2369,16 @@ function showDashboard(data) {
         { label: `阅读 ${g} 组培训说明`, desc: '阅读文字培训说明材料' },
         { label: '阅读 SUE 理论培训材料', desc: '阅读 SUE 相关文字材料' },
         { label: '通过 EFM 注意力检测', desc: '完成证据框架矩阵分类练习' },
-        { label: '阅读案件信息与证据', desc: '了解您将审讯的案件背景' },
         { label: '预约正式访谈时间', desc: '选择您和嫌疑人的可用时间段' },
+        { label: '阅读案件信息与证据', desc: '配对成功后查看对应案件背景与证据' },
         { label: '完成 6 次虚拟审讯训练', desc: '按顺序完成 6 次虚拟嫌疑人审讯（每次 3–10 分钟），提交判断并获取反馈' },
       ];
     } else {
       steps = [
         { label: `阅读 ${trainingGroupLabel('control')} 组培训材料`, desc: '阅读文字培训材料' },
         { label: '通过注意力检测', desc: '完成注意力检测题' },
-        { label: '阅读案件信息与证据', desc: '了解您将审讯的案件背景' },
         { label: '预约正式访谈时间', desc: '选择您和嫌疑人的可用时间段' },
+        { label: '阅读案件信息与证据', desc: '配对成功后查看对应案件背景与证据' },
       ];
     }
   }
@@ -3422,7 +3426,7 @@ function renderSueEFMCheck(feedbackResults) {
   if (feedbackResults) {
     const allCorrect = feedbackResults.every(r => r.correct);
     if (allCorrect) {
-      const nextHint = '🎉 全部正确！正在进入案件信息...';
+      const nextHint = '🎉 全部正确！正在进入时间预约...';
       html += '<div id="sueAttentionFeedback" style="color:#27ae60;font-weight:600;margin-bottom:12px;">' + nextHint + '</div>';
     } else if (sueAttempt >= 2) {
       html += '<div id="sueAttentionFeedback" style="color:#c0392b;font-weight:600;margin-bottom:12px;">❌ 两次机会已用完。您未能通过注意力检测，无法继续参与实验。</div>';
@@ -3440,9 +3444,9 @@ function renderSueEFMCheck(feedbackResults) {
 
   $('trainingContent').innerHTML = html;
 
-  // Auto-advance if all correct — go to case info first, avatar training later
+  // Auto-advance if all correct — book first, then case info after pairing
   if (feedbackResults && feedbackResults.every(r => r.correct)) {
-    setTimeout(() => showCaseInfo(), 800);
+    setTimeout(() => showBookingFromCaseInfo(), 800);
   }
 }
 
@@ -3573,7 +3577,7 @@ async function showAvatarTraining(data) {
     await showAvatarTrainingSessions();
     return;
   }
-  if (tt === 'theory_sue' || tt === 'control') {
+  if (tt === 'control') {
     goToCompletionFromCaseInfo();
     return;
   }
@@ -3731,9 +3735,9 @@ async function submitControlAttention() {
       const retryBtn = document.getElementById('controlAttentionRetryBtn');
       if (retryBtn) retryBtn.classList.add('hidden');
       const feedback = document.getElementById('controlAttentionFeedback');
-      if (feedback) feedback.innerHTML = '<div style="color:#27ae60;font-weight:600;">全部正确！正在进入案件信息...</div>';
+      if (feedback) feedback.innerHTML = '<div style="color:#27ae60;font-weight:600;">全部正确！正在进入时间预约...</div>';
 
-      setTimeout(() => showCaseInfo(), 800);
+      setTimeout(() => showBookingFromCaseInfo(), 800);
     } else if (result.retry_allowed) {
       controlAttentionRetryUsed = true;
       document.getElementById('controlAttentionSubmitBtn').classList.add('hidden');
@@ -4639,11 +4643,61 @@ async function completeInterviewer() {
 
 // ====== CASE INFO SCREEN ======
 
+function configureCaseInfoNextButton() {
+  const tt = getInterviewerTrainingType();
+  if (needsSixAvatarSessions(tt)) {
+    $('caseInfoNextBtn').textContent = '我已阅读完毕，进入虚拟审讯训练 →';
+    $('caseInfoNextBtn').onclick = () => showAvatarTrainingSessions();
+  } else if (tt === 'theory_sue') {
+    $('caseInfoNextBtn').textContent = '我已阅读完毕，进入 Avatar 练习 →';
+    $('caseInfoNextBtn').onclick = () => showAvatarTraining(APP.participant);
+  } else {
+    $('caseInfoNextBtn').textContent = '我已阅读完毕，完成实验 →';
+    $('caseInfoNextBtn').onclick = goToCompletionFromCaseInfo;
+  }
+}
+
+function renderCaseInfoBlocked(result) {
+  $('caseInfoTitle').textContent = '案件材料暂不可用';
+  $('caseInfoGroup').textContent = (APP.participant && APP.participant.group_name)
+    ? '第 ' + APP.participant.group_name + ' 组'
+    : '待分配';
+  const status = result.status || '';
+  let extra = '';
+  if (result.time_slot) {
+    extra = '<p style="margin-top:12px;font-size:13px;color:var(--text-light);">您的预约时段：<strong>' + escapeHtml(result.time_slot) + '</strong></p>';
+  }
+  $('caseInfoContent').innerHTML = ''
+    + '<div style="padding:16px;background:#fff8e1;border:1px solid #ffc107;border-radius:8px;font-size:14px;line-height:1.8;color:#856404;">'
+    + escapeHtml(result.message || '暂时无法查看案件材料。')
+    + extra
+    + '</div>';
+  $('caseInfoDownloads').innerHTML = '';
+  APP.caseDownloadFiles = [];
+  if (status === 'no_booking') {
+    $('caseInfoNextBtn').textContent = '去预约正式访谈时间 →';
+    $('caseInfoNextBtn').onclick = showBookingFromCaseInfo;
+  } else {
+    $('caseInfoNextBtn').textContent = '返回预约管理，刷新配对状态 →';
+    $('caseInfoNextBtn').onclick = () => {
+      showBookingFromCaseInfo();
+      loadBookingSlotsForInterviewer();
+    };
+  }
+  showScreen('screen-case-info');
+}
+
 async function showCaseInfo() {
   showLoading('正在加载案件信息...');
   try {
     const result = await api('/api/case-info', { phone: APP.phone });
     hideLoading();
+    APP.interviewCaseInfo = result;
+
+    if (result.status && result.status !== 'ready') {
+      renderCaseInfoBlocked(result);
+      return;
+    }
 
     $('caseInfoTitle').textContent = result.case_title;
     $('caseInfoGroup').textContent = (APP.participant && APP.participant.group_name)
@@ -4651,11 +4705,9 @@ async function showCaseInfo() {
       : '待分配';
 
     let html = '';
-    // Overview
     html += '<h3>案件概述</h3>';
-    html += '<div class="context-box">' + escapeHtml(result.overview).replace(/\n/g, '<br>') + '</div>';
+    html += '<div class="context-box">' + escapeHtml(result.overview || '').replace(/\n/g, '<br>') + '</div>';
 
-    // Evidence list
     html += '<h3 style="margin-top:16px;">证据材料</h3>';
     (result.evidence || []).forEach(e => {
       html += '<div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;">';
@@ -4668,14 +4720,20 @@ async function showCaseInfo() {
 
     const dlArea = $('caseInfoDownloads');
     if (dlArea) {
-      dlArea.innerHTML = '<p style="font-size:12px;color:var(--text-light);padding:10px;background:#f7f9fc;border-radius:6px;">案件材料 PDF 请在<strong>完成时间预约且与嫌疑人配对成功</strong>后，在预约成功页面或「预约管理」中下载。</p>';
+      try {
+        const caseDl = await api('/api/interviewer-case-downloads', { phone: APP.phone });
+        APP.caseDownloadFiles = caseDl.files || [];
+        if (APP.caseDownloadFiles.length) {
+          dlArea.innerHTML = renderPdfDownloadLinksHtml(APP.caseDownloadFiles, '📂 下载案件材料（背景+证据 PDF）');
+        } else {
+          dlArea.innerHTML = '<p style="font-size:12px;color:var(--text-light);">' + escapeHtml(caseDl.message || 'PDF 暂不可用') + '</p>';
+        }
+      } catch (_) {
+        dlArea.innerHTML = '';
+      }
     }
-    APP.caseDownloadFiles = [];
 
-    // All interviewer groups go to scheduling after case info
-    $('caseInfoNextBtn').textContent = '我已阅读完毕，进入时间预约 →';
-    $('caseInfoNextBtn').onclick = showBookingFromCaseInfo;
-
+    configureCaseInfoNextButton();
     showScreen('screen-case-info');
   } catch (err) {
     hideLoading();
@@ -4684,7 +4742,8 @@ async function showCaseInfo() {
 }
 
 function goToNextAfterCaseInfo() {
-  showBookingFromCaseInfo();
+  configureCaseInfoNextButton();
+  $('caseInfoNextBtn').click();
 }
 
 // ---- Interviewer scheduling step (between case info and avatar training) ----
@@ -4782,20 +4841,11 @@ function renderBookingSlotsForInterviewer() {
           ${TENCENT_MEETING_LABEL}
         </div>`;
     } else {
-      const ttBooking = APP.participant ? APP.participant.training_type : '';
-      if (ttBooking === 'avatar_specific') {
-        matchStatusHtml = `
+      matchStatusHtml = `
         <div style="margin-top:8px;padding:8px;background:#fff3cd;border-radius:4px;color:#856404;font-size:13px;line-height:1.6;">
-          ⏳ 您已预约该时间段，但<strong>嫌疑人尚未预约</strong>同一时段。<br>
-          请过段时间后返回本界面再次查看确认；配对成功后再进入虚拟审讯训练。
+          ⏳ 您已预约该时间段，但<strong>尚未与嫌疑人配对</strong>。<br>
+          请过段时间后重新登录本系统确认；配对成功后可查看对应案件材料并继续后续步骤。
         </div>`;
-      } else {
-        matchStatusHtml = `
-        <div style="margin-top:8px;padding:8px;background:#fff3cd;border-radius:4px;color:#856404;font-size:13px;">
-          ⏳ 目前该时间段只有您预约。<br>
-          请联系研究人员，并报上您的编号：<strong>${bookingState.myBooking.participant_id || bookingState.fullId || '暂无'}</strong>
-        </div>`;
-      }
     }
 
     $('myBookingInfo').innerHTML = `
@@ -4803,7 +4853,7 @@ function renderBookingSlotsForInterviewer() {
         <span style="font-weight:600;color:var(--success);">✓ 您已预约</span>
         <span style="margin-left:8px;">${bookingState.myBooking.time_slot}</span>
         ${matchStatusHtml}
-        <div style="font-size:12px;color:var(--text-light);margin-top:8px;">${(APP.participant && APP.participant.training_type === 'avatar_specific' && !bookingState.myBooking.is_matched) ? '请稍后返回本页刷新配对状态。' : '预约已确认，请继续下一步。'}</div>
+        <div style="font-size:12px;color:var(--text-light);margin-top:8px;">${!bookingState.myBooking.is_matched ? '请稍后返回本页刷新配对状态。' : '预约已确认，请继续下一步。'}</div>
       </div>
     `;
     $('myBookingInfo').classList.remove('hidden');
@@ -4813,15 +4863,15 @@ function renderBookingSlotsForInterviewer() {
     // Show action area
     if (actionArea) {
       const tt = APP.participant ? APP.participant.training_type : '';
-      if (tt === 'avatar_specific' && !bookingState.myBooking.is_matched) {
+      if (!bookingState.myBooking.is_matched) {
         actionArea.innerHTML = `
           <button class="btn btn-outline" onclick="loadBookingSlotsForInterviewer()" style="width:100%;margin-top:12px;">刷新配对状态</button>
-          <p style="font-size:12px;color:#856404;margin-top:8px;text-align:center;">嫌疑人预约同一时段后，方可进入训练</p>
+          <p style="font-size:12px;color:#856404;margin-top:8px;text-align:center;">嫌疑人预约同一时段并配对成功后，方可查看案件材料并继续</p>
         `;
       } else {
-        let nextLabel = '完成实验 →';
+        let nextLabel = '查看案件材料并继续 →';
         if (needsSixAvatarSessions(tt)) {
-          nextLabel = '进入虚拟审讯训练（6次） →';
+          nextLabel = '查看案件材料并进入训练 →';
         }
         actionArea.innerHTML = `
           <button class="btn btn-primary" onclick="proceedAfterBooking()" style="width:100%;margin-top:12px;">${nextLabel}</button>
@@ -4919,12 +4969,7 @@ async function bookSlotForInterviewer(slot) {
 
 async function proceedAfterBooking() {
   await ensureParticipantContext();
-  const tt = getInterviewerTrainingType();
-  if (needsSixAvatarSessions(tt)) {
-    await showAvatarTrainingSessions();
-  } else {
-    goToCompletionFromCaseInfo();
-  }
+  await showCaseInfo();
 }
 
 async function goToCompletionFromCaseInfo() {
@@ -5638,27 +5683,44 @@ function downloadProfile() {
 }
 
 async function downloadAllMaterials() {
-  showLoading('正在生成材料...');
+  const phone = APP.phone;
+  if (!phone) {
+    alert('请先登录');
+    return;
+  }
+  showLoading('正在准备下载...');
   try {
-    const resp = await fetch('/api/generate-results-docx', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: APP.phone }),
-    });
-    if (!resp.ok) throw new Error('生成失败');
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const disposition = resp.headers.get('Content-Disposition') || '';
-    const fnameMatch = disposition.match(/filename="?(.+?)"?$/);
-    a.download = fnameMatch ? fnameMatch[1] : '实验记录.docx';
-    a.click();
-    URL.revokeObjectURL(url);
+    const files = [];
+    if (APP.role === 'S') {
+      const dl = await api('/api/suspect-case-downloads', { phone });
+      files.push(...(dl.files || []));
+    } else {
+      const tt = getInterviewerTrainingType();
+      if (tt) {
+        const matResp = await fetch(`/api/training-material/${tt}`);
+        if (matResp.ok) {
+          const matInfo = await matResp.json();
+          files.push(...(matInfo.files || []));
+        }
+      }
+      const caseDl = await api('/api/interviewer-case-downloads', { phone });
+      if (caseDl.files && caseDl.files.length) {
+        files.push(...caseDl.files);
+      } else if (caseDl.message) {
+        hideLoading();
+        alert(caseDl.message);
+        return;
+      }
+    }
+    hideLoading();
+    await triggerPdfDownloads(
+      files,
+      '暂无可下载的 PDF。请将对应文件放入 materials/pdf/（见 pdf/README.md）。'
+    );
   } catch (err) {
+    hideLoading();
     alert('下载失败: ' + err.message);
   }
-  hideLoading();
 }
 
 function downloadChatHistory() {
@@ -5718,6 +5780,27 @@ async function showCompletion(data) {
     } catch (_) {
       dlArea.innerHTML = '';
     }
+  } else if (dlArea && APP.role === 'I') {
+    try {
+      const files = [];
+      const tt = getInterviewerTrainingType();
+      if (tt) {
+        const matResp = await fetch(`/api/training-material/${tt}`);
+        if (matResp.ok) {
+          const matInfo = await matResp.json();
+          files.push(...(matInfo.files || []));
+        }
+      }
+      const caseDl = await api('/api/interviewer-case-downloads', { phone: APP.phone });
+      files.push(...(caseDl.files || []));
+      if (files.length) {
+        dlArea.innerHTML = renderPdfDownloadLinksHtml(files, '📂 再次下载实验材料 (PDF)');
+      } else {
+        dlArea.innerHTML = '';
+      }
+    } catch (_) {
+      dlArea.innerHTML = '';
+    }
   } else if (dlArea) {
     dlArea.innerHTML = '';
   }
@@ -5749,8 +5832,8 @@ async function buildBookingDownloadSection(isMatched) {
   if (bookingState.role === 'I') {
     if (!isMatched) {
       return '<div style="margin-top:12px;padding:12px;background:#fff8e1;border:1px solid #ffc107;border-radius:8px;font-size:13px;line-height:1.7;color:#856404;">'
-        + '📂 <strong>案件材料（背景+证据）</strong>需在您预约的时间段内<strong>已有嫌疑人预约</strong>后方可下载。'
-        + '请过段时间<strong>重新登录</strong>本系统，在「预约管理」中确认配对成功后再下载。'
+        + '📂 <strong>案件材料（背景+证据）</strong>需在您预约的时间段内<strong>与嫌疑人配对成功</strong>后方可查看与下载。'
+        + '请过段时间<strong>重新登录</strong>本系统确认配对状态。'
         + '</div>';
     }
     try {
@@ -6136,8 +6219,9 @@ async function bookSlot(slot) {
     } else {
       matchStatusHtml = `
         <div style="margin-top:12px;padding:12px;background:#fff3cd;border-radius:6px;color:#856404;font-size:14px;border:1px solid #ffc107;">
-          ⏳ 目前该时间段只有您预约。<br>
-          请联系研究人员，并报上您的编号：<strong>${result.participant_id || fullId || '暂无'}</strong>
+          ⏳ 您已预约，但<strong>尚未与嫌疑人配对</strong>。<br>
+          请过段时间后重新登录本系统确认；配对成功后可查看案件材料。
+          ${result.participant_id ? '<br>您的编号：<strong>' + escapeHtml(result.participant_id) + '</strong>' : ''}
         </div>`;
     }
 
@@ -6153,7 +6237,7 @@ async function bookSlot(slot) {
 
     const downloadSection = await buildBookingDownloadSection(result.is_matched);
 
-    if (needsSix && !trainingDone) {
+    if (bookingState.role === 'I' && needsSix && !trainingDone) {
       $('bookingResult').innerHTML = `
         <div style="margin-top:16px;padding:16px;background:#fff8e1;border:1px solid #ffc107;border-radius:8px;">
           <h3 style="border:none;margin:0 0 8px;color:#856404;">预约成功</h3>
@@ -6161,15 +6245,22 @@ async function bookSlot(slot) {
           ${matchStatusHtml}
           ${downloadSection}
           <p style="font-size:13px;color:#856404;margin-top:12px;line-height:1.6;">
-            接下来请完成 <strong>6 次</strong> 虚拟审讯训练（中性/回避/敌意 × 有罪/无罪）。
+            配对成功后请先阅读案件材料，再完成 <strong>6 次</strong> 虚拟审讯训练。
           </p>
           ${BOOKING_SCREENSHOT_NOTE}
-          <button class="btn btn-primary" onclick="proceedAfterBooking()" style="width:100%;margin-top:12px;">进入虚拟审讯训练（6次） →</button>
+          <button class="btn btn-primary" onclick="${result.is_matched ? 'proceedAfterBooking()' : 'loadBookingSlots()'}" style="width:100%;margin-top:12px;">${result.is_matched ? '查看案件材料并继续 →' : '刷新配对状态'}</button>
         </div>`;
       $('bookingResult').classList.remove('hidden');
       $('bookingSlotList').classList.add('hidden');
       renderBookingUI();
       $('bookingResult').scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+
+    if (bookingState.role === 'I' && !needsSix && !(bookingState.trainingInfo && bookingState.trainingInfo.completed)) {
+      APP.phone = phone;
+      await ensureParticipantContext();
+      await showCaseInfo();
       return;
     }
 
