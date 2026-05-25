@@ -1144,6 +1144,7 @@
     <div class="info-row"><span class="label">编号</span><span class="value" id="dashboardId"></span></div>
     <div class="info-row"><span class="label">组别</span><span class="value" id="dashboardGroup"></span></div>
     <div id="dashboardTrainingInfo" class="hidden"></div>
+    <div id="dashboardResumeHint" class="hidden" style="margin-top:12px;padding:10px 12px;background:#f0f7ff;border-radius:8px;font-size:13px;line-height:1.6;color:var(--primary);"></div>
     <h3 style="margin-top:16px;">你需要完成的步骤</h3>
     <div id="dashboardSteps" style="margin-bottom:16px;"></div>
     <div style="display:flex;gap:8px;">
@@ -2415,33 +2416,216 @@ function showDashboard(data) {
     trainingInfo.innerHTML = '';
   }
 
+  const resumeHint = $('dashboardResumeHint');
+  if (resumeHint) {
+    if (data.resume_step && data.resume_step !== 'dashboard' && data.resume_step !== 'all_done' && data.resume_step !== 'booking_done') {
+      resumeHint.innerHTML = '📌 <strong>上次进度：</strong>' + escapeHtml(data.resume_label || '继续实验');
+      resumeHint.classList.remove('hidden');
+    } else {
+      resumeHint.innerHTML = '';
+      resumeHint.classList.add('hidden');
+    }
+  }
+  const startBtn = $('dashboardStartBtn');
+  if (startBtn) {
+    startBtn.textContent = (data.resume_step && data.resume_step !== 'dashboard' && data.resume_step !== 'booking_done')
+      ? '从上次进度继续 →'
+      : (data.resume_step === 'all_done' ? '查看完成信息 →' : '开始第 1 步 →');
+  }
+
   showScreen('screen-dashboard');
 }
 
-async function startFromDashboard() {
-  const data = APP.participant;
-  if (data.role === 'S') {
-    showSuspectFlow(data);
+async function saveFlowStep(step) {
+  if (!APP.phone || !step) return;
+  try {
+    const res = await api('/api/flow-step', { phone: APP.phone, step });
+    if (APP.participant) {
+      APP.participant.flow_step = step;
+      if (res.resume_step) APP.participant.resume_step = res.resume_step;
+      if (res.resume_label) APP.participant.resume_label = res.resume_label;
+    }
+  } catch (_) { /* non-blocking */ }
+}
+
+function showBookingWaitModal() {
+  const m = $('dGroupBookingWaitModal');
+  if (m) m.classList.add('show');
+}
+
+function closeDGroupBookingWaitModal() {
+  const m = $('dGroupBookingWaitModal');
+  if (m) m.classList.remove('show');
+}
+
+function showDGroupBookingWaitModal() {
+  showBookingWaitModal();
+}
+
+async function resumeInterviewerTraining(p) {
+  const tt = p.training_type || getInterviewerTrainingType();
+  const fs = (p.flow_step || '').trim();
+  $('interviewerGroup').textContent = p.group_name ? '第 ' + p.group_name + ' 组' : '待分配';
+
+  if (tt === 'avatar_specific') {
+    if (fs === 'sue_principle_done' || fs === 'sue_efm') {
+      await showSueAttentionCheck();
+      return;
+    }
+    if (fs === 'sue_material_done') {
+      await showSuePrincipleAttention();
+      return;
+    }
+    if (fs === 'avatar_specific_intro_done') {
+      await showSUEMaterial('avatar_specific');
+      return;
+    }
+    await showAvatarSpecificInstructions(p);
     return;
   }
-  if (needsSixAvatarSessions(data.training_type)) {
-    try {
-      const lookup = await api('/api/lookup', { phone: APP.phone });
-      const ti = lookup.participant && lookup.participant.training_info;
-      const hasBooking = lookup.appointment && lookup.appointment.time_slot;
-      if (ti && !ti.all_completed && hasBooking) {
-        if (data.training_type === 'avatar_specific' && lookup.appointment && !lookup.appointment.is_matched) {
-          bookingState.myBooking = lookup.appointment;
-          showDGroupBookingWaitModal();
-          showBookingFromCaseInfo();
-          return;
-        }
-        showAvatarTrainingSessions();
-        return;
-      }
-    } catch (e) { /* fall through to normal flow */ }
+  if (tt === 'avatar_general') {
+    if (fs === 'sue_principle_done') {
+      await showSueAttentionCheck();
+      return;
+    }
+    if (fs === 'sue_material_done') {
+      await showSuePrincipleAttention();
+      return;
+    }
+    if (fs === 'avatar_general_intro_done') {
+      await showSUEMaterial('avatar_general');
+      return;
+    }
+    await showAvatarGeneralInstructions(p);
+    return;
   }
-  showInterviewerFlow(data);
+  if (tt === 'theory_sue') {
+    if (fs === 'sue_principle_done') {
+      await showSueAttentionCheck();
+      return;
+    }
+    if (fs === 'sue_material_done') {
+      await showSuePrincipleAttention();
+      return;
+    }
+    await showSUEMaterial('theory_sue');
+    return;
+  }
+  if (tt === 'control') {
+    await showControlGroup(p);
+    return;
+  }
+  showInterviewerFlow(p);
+}
+
+async function continueParticipantFlow(lookup) {
+  const p = lookup.participant;
+  const step = p.resume_step || 'dashboard';
+
+  if (step === 'terminated') {
+    $('attentionTerminatedMsg').textContent = p.resume_label || '无法继续参与实验。';
+    showScreen('screen-attention-terminated');
+    return;
+  }
+
+  if (step === 'consent_attention' || p.consent_attention_required) {
+    showConsentAttentionCheck();
+    return;
+  }
+
+  if (p.role === 'S') {
+    if (step === 'case_attention') {
+      await showSuspectFlow(p);
+      return;
+    }
+    if (step === 'serious_game') {
+      showGameLink();
+      return;
+    }
+    if (step === 'profile') {
+      showProfile();
+      return;
+    }
+    if (step === 'booking' || step === 'booking_done') {
+      bookingState.phone = APP.phone;
+      bookingState.role = 'S';
+      bookingState.fullId = p.full_id || '';
+      if (lookup.appointment) bookingState.myBooking = lookup.appointment;
+      showBookingSystem();
+      if (APP.phone) loadBookingSlots();
+      return;
+    }
+    showDashboard(p);
+    return;
+  }
+
+  bookingState.phone = APP.phone;
+  bookingState.role = 'I';
+  bookingState.fullId = p.full_id || '';
+  if (lookup.appointment) bookingState.myBooking = lookup.appointment;
+
+  if (step === 'interviewer_training') {
+    await resumeInterviewerTraining(p);
+    return;
+  }
+  if (step === 'booking' || step === 'booking_wait') {
+    if (step === 'booking_wait') showBookingWaitModal();
+    showBookingFromCaseInfo();
+    await loadBookingSlotsForInterviewer();
+    return;
+  }
+  if (step === 'case_info') {
+    await showCaseInfo();
+    return;
+  }
+  if (step === 'avatar_training') {
+    await showAvatarTrainingSessions();
+    return;
+  }
+  if (step === 'theory_practice') {
+    await showAvatarTraining(p);
+    return;
+  }
+  if (step === 'finalize') {
+    await goToCompletionFromCaseInfo();
+    return;
+  }
+  if (step === 'all_done') {
+    if (parseInt(p.completed, 10) === 1 && p.full_id) {
+      showCompletion({
+        message: `编号 ${p.full_id} (第 ${p.group_name} 组) 已完成。`,
+        full_id: p.full_id,
+      });
+      return;
+    }
+    await goToCompletionAfterTraining();
+    return;
+  }
+
+  showDashboard(p);
+}
+
+async function startFromDashboard() {
+  showLoading('正在恢复进度...');
+  try {
+    const lookup = await api('/api/lookup', { phone: APP.phone });
+    hideLoading();
+    APP.participant = { ...lookup.participant };
+    if (lookup.appointment) bookingState.myBooking = lookup.appointment;
+    await continueParticipantFlow(lookup);
+  } catch (err) {
+    hideLoading();
+    const data = APP.participant;
+    if (!data) {
+      showError(err.message);
+      return;
+    }
+    if (data.role === 'S') {
+      showSuspectFlow(data);
+      return;
+    }
+    showInterviewerFlow(data);
+  }
 }
 
 async function resumeParticipant(phone) {
@@ -2453,20 +2637,15 @@ async function resumeParticipant(phone) {
     if (lookup.found) {
       APP.phone = phone;
       APP.role = lookup.participant.role;
-
-      // Reconstruct participant data — pass through all fields
       const p = lookup.participant;
       APP.participant = { ...p, training_type: p.training_type || '' };
-
-      // Check training progress for avatar groups
       if (p.training_info) {
         APP.participant.training_info = p.training_info;
       }
-      if (p.consent_attention_required) {
-        showConsentAttentionCheck();
-        return;
+      if (lookup.appointment) {
+        bookingState.myBooking = lookup.appointment;
       }
-      showDashboard(APP.participant);
+      await continueParticipantFlow(lookup);
     } else {
       hideLoading();
       showError('未找到该手机号的记录，请先注册。');
@@ -3280,6 +3459,7 @@ async function showSUEMaterial(source) {
   $('avatarChatArea').classList.add('hidden');
   showScreen('screen-interviewer');
   await showMaterialGuidedReader('theory_sue', stepTitle, '我已阅读完毕，进入测试', async () => {
+    await saveFlowStep('sue_material_done');
     $('trainingContent').innerHTML = `
       <p style="font-size:13px;color:var(--text-light);">SUE 理论材料已阅读完毕。</p>
       <div id="sueDownloadArea"></div>
@@ -3367,6 +3547,7 @@ async function submitSuePrincipleAttention() {
       if (msg) msg.textContent = result.message || '回答不正确，无法参与正式实验。';
       return;
     }
+    await saveFlowStep('sue_principle_done');
     $('trainingContent').innerHTML = '<p style="color:#27ae60;font-weight:600;">✓ 回答正确，即将进入 EFM 检测…</p>';
     setTimeout(() => showSueAttentionCheck(), 800);
   } catch (err) {
@@ -3555,7 +3736,10 @@ async function showAvatarSpecificInstructions(data) {
     'avatar_specific',
     `第一步：阅读 ${trainingGroupLabel('avatar_specific')} 组培训说明`,
     '我已阅读完毕，进入 SUE 培训 →',
-    () => showSUEMaterial('avatar_specific'),
+    async () => {
+      await saveFlowStep('avatar_specific_intro_done');
+      showSUEMaterial('avatar_specific');
+    },
   );
 }
 
@@ -3567,7 +3751,10 @@ async function showAvatarGeneralInstructions(data) {
     'avatar_general',
     `第一步：阅读 ${trainingGroupLabel('avatar_general')} 组培训说明`,
     '我已阅读完毕，进入 SUE 培训 →',
-    () => showSUEMaterial('avatar_general'),
+    async () => {
+      await saveFlowStep('avatar_general_intro_done');
+      showSUEMaterial('avatar_general');
+    },
   );
 }
 
@@ -3634,7 +3821,8 @@ async function showControlGroup(data) {
     'control',
     `${trainingGroupLabel('control')} 组培训材料`,
     '我已阅读完毕，进入测试',
-    () => {
+    async () => {
+      await saveFlowStep('sue_material_done');
       $('trainingContent').innerHTML = `
         <h3>${trainingGroupLabel('control')} 组 — 注意力检测</h3>
         <div id="controlActionArea"></div>
@@ -4647,13 +4835,23 @@ function configureCaseInfoNextButton() {
   const tt = getInterviewerTrainingType();
   if (needsSixAvatarSessions(tt)) {
     $('caseInfoNextBtn').textContent = '我已阅读完毕，进入虚拟审讯训练 →';
-    $('caseInfoNextBtn').onclick = () => showAvatarTrainingSessions();
+    $('caseInfoNextBtn').onclick = async () => {
+      await saveFlowStep('case_info_done');
+      await showAvatarTrainingSessions();
+    };
   } else if (tt === 'theory_sue') {
     $('caseInfoNextBtn').textContent = '我已阅读完毕，进入 Avatar 练习 →';
-    $('caseInfoNextBtn').onclick = () => showAvatarTraining(APP.participant);
+    $('caseInfoNextBtn').onclick = async () => {
+      await saveFlowStep('case_info_done');
+      await saveFlowStep('theory_practice');
+      await showAvatarTraining(APP.participant);
+    };
   } else {
     $('caseInfoNextBtn').textContent = '我已阅读完毕，完成实验 →';
-    $('caseInfoNextBtn').onclick = goToCompletionFromCaseInfo;
+    $('caseInfoNextBtn').onclick = async () => {
+      await saveFlowStep('case_info_done');
+      goToCompletionFromCaseInfo();
+    };
   }
 }
 

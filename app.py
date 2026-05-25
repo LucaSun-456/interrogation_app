@@ -534,7 +534,13 @@ SHEET_SERIOUS_GAME = "serious_game_choices"
 SHEET_META = "meta"
 
 SHEET_COLUMNS = {
-    SHEET_PARTICIPANTS: ["id", "phone", "role", "group_name", "full_id", "guilt", "case_type", "training_type", "consent_attention_passed", "attention_passed", "attention_failed", "game_completed", "profile_completed", "completed", "created_at", "avatar_practice_transcript"],
+    SHEET_PARTICIPANTS: [
+        "id", "phone", "role", "group_name", "full_id", "guilt", "case_type", "training_type",
+        "consent_attention_passed", "attention_passed", "attention_failed",
+        "sue_attention_passed", "sue_attention_attempts", "control_attention_passed",
+        "game_completed", "profile_completed", "completed", "flow_step",
+        "created_at", "avatar_practice_transcript",
+    ],
     SHEET_GROUPS: ["name", "suspect_id", "interviewer_id", "created_at"],
     SHEET_PROFILES: ["participant_id", "data", "submitted_at"],
     SHEET_AVAILABILITIES: ["id", "phone", "group_name", "role", "slots", "updated_at"],
@@ -1012,10 +1018,14 @@ class ExcelStore:
                 kwargs["id"] = pid
                 kwargs.setdefault("consent_attention_passed", 0)
                 kwargs.setdefault("attention_passed", 0)
+                kwargs.setdefault("sue_attention_passed", 0)
+                kwargs.setdefault("sue_attention_attempts", 0)
+                kwargs.setdefault("control_attention_passed", 0)
                 kwargs.setdefault("full_id", "")
                 kwargs.setdefault("game_completed", 0)
                 kwargs.setdefault("profile_completed", 0)
                 kwargs.setdefault("completed", 0)
+                kwargs.setdefault("flow_step", "")
                 kwargs.setdefault("created_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                 participants.append(kwargs)
                 self._write_all(wb, SHEET_PARTICIPANTS, participants)
@@ -2378,9 +2388,125 @@ def consent_attention_required(participant):
             return False
         if int(participant.get("game_completed") or 0) == 1:
             return False
-    if participant.get("role") == "I" and int(participant.get("completed") or 0) == 1:
-        return False
+        if int(participant.get("profile_completed") or 0) == 1:
+            return False
+    if participant.get("role") == "I":
+        if int(participant.get("completed") or 0) == 1:
+            return False
+        if int(participant.get("sue_attention_passed") or 0) == 1:
+            return False
+        if int(participant.get("control_attention_passed") or 0) == 1:
+            return False
+        if participant.get("flow_step") in ("booking", "booking_wait", "booking_matched", "case_info_done", "theory_practice", "avatar_training"):
+            return False
     return True
+
+
+ALLOWED_FLOW_STEPS = frozenset({
+    "avatar_specific_intro_done",
+    "avatar_general_intro_done",
+    "sue_material_done",
+    "sue_principle_done",
+    "booking",
+    "booking_wait",
+    "booking_matched",
+    "case_info_done",
+    "theory_practice",
+    "avatar_training",
+})
+
+
+def _booking_is_matched(time_slot):
+    if not time_slot:
+        return False
+    slot_bookings = store.get_slot_bookings()
+    return len(slot_bookings.get(time_slot, set())) >= 2
+
+
+def _participant_display_id(p):
+    """Provisional or final experiment ID for UI (booking, resume)."""
+    if p.get("full_id"):
+        return p["full_id"]
+    group_name = p.get("group_name")
+    if not group_name:
+        return ""
+    try:
+        return make_full_id(group_name, p["role"], participant_id_suffix(p))
+    except Exception:
+        return ""
+
+
+def compute_participant_resume(p, booking=None):
+    """Return (resume_step, resume_label) for continuing the experiment flow."""
+    if int(p.get("attention_failed") or 0) == 1:
+        return "terminated", "注意力检测未通过，无法继续参与实验"
+
+    if consent_attention_required(p):
+        return "consent_attention", "请完成知情同意书理解检测"
+
+    role = p.get("role")
+    phone = p.get("phone")
+
+    if role == "S":
+        if not int(p.get("attention_passed") or 0):
+            return "case_attention", "阅读案件背景并通过注意力检测"
+        if not int(p.get("game_completed") or 0):
+            return "serious_game", "完成模拟行动游戏"
+        if not int(p.get("profile_completed") or 0):
+            return "profile", "填写个人信息问卷"
+        if booking is None:
+            booking = store.get_my_booking(phone)
+        if not booking:
+            return "booking", "预约正式访谈时间"
+        return "booking_done", "查看预约信息或返回首页"
+
+    if role != "I":
+        return "dashboard", "继续实验"
+
+    if int(p.get("completed") or 0) == 1:
+        return "all_done", "实验已完成，可查看编号"
+
+    training_type = p.get("training_type", "")
+    if booking is None:
+        booking = store.get_my_booking(phone)
+
+    training_done = False
+    if training_type == "control":
+        training_done = int(p.get("control_attention_passed") or 0) == 1
+    elif training_type in ("theory_sue", "avatar_specific", "avatar_general"):
+        training_done = int(p.get("sue_attention_passed") or 0) == 1
+
+    if not training_done:
+        return "interviewer_training", "继续培训材料与注意力检测"
+
+    if not booking:
+        return "booking", "预约正式访谈时间"
+
+    time_slot = booking.get("time_slot", "")
+    if not _booking_is_matched(time_slot):
+        return "booking_wait", "等待与嫌疑人配对同一时段"
+
+    flow_step = (p.get("flow_step") or "").strip()
+
+    if training_type in ("avatar_specific", "avatar_general"):
+        done_sessions = store.count_completed_training_sessions(phone)
+        if done_sessions >= 6:
+            return "all_done", "完成实验并获取编号"
+        if flow_step == "case_info_done" or done_sessions > 0:
+            return "avatar_training", f"继续虚拟审讯训练（已完成 {done_sessions}/6）"
+        return "case_info", "阅读配对案件的背景与证据"
+
+    if training_type == "theory_sue":
+        if flow_step in ("case_info_done", "theory_practice"):
+            return "theory_practice", "继续 Avatar 练习审讯"
+        return "case_info", "阅读配对案件的背景与证据"
+
+    if training_type == "control":
+        if flow_step == "case_info_done":
+            return "finalize", "完成实验"
+        return "case_info", "阅读配对案件的背景与证据"
+
+    return "dashboard", "继续实验"
 
 
 def _count_training_assignments():
@@ -3370,7 +3496,12 @@ def verify_sue_attention():
         })
 
     if all_correct:
-        store.update_participant(phone, sue_attention_passed=1, sue_attention_attempts=attempt)
+        store.update_participant(
+            phone,
+            sue_attention_passed=1,
+            sue_attention_attempts=attempt,
+            flow_step="booking",
+        )
         return jsonify({
             "all_correct": True,
             "attempt": attempt,
@@ -3430,7 +3561,7 @@ def verify_control_attention():
         })
 
     if all_correct:
-        store.update_participant(phone, control_attention_passed=1)
+        store.update_participant(phone, control_attention_passed=1, flow_step="booking")
         return jsonify({
             "all_correct": True,
             "results": results,
@@ -3544,13 +3675,36 @@ def complete_interviewer():
         full_id = make_full_id(p["group_name"], p["role"], suffix)
         store.update_participant(phone, full_id=full_id)
 
-    store.update_participant(phone, completed=1)
+    store.update_participant(phone, completed=1, flow_step="done")
 
     return jsonify({
         "success": True,
         "full_id": full_id,
         "group_name": p["group_name"],
         "message": f"编号 {full_id} (第 {p['group_name']} 组) 已完成。请截图此页面并发送给研究人员。",
+    })
+
+
+@app.route("/api/flow-step", methods=["POST"])
+def api_set_flow_step():
+    """Persist fine-grained progress within multi-screen training flows."""
+    data = request.get_json() or {}
+    phone = (data.get("phone") or "").strip()
+    step = (data.get("step") or "").strip()
+    if not phone:
+        return jsonify({"error": "手机号不能为空"}), 400
+    if step not in ALLOWED_FLOW_STEPS:
+        return jsonify({"error": "无效的进度标识"}), 400
+    p = store.get_participant(phone)
+    if not p:
+        return jsonify({"error": "未找到参与者"}), 404
+    store.update_participant(phone, flow_step=step)
+    resume_step, resume_label = compute_participant_resume(p, store.get_my_booking(phone))
+    return jsonify({
+        "success": True,
+        "flow_step": step,
+        "resume_step": resume_step,
+        "resume_label": resume_label,
     })
 
 
@@ -3736,7 +3890,12 @@ def api_book_appointment():
     booked_roles = slot_bookings.get(time_slot, set())
     is_matched = (len(booked_roles) == 2)
     p = store.get_participant(phone)
-    full_id = p["full_id"] if p else None
+    full_id = _participant_display_id(p) if p else None
+    if p:
+        store.update_participant(
+            phone,
+            flow_step="booking_matched" if is_matched else "booking_wait",
+        )
 
     return jsonify({
         "success": True, 
@@ -4352,13 +4511,14 @@ def api_lookup_participant():
     if blocked:
         return blocked
 
+    display_id = _participant_display_id(p)
     booking = store.get_my_booking(phone)
     if booking:
         time_slot = booking["time_slot"]
         slot_bookings = store.get_slot_bookings()
         booked_roles = slot_bookings.get(time_slot, set())
         booking["is_matched"] = (len(booked_roles) == 2)
-        booking["participant_id"] = p.get("full_id")
+        booking["participant_id"] = display_id
 
     training_info = None
     training_type = p.get("training_type", "")
@@ -4372,6 +4532,7 @@ def api_lookup_participant():
         }
 
     is_completed = bool(p.get("completed", 0))
+    resume_step, resume_label = compute_participant_resume(p, booking)
 
     suspect_context = None
     suspect_case_label = None
@@ -4397,14 +4558,21 @@ def api_lookup_participant():
         "participant": {
             "phone": p["phone"],
             "role": p["role"],
-            "full_id": p.get("full_id", "") if is_completed else "",
-            "group_name": p.get("group_name", "") if is_completed else "",
+            "full_id": display_id,
+            "group_name": p.get("group_name", ""),
             "completed": p.get("completed", 0),
             "game_completed": p.get("game_completed", 0),
+            "profile_completed": p.get("profile_completed", 0),
+            "attention_passed": p.get("attention_passed", 0),
             "training_type": training_type,
             "training_info": training_info,
+            "flow_step": (p.get("flow_step") or "").strip(),
+            "sue_attention_passed": int(p.get("sue_attention_passed") or 0),
+            "control_attention_passed": int(p.get("control_attention_passed") or 0),
+            "resume_step": resume_step,
+            "resume_label": resume_label,
             # Suspect fields for case background / showSuspectFlow
-            "display_id": suspect_display_id,
+            "display_id": suspect_display_id or display_id,
             "case_type": p.get("case_type"),
             "case_label": suspect_case_label,
             "context": suspect_context,
