@@ -1735,7 +1735,7 @@
       <strong>1. 访谈前问卷</strong> — 请在<strong>实验开始前 5 分钟内</strong>，点击本系统顶栏「<a href="/questionnaire/pre" target="_blank" rel="noopener" style="color:var(--primary);">访谈前问卷</a>」并完成填写。
     </p>
     <p style="font-size:13px;color:var(--text);margin-bottom:20px;line-height:1.85;">
-      <strong>2. 访谈后问卷</strong> — 请在<strong>访谈结束后的 5 分钟内</strong>，再次打开本系统并点击「<a href="/questionnaire/post" target="_blank" rel="noopener" style="color:var(--primary);">访谈后问卷</a>」完成填写。
+      <strong>2. 访谈后问卷</strong> — 请在<strong>访谈结束后</strong>打开本系统，点击「<a href="/questionnaire/post" target="_blank" rel="noopener" style="color:var(--primary);">访谈后问卷</a>」完成填写（开放后 <strong>1 小时内</strong>截止）。
     </p>
     <button class="btn-primary" onclick="closeQuestionnaireReminderModal()" style="padding:12px 40px;font-size:15px;width:100%;">我已了解</button>
   </div>
@@ -2255,7 +2255,7 @@ function buildQuestionnaireReminderBlock() {
   return '<div style="margin-top:14px;padding:14px 16px;background:#fff8e1;border:1px solid #ffb300;border-radius:8px;font-size:13px;line-height:1.85;text-align:left;">'
     + '<div style="font-weight:700;color:#e65100;margin-bottom:6px;">📋 访谈问卷（必做）</div>'
     + '· <strong>访谈开始前 5 分钟内</strong>：请在本系统点击「<a href="/questionnaire/pre" target="_blank" rel="noopener" style="color:var(--primary);font-weight:600;">访谈前问卷</a>」并完成填写。<br>'
-    + '· <strong>访谈结束后 5 分钟内</strong>：请再次点击「<a href="/questionnaire/post" target="_blank" rel="noopener" style="color:var(--primary);font-weight:600;">访谈后问卷</a>」并完成填写。'
+    + '· <strong>访谈结束后</strong>：请尽快点击「<a href="/questionnaire/post" target="_blank" rel="noopener" style="color:var(--primary);font-weight:600;">访谈后问卷</a>」并完成填写（开放后 <strong>1 小时内</strong>截止）。'
     + '</div>';
 }
 

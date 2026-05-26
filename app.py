@@ -687,8 +687,8 @@ BOOKING_SLOT_WINDOWS = [
 ]
 BOOKING_SLOT_STEP_MINUTES = 30
 QUESTIONNAIRE_PRE_OPEN_MINUTES_BEFORE = 5
-QUESTIONNAIRE_POST_CLOSE_MINUTES_AFTER_END = 5
-FORMAL_INTERVIEW_DURATION_MINUTES = BOOKING_SLOT_STEP_MINUTES
+QUESTIONNAIRE_POST_OPEN_MINUTES_AFTER_SLOT_START = 5
+QUESTIONNAIRE_POST_CLOSE_MINUTES_AFTER_OPEN = 60
 TRAINING_TYPES = ["theory_sue", "avatar_specific", "avatar_general", "control"]
 TRAINING_GROUP_LABELS = {
     "control": "A",
@@ -5203,15 +5203,15 @@ def _questionnaire_access_state(phone, phase):
         }
 
     now = datetime.now()
-    slot_end = slot_start + timedelta(minutes=FORMAL_INTERVIEW_DURATION_MINUTES)
     override_open = _is_override_open(phone, phase)
 
     if phase == PHASE_PRE:
         open_time = slot_start - timedelta(minutes=QUESTIONNAIRE_PRE_OPEN_MINUTES_BEFORE)
         close_time = slot_start
     else:
-        open_time = slot_end
-        close_time = slot_end + timedelta(minutes=QUESTIONNAIRE_POST_CLOSE_MINUTES_AFTER_END)
+        # Post questionnaire: opens 5 minutes after slot start; closes 1 hour after open.
+        open_time = slot_start + timedelta(minutes=QUESTIONNAIRE_POST_OPEN_MINUTES_AFTER_SLOT_START)
+        close_time = open_time + timedelta(minutes=QUESTIONNAIRE_POST_CLOSE_MINUTES_AFTER_OPEN)
 
     if override_open:
         is_open = True
@@ -5225,8 +5225,8 @@ def _questionnaire_access_state(phone, phase):
             )
         else:
             error = (
-                f"访谈后问卷将于正式访谈结束后开放"
-                f"（约 {open_time.strftime('%Y-%m-%d %H:%M')} 起）"
+                f"访谈后问卷将于预约时间后 {QUESTIONNAIRE_POST_OPEN_MINUTES_AFTER_SLOT_START} 分钟开放"
+                f"（{open_time.strftime('%Y-%m-%d %H:%M')} 起，截止 {close_time.strftime('%Y-%m-%d %H:%M')}）"
             )
     elif now > close_time:
         is_open = False
@@ -5237,7 +5237,7 @@ def _questionnaire_access_state(phone, phase):
             )
         else:
             error = (
-                f"访谈后问卷填写时间已结束（须在访谈结束后 {QUESTIONNAIRE_POST_CLOSE_MINUTES_AFTER_END} 分钟内完成），"
+                f"访谈后问卷填写时间已结束（开放后 {QUESTIONNAIRE_POST_CLOSE_MINUTES_AFTER_OPEN} 分钟内截止），"
                 "请联系研究人员"
             )
     else:
