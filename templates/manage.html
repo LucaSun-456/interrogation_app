@@ -1514,7 +1514,7 @@ async function loadData() {
     const gh = document.getElementById('groupAssignHint');
     if (gh) {
       gh.textContent = APP.nextGroupNumber
-        ? `当前已用最大组别：${String(APP.maxGroupNumber).padStart(3, '0')}；新预约将自动分配 ${APP.nextGroupNumber}`
+        ? `当前最大已占用组别：${String(APP.maxGroupNumber).padStart(3, '0')}；新预约将优先分配空缺组别 ${APP.nextGroupNumber}`
         : '组别编号已达上限';
     }
     applyFiltersAndRender();
@@ -1527,7 +1527,7 @@ async function loadData() {
 async function editParticipantGroup(phone, currentGroup, currentFullId) {
   if (!phone) { alert('无手机号'); return; }
   const hint = APP.nextGroupNumber
-    ? `\n（新预约自动编号为 ${APP.nextGroupNumber}；此处仅修改该参与者当前组别）`
+    ? `\n（新预约将优先分配空缺组别 ${APP.nextGroupNumber}；此处仅修改该参与者当前组别）`
     : '';
   const raw = prompt(
     `手机号：${phone}\n当前组别：${currentGroup || '无'}\n当前编号：${currentFullId || '无'}\n\n请输入新的三位数字组别（如 001、012）：${hint}`,

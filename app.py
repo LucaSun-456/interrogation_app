@@ -1210,6 +1210,7 @@ class ExcelStore:
                 self._save(wb)
             finally:
                 self._close(wb)
+        _reconcile_group_allocations()
 
     def _cleanup_group_after_participant_delete(self, wb, pid, group_name, role):
         groups = self._read_all(wb, SHEET_GROUPS)
@@ -1452,6 +1453,7 @@ class ExcelStore:
                 self._save(wb)
             finally:
                 self._close(wb)
+        _reconcile_group_allocations()
 
     def get_slot_bookings(self):
         """Return dict mapping time_slot -> set of roles booked."""
@@ -2660,24 +2662,102 @@ def _normalize_group_name(raw):
     return f"{n:03d}"
 
 
+def _active_booking_slots():
+    """Time slots that still have at least one confirmed appointment."""
+    slots = set()
+    for appt in store.get_appointments():
+        if appt.get("status") != "confirmed":
+            continue
+        slot = (appt.get("time_slot") or "").strip()
+        if slot:
+            slots.add(slot)
+    return slots
+
+
+def _groups_in_use():
+    """Group numbers reserved by participants with a confirmed booking."""
+    used = set()
+    for appt in store.get_appointments():
+        if appt.get("status") != "confirmed":
+            continue
+        p = store.get_participant((appt.get("phone") or "").strip())
+        if not p:
+            continue
+        n = _parse_group_number(p.get("group_name"))
+        if n > 0:
+            used.add(n)
+    return used
+
+
 def _max_assigned_group_number():
-    """Highest numeric group already used (meta, participants, groups sheet)."""
-    nums = []
-    for gn in _get_slot_group_map().values():
-        nums.append(_parse_group_number(gn))
+    """Highest numeric group currently in use."""
+    used = _groups_in_use()
+    return max(used) if used else 0
+
+
+def _next_available_group_number():
+    """Lowest unused group number from 001 upward (fills gaps first)."""
+    used = _groups_in_use()
+    for n in range(1, MAX_GROUPS + 1):
+        if n not in used:
+            return f"{n:03d}"
+    raise ValueError(f"Maximum group count ({MAX_GROUPS}) reached")
+
+
+def _reconcile_group_allocations():
+    """
+    Release group numbers when slots are empty; drop stale slot_map / groups rows;
+    clear group_name on participants without a confirmed booking.
+    """
+    used_nums = _groups_in_use()
+    used_names = {f"{n:03d}" for n in used_nums}
+
+    active_slots = _active_booking_slots()
+    slot_map = _get_slot_group_map()
+    new_map = {}
+    for slot in active_slots:
+        gn = slot_map.get(slot, "").strip()
+        if not gn:
+            for appt in store.get_appointments():
+                if appt.get("status") != "confirmed":
+                    continue
+                if (appt.get("time_slot") or "").strip() != slot:
+                    continue
+                p = store.get_participant((appt.get("phone") or "").strip())
+                gn = (p.get("group_name") or "").strip() if p else ""
+                if gn:
+                    break
+        if gn:
+            new_map[slot] = gn
+    if new_map != slot_map:
+        _set_slot_group_map(new_map)
+
     for p in store.get_all_participants():
-        nums.append(_parse_group_number(p.get("group_name")))
-    nums = [n for n in nums if n > 0]
-    return max(nums) if nums else 0
+        phone = (p.get("phone") or "").strip()
+        if not phone or store.has_booking(phone):
+            continue
+        if (p.get("group_name") or "").strip() or (p.get("full_id") or "").strip():
+            store.update_participant(phone, group_name="", full_id="")
+
+    with _excel_lock:
+        wb = store._load()
+        try:
+            groups = store._read_all(wb, SHEET_GROUPS)
+            pruned = [
+                g for g in groups
+                if (g.get("name") or "").strip() in used_names
+            ]
+            if len(pruned) != len(groups):
+                store._write_all(wb, SHEET_GROUPS, pruned)
+                store._save(wb)
+        finally:
+            store._close(wb)
 
 
 def _next_slot_group_number(slot_map):
-    """Next group = max(assigned globally) + 1 (not lowest gap). slot_map kept for API compat."""
+    """Next group: lowest free number (001, 002, …), reusing gaps after admin deletes."""
     _ = slot_map
-    next_n = _max_assigned_group_number() + 1
-    if next_n > MAX_GROUPS:
-        raise ValueError(f"Maximum group count ({MAX_GROUPS}) reached")
-    return f"{next_n:03d}"
+    return _next_available_group_number()
 
 
 def admin_apply_participant_group(phone, new_group_raw, sync_slot=True):
@@ -2734,7 +2814,7 @@ def admin_apply_participant_group(phone, new_group_raw, sync_slot=True):
         "slot_updated": slot_updated,
         "sync_slot": sync_slot,
         "updated": updated,
-        "next_auto_group": f"{_max_assigned_group_number() + 1:03d}",
+        "next_auto_group": _next_available_group_number(),
     }
 
 
@@ -2743,6 +2823,7 @@ def assign_group_for_time_slot(time_slot):
     slot = (time_slot or "").strip()
     if not slot:
         raise ValueError("预约时段无效")
+    _reconcile_group_allocations()
     slot_map = _get_slot_group_map()
     if slot in slot_map:
         return slot_map[slot]
@@ -5968,6 +6049,7 @@ def parse_slots(slots_str):
 @admin_required
 def admin_results():
     """Return all data for admin management page."""
+    _reconcile_group_allocations()
     participants = store.get_all_participants()
     availabilities = store.get_availabilities()
     appointments = store.get_appointments()
@@ -5979,6 +6061,10 @@ def admin_results():
         a["slots"] = parse_slots(a.get("slots", "[]"))
 
     max_g = _max_assigned_group_number()
+    try:
+        next_group = _next_available_group_number()
+    except ValueError:
+        next_group = None
     return jsonify({
         "participants": participants,
         "availabilities": availabilities,
@@ -5986,7 +6072,7 @@ def admin_results():
         "interview_questionnaires": interview_questionnaires,
         "questionnaire_overrides": questionnaire_overrides,
         "max_group_number": max_g,
-        "next_group_number": f"{max_g + 1:03d}" if max_g < MAX_GROUPS else None,
+        "next_group_number": next_group,
     })
 
 
