@@ -2054,24 +2054,38 @@ def sanitize_text_for_tts(text):
 
 def deepseek_chat_completion(messages, *, temperature=0.7, max_tokens=100, timeout=15):
     """Call DeepSeek chat completions API; returns assistant message text."""
+    payload = {
+        "model": DEEPSEEK_CHAT_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    # v4 models may emit empty content when thinking is enabled (reasoning in reasoning_content).
+    if str(DEEPSEEK_CHAT_MODEL).startswith("deepseek-v4"):
+        payload["thinking"] = {"type": "disabled"}
+
     resp = requests.post(
         "https://api.deepseek.com/v1/chat/completions",
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
         },
-        json={
-            "model": DEEPSEEK_CHAT_MODEL,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        },
+        json=payload,
         timeout=timeout,
     )
     if resp.status_code != 200:
         raise RuntimeError(f"DeepSeek API Error: {resp.text}")
     data = resp.json()
-    return data["choices"][0]["message"]["content"]
+    choice = data["choices"][0]
+    message = choice.get("message") or {}
+    content = message.get("content")
+    if content is None:
+        content = ""
+    content = str(content).strip()
+    if not content:
+        finish_reason = choice.get("finish_reason") or "unknown"
+        raise RuntimeError(f"DeepSeek 返回空回复 (finish_reason={finish_reason})")
+    return content
 
 
 def _normalize_suspect_profile_data(profile_data):
@@ -4189,7 +4203,7 @@ def chat():
         reply = deepseek_chat_completion(
             messages, temperature=0.8, max_tokens=150, timeout=30,
         )
-        return jsonify({"reply": reply})
+        return jsonify({"reply": reply.strip()})
 
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 500
@@ -5701,7 +5715,7 @@ def api_avatar_training_chat():
 
     try:
         reply_text = deepseek_chat_completion(messages, temperature=0.7, max_tokens=100)
-        return jsonify({"reply": reply_text})
+        return jsonify({"reply": reply_text.strip()})
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 500
     except requests.exceptions.RequestException as e:

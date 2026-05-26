@@ -5081,7 +5081,10 @@ async function processAvatarChatMessage(text) {
       message: trimmed,
       history: APP.chatHistory.slice(0, -1),
     });
-    const reply = chatResp.reply;
+    const reply = (chatResp.reply || '').trim();
+    if (!reply) {
+      throw new Error('Avatar 未返回有效回复，请重试');
+    }
 
     APP.chatHistory.push({ role: 'assistant', content: reply });
     setAvatarPhase('live', 'preparing');
@@ -6206,7 +6209,10 @@ async function processTrainingUserMessage(message) {
       history: APP.trainingSession.chatHistory.slice(0, -1),
     });
 
-    const reply = chatResp.reply;
+    const reply = (chatResp.reply || '').trim();
+    if (!reply) {
+      throw new Error('Avatar 未返回有效回复，请重试');
+    }
     APP.trainingSession.chatHistory.push({ role: 'assistant', content: reply });
     appendTrainingChatMessage('avatar', reply);
     APP.trainingSession.transcript.push({ role: 'avatar', text: reply });
