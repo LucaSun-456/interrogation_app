@@ -648,6 +648,7 @@ SHEET_COLUMNS = {
         "sue_attention_passed", "sue_attention_attempts", "control_attention_passed",
         "game_completed", "profile_completed", "completed", "flow_step",
         "created_at", "avatar_practice_transcript",
+        "training_avatar_order", "training_ui_order",
     ],
     SHEET_GROUPS: ["name", "suspect_id", "interviewer_id", "created_at"],
     SHEET_PROFILES: ["participant_id", "data", "submitted_at"],
@@ -685,6 +686,9 @@ BOOKING_SLOT_WINDOWS = [
     ("19:30", "21:00"),
 ]
 BOOKING_SLOT_STEP_MINUTES = 30
+QUESTIONNAIRE_PRE_OPEN_MINUTES_BEFORE = 5
+QUESTIONNAIRE_POST_CLOSE_MINUTES_AFTER_END = 5
+FORMAL_INTERVIEW_DURATION_MINUTES = BOOKING_SLOT_STEP_MINUTES
 TRAINING_TYPES = ["theory_sue", "avatar_specific", "avatar_general", "control"]
 TRAINING_GROUP_LABELS = {
     "control": "A",
@@ -5199,9 +5203,46 @@ def _questionnaire_access_state(phone, phase):
         }
 
     now = datetime.now()
-    open_time = slot_start - timedelta(minutes=5) if phase == PHASE_PRE else slot_start
+    slot_end = slot_start + timedelta(minutes=FORMAL_INTERVIEW_DURATION_MINUTES)
     override_open = _is_override_open(phone, phase)
-    is_open = override_open or now >= open_time
+
+    if phase == PHASE_PRE:
+        open_time = slot_start - timedelta(minutes=QUESTIONNAIRE_PRE_OPEN_MINUTES_BEFORE)
+        close_time = slot_start
+    else:
+        open_time = slot_end
+        close_time = slot_end + timedelta(minutes=QUESTIONNAIRE_POST_CLOSE_MINUTES_AFTER_END)
+
+    if override_open:
+        is_open = True
+        error = ""
+    elif now < open_time:
+        is_open = False
+        if phase == PHASE_PRE:
+            error = (
+                f"访谈前问卷将于访谈开始前 {QUESTIONNAIRE_PRE_OPEN_MINUTES_BEFORE} 分钟开放"
+                f"（{open_time.strftime('%Y-%m-%d %H:%M')} 起，至 {close_time.strftime('%H:%M')} 前完成）"
+            )
+        else:
+            error = (
+                f"访谈后问卷将于正式访谈结束后开放"
+                f"（约 {open_time.strftime('%Y-%m-%d %H:%M')} 起）"
+            )
+    elif now > close_time:
+        is_open = False
+        if phase == PHASE_PRE:
+            error = (
+                f"访谈前问卷填写时间已结束（须在访谈开始前 {QUESTIONNAIRE_PRE_OPEN_MINUTES_BEFORE} 分钟内完成），"
+                "请联系研究人员"
+            )
+        else:
+            error = (
+                f"访谈后问卷填写时间已结束（须在访谈结束后 {QUESTIONNAIRE_POST_CLOSE_MINUTES_AFTER_END} 分钟内完成），"
+                "请联系研究人员"
+            )
+    else:
+        is_open = True
+        error = ""
 
     submitted_rows = store.get_interview_questionnaires(phone=phone, phase=phase)
     submitted = len(submitted_rows) > 0
@@ -5209,10 +5250,11 @@ def _questionnaire_access_state(phone, phase):
     return {
         "ok": is_open,
         "status": "open" if is_open else "locked",
-        "error": "" if is_open else ("问卷尚未开放，请在开放时间后填写"),
+        "error": error,
         "role": p.get("role"),
         "appointment_slot": slot_str,
         "open_time": open_time.strftime("%Y-%m-%d %H:%M"),
+        "close_time": close_time.strftime("%Y-%m-%d %H:%M"),
         "now": now.strftime("%Y-%m-%d %H:%M"),
         "manual_override": override_open,
         "submitted": submitted,
@@ -5399,6 +5441,88 @@ def api_case_info():
 
 # ====== Avatar Training Sessions (6-session requirement) ======
 
+def _parse_training_order_csv(raw):
+    """Parse comma-separated permutation of 1..6."""
+    if not raw:
+        return None
+    try:
+        parts = [int(x.strip()) for x in str(raw).split(",") if str(x).strip()]
+    except (TypeError, ValueError):
+        return None
+    if len(parts) != 6 or sorted(parts) != list(range(1, 7)):
+        return None
+    return parts
+
+
+def _reconstruct_training_avatar_order_from_sessions(sessions):
+    """Infer avatar assignment order from existing training_sessions rows."""
+    order = [None] * 6
+    for s in sessions:
+        try:
+            sn = int(s.get("session_num"))
+        except (TypeError, ValueError):
+            continue
+        if sn < 1 or sn > 6:
+            continue
+        setting = s.get("avatar_setting", "")
+        guilt = s.get("avatar_guilt", "")
+        matched = None
+        for i, cfg in enumerate(AVATAR_TRAINING_SETTINGS):
+            if cfg["setting"] == setting and cfg["guilt"] == guilt:
+                matched = i + 1
+                break
+        if matched is not None:
+            order[sn - 1] = matched
+    if all(x is not None for x in order):
+        return order
+    return None
+
+
+def _ensure_training_avatar_order(phone):
+    """Per-participant permutation: session N uses AVATAR_TRAINING_SETTINGS[order[N-1]-1]."""
+    p = store.get_participant(phone)
+    if not p:
+        return list(range(1, 7))
+    existing = _parse_training_order_csv(p.get("training_avatar_order"))
+    if existing:
+        return existing
+    sessions = store.get_training_sessions(phone)
+    inferred = _reconstruct_training_avatar_order_from_sessions(sessions)
+    if inferred:
+        store.update_participant(phone, training_avatar_order=",".join(str(x) for x in inferred))
+        return inferred
+    order = list(range(1, 7))
+    random.shuffle(order)
+    store.update_participant(phone, training_avatar_order=",".join(str(x) for x in order))
+    return order
+
+
+def _ensure_training_ui_order(phone):
+    """Per-participant card layout order on the training list screen."""
+    p = store.get_participant(phone)
+    if not p:
+        return list(range(1, 7))
+    existing = _parse_training_order_csv(p.get("training_ui_order"))
+    if existing:
+        return existing
+    order = list(range(1, 7))
+    random.shuffle(order)
+    store.update_participant(phone, training_ui_order=",".join(str(x) for x in order))
+    return order
+
+
+def _training_setting_for_session(phone, session_num):
+    """Avatar config for sequential session_num (1–6) under this participant's random order."""
+    try:
+        sn = int(session_num)
+    except (TypeError, ValueError):
+        sn = 1
+    sn = max(1, min(6, sn))
+    order = _ensure_training_avatar_order(phone)
+    setting_index = order[sn - 1]
+    return AVATAR_TRAINING_SETTINGS[setting_index - 1]
+
+
 def _first_incomplete_training_session(existing_sessions):
     """Lowest session number 1..6 that is not fully completed (missing judgment or feedback)."""
     for i in range(1, 7):
@@ -5429,6 +5553,9 @@ def api_avatar_training_status():
     completed_count = len(completed)
     next_session_num = _first_incomplete_training_session(sessions)
 
+    _ensure_training_avatar_order(phone)
+    ui_order = _ensure_training_ui_order(phone)
+
     session_list = []
     for i in range(1, 7):
         existing = None
@@ -5436,13 +5563,9 @@ def api_avatar_training_status():
             if str(s.get("session_num")) == str(i):
                 existing = s
                 break
-        raw_label = AVATAR_TRAINING_SETTINGS[i - 1]["label"] if i <= len(AVATAR_TRAINING_SETTINGS) else ""
-        public_label = avatar_setting_label_public(raw_label, training_type)
         if existing:
             session_list.append({
                 "session_num": i,
-                "avatar_setting": existing.get("avatar_setting", ""),
-                "avatar_label": public_label,
                 "completed": bool(existing.get("judgment") and existing.get("feedback")),
                 "judgment": existing.get("judgment", ""),
                 "feedback": existing.get("feedback", ""),
@@ -5455,13 +5578,13 @@ def api_avatar_training_status():
         else:
             session_list.append({
                 "session_num": i,
-                "avatar_setting": AVATAR_TRAINING_SETTINGS[i - 1]["setting"] if i <= len(AVATAR_TRAINING_SETTINGS) else "",
-                "avatar_label": public_label,
                 "completed": False,
                 "judgment": "",
                 "feedback": "",
                 "avatar_guilt_label": "",
             })
+
+    session_list.sort(key=lambda row: ui_order.index(int(row["session_num"])))
 
     return jsonify({
         "training_type": p.get("training_type", ""),
@@ -5511,7 +5634,7 @@ def api_avatar_training_start():
 
     next_num = requested
 
-    setting_info = AVATAR_TRAINING_SETTINGS[next_num - 1]
+    setting_info = _training_setting_for_session(phone, next_num)
     avatar_setting = setting_info["setting"]
     avatar_guilt = setting_info["guilt"]
 
@@ -5535,8 +5658,6 @@ def api_avatar_training_start():
     return jsonify({
         "session_num": next_num,
         "training_type": effective_type,
-        "avatar_setting": avatar_setting,
-        "avatar_label": avatar_setting_label_public(setting_info["label"], effective_type),
         "avatar_id": avatar_config.get("avatar_id", ""),
         "face_id": avatar_config.get("face_id", ""),
         "elevenlabs_voice_id": avatar_config.get("elevenlabs_voice_id", ""),
@@ -5607,8 +5728,8 @@ def api_avatar_training_submit():
                 {"role": "user", "content": user_message},
             ],
             temperature=0.7,
-            max_tokens=1200,
-            timeout=60,
+            max_tokens=4096,
+            timeout=180,
         )
     except Exception as e:
         feedback = f"反馈生成失败: {str(e)}"

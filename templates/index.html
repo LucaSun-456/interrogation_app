@@ -1723,6 +1723,24 @@
   </div>
 </div>
 
+<!-- Interview questionnaire reminder -->
+<div class="number-reminder-overlay" id="questionnaireReminderModal">
+  <div class="number-reminder-modal" style="text-align:left;max-width:440px;">
+    <div class="warning-icon" style="text-align:center;">📋</div>
+    <h3 style="color:var(--primary);border:none;margin-bottom:8px;text-align:center;">请务必按时填写访谈问卷</h3>
+    <p style="font-size:13px;color:var(--text);margin-bottom:12px;line-height:1.85;">
+      正式访谈除腾讯会议外，还需在本系统完成两份问卷：
+    </p>
+    <p style="font-size:13px;color:var(--text);margin-bottom:12px;line-height:1.85;">
+      <strong>1. 访谈前问卷</strong> — 请在<strong>实验开始前 5 分钟内</strong>，点击本系统顶栏「<a href="/questionnaire/pre" target="_blank" rel="noopener" style="color:var(--primary);">访谈前问卷</a>」并完成填写。
+    </p>
+    <p style="font-size:13px;color:var(--text);margin-bottom:20px;line-height:1.85;">
+      <strong>2. 访谈后问卷</strong> — 请在<strong>访谈结束后的 5 分钟内</strong>，再次打开本系统并点击「<a href="/questionnaire/post" target="_blank" rel="noopener" style="color:var(--primary);">访谈后问卷</a>」完成填写。
+    </p>
+    <button class="btn-primary" onclick="closeQuestionnaireReminderModal()" style="padding:12px 40px;font-size:15px;width:100%;">我已了解</button>
+  </div>
+</div>
+
 <!-- Screenshot confirmation modal -->
 <div class="screenshot-modal-overlay" id="screenshotModal">
   <div class="screenshot-modal">
@@ -1765,7 +1783,8 @@ const APP = {
   sg_recap_passed: false,
 };
 
-const TENCENT_MEETING_LABEL = '#腾讯会议：915-688-5929';
+const TENCENT_MEETING_ID = '915-688-5929';
+const TENCENT_MEETING_LABEL = '#腾讯会议：' + TENCENT_MEETING_ID;
 
 const TRAINING_GROUP_LABELS = {
   control: 'A',
@@ -2215,6 +2234,41 @@ function escapeHtml(str) {
   if (!str) return '';
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+/** Minimal markdown: **bold** and line breaks. Input is escaped first. */
+function renderSimpleMarkdown(text) {
+  let s = escapeHtml(text || '');
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/\n/g, '<br>');
+  return s;
+}
+
+function renderTencentMeetingBanner() {
+  return '<div style="margin:16px 0;padding:18px;background:linear-gradient(135deg,#e3f2fd 0%,#bbdefb 100%);border:2px solid #1976d2;border-radius:10px;text-align:center;">'
+    + '<div style="font-size:14px;color:#1565c0;font-weight:700;margin-bottom:8px;">📹 正式访谈 · 腾讯会议号</div>'
+    + '<div style="font-size:32px;font-weight:800;color:#0d47a1;letter-spacing:3px;line-height:1.2;">' + escapeHtml(TENCENT_MEETING_ID) + '</div>'
+    + '<div style="font-size:12px;color:#455a64;margin-top:10px;">请在预约时间准时加入腾讯会议进行正式访谈</div>'
+    + '</div>';
+}
+
+function buildQuestionnaireReminderBlock() {
+  return '<div style="margin-top:14px;padding:14px 16px;background:#fff8e1;border:1px solid #ffb300;border-radius:8px;font-size:13px;line-height:1.85;text-align:left;">'
+    + '<div style="font-weight:700;color:#e65100;margin-bottom:6px;">📋 访谈问卷（必做）</div>'
+    + '· <strong>访谈开始前 5 分钟内</strong>：请在本系统点击「<a href="/questionnaire/pre" target="_blank" rel="noopener" style="color:var(--primary);font-weight:600;">访谈前问卷</a>」并完成填写。<br>'
+    + '· <strong>访谈结束后 5 分钟内</strong>：请再次点击「<a href="/questionnaire/post" target="_blank" rel="noopener" style="color:var(--primary);font-weight:600;">访谈后问卷</a>」并完成填写。'
+    + '</div>';
+}
+
+function showQuestionnaireReminderModal() {
+  const el = $('questionnaireReminderModal');
+  if (el) el.classList.add('show');
+}
+
+function closeQuestionnaireReminderModal() {
+  const el = $('questionnaireReminderModal');
+  if (el) el.classList.remove('show');
+}
+
 function showLoading(text) { $('loadingText').textContent = text || '正在处理...'; $('loadingOverlay').classList.add('show'); }
 function hideLoading() { $('loadingOverlay').classList.remove('show'); }
 
@@ -5872,7 +5926,7 @@ async function showAvatarTrainingSessions() {
       } else if (status.training_type === 'avatar_general') {
         hintEl.innerHTML = `
           <div><strong>${trainingGroupLabel('avatar_general')} 组说明：</strong></div>
-          <div>共 <strong>6</strong> 次训练，对应六种人格设定组合；案件背景为独立情境（与 ${trainingGroupLabel('avatar_specific')} 组不同）。</div>
+          <div>共 <strong>6</strong> 次虚拟审讯训练；案件背景为独立情境（与 ${trainingGroupLabel('avatar_specific')} 组不同）。</div>
           <div style="margin-top:4px;color:var(--accent);font-weight:600;">
             ⚠️ 请<strong>按顺序</strong>完成；每次须用语音讯问并在结束时提交有罪/无罪判断。全部完成后才算报名成功并获得实验编号。
           </div>
@@ -5893,13 +5947,9 @@ async function showAvatarTrainingSessions() {
       const done = s.completed;
       const canStart = !done && nextNum && Number(s.session_num) === Number(nextNum);
       html += '<div style="border:1px solid ' + (done ? 'var(--success)' : 'var(--border)') + ';border-radius:8px;padding:10px;text-align:center;' + (done ? 'background:#f0fdf4;' : '') + '">';
-      html += '<div style="font-weight:600;font-size:13px;">训练 #' + s.session_num + '</div>';
-      if (status.training_type !== 'avatar_general') {
-        html += '<div style="font-size:11px;color:var(--text-light);margin-top:4px;line-height:1.35;">' + escapeHtml(s.avatar_label || '') + '</div>';
-      }
+      html += '<div style="font-weight:600;font-size:13px;">第 ' + s.session_num + ' 次训练</div>';
       if (done) {
         html += '<div style="color:var(--success);font-size:12px;margin-top:4px;">✓ 已完成</div>';
-        html += '<div style="font-size:11px;margin-top:2px;">判断: ' + (s.judgment === 'guilty' ? '有罪' : '无罪') + '</div>';
         if (s.feedback) {
           html += '<button class="btn btn-outline" style="font-size:10px;padding:2px 8px;margin-top:4px;" onclick="showTrainingFeedback(\'' + escapeHtml(s.feedback) + '\', ' + s.session_num + ', \'' + escapeHtml(s.avatar_guilt_label || '') + '\')">查看反馈</button>';
         }
@@ -5965,20 +6015,18 @@ async function startAvatarTrainingSessionInternal(sessionNum) {
 
     APP.trainingSession = {
       sessionNum: sessionData.session_num,
-      avatarSetting: sessionData.avatar_setting,
-      avatarGuilt: sessionData.avatar_guilt,
       trainingType: sessionData.training_type || '',
       systemPrompt: sessionData.system_prompt || '',
-      avatarLabel: sessionData.avatar_label || '',
       chatHistory: [],
       transcript: [],
     };
 
-    $('activeSessionTitle').textContent = '训练 #' + sessionData.session_num;
-    const label = sessionData.avatar_label || '';
-    $('activeSessionSetting').textContent = sessionData.training_type === 'avatar_specific'
-      ? (trainingGroupLabel('avatar_specific') + ' 组 · ' + label)
-      : (trainingGroupLabel('avatar_general') + ' 组 · ' + label);
+    $('activeSessionTitle').textContent = '第 ' + sessionData.session_num + ' 次训练';
+    const settingBadge = $('activeSessionSetting');
+    if (settingBadge) {
+      settingBadge.textContent = trainingGroupLabel(sessionData.training_type) + ' 组';
+      settingBadge.classList.remove('hidden');
+    }
     $('trainingChatMessages').innerHTML = '';
     $('trainingChatPlaceholder').classList.remove('hidden');
     $('trainingJudgmentForm').classList.add('hidden');
@@ -6433,7 +6481,7 @@ function showTrainingFeedback(feedback, sessionNum, avatarGuiltLabel) {
     html += '<strong>该 Avatar 的真实罪责状态：</strong>' + escapeHtml(avatarGuiltLabel);
     html += '</div>';
   }
-  html += '<div style="font-size:13px;line-height:1.8;white-space:pre-wrap;">' + escapeHtml(feedback) + '</div>';
+  html += '<div class="feedback-markdown" style="font-size:13px;line-height:1.8;">' + renderSimpleMarkdown(feedback) + '</div>';
   html += '<button class="btn btn-primary" onclick="showAvatarTrainingSessions()" style="margin-top:12px;">返回训练列表</button>';
 
   $('trainingFeedbackArea').innerHTML = html;
@@ -6587,6 +6635,7 @@ function showScreenshotModal() {
 function confirmScreenshot() {
   screenshotConfirmed = true;
   $('screenshotModal').classList.remove('show');
+  setTimeout(showQuestionnaireReminderModal, 400);
 }
 
 function remindScreenshot() {
@@ -6865,8 +6914,7 @@ function renderBookingUI() {
     if (myBooking.is_matched) {
       matchStatusHtml = `
         <div style="margin-top:8px;padding:8px;background:#e8f5e9;border-radius:4px;color:#2e7d32;font-size:13px;font-weight:600;">
-          🎉 匹配成功！<br>
-          ${TENCENT_MEETING_LABEL}
+          🎉 匹配成功！
         </div>`;
     } else {
       matchStatusHtml = `
@@ -6875,7 +6923,9 @@ function renderBookingUI() {
           请联系研究人员，并报上您的编号：<strong>${myBooking.participant_id || fullId || '暂无'}</strong>
         </div>`;
     }
+    matchStatusHtml += renderTencentMeetingBanner() + buildQuestionnaireReminderBlock();
 
+    const myPid = myBooking.participant_id || fullId || '';
     myBookingHtml = `
       <div class="my-booking-card">
         <div style="font-size:12px;color:var(--text-light);">📌 我的预约</div>
@@ -6883,6 +6933,9 @@ function renderBookingUI() {
         <div style="font-size:13px;color:var(--text-light);">
           角色：${roleLabel}
         </div>
+        ${myPid ? '<div style="margin-top:10px;padding:10px;background:#fff;border:2px dashed var(--primary);border-radius:8px;text-align:center;">'
+          + '<div style="font-size:11px;color:var(--text-light);">您的实验研究编号</div>'
+          + '<div class="id-display" style="margin:6px 0;font-size:22px;">' + escapeHtml(myPid) + '</div></div>' : ''}
         ${matchStatusHtml}
         ${role === 'S'
           ? '<button class="btn btn-outline" onclick="downloadSuspectScenarioPdf()" style="margin-top:10px;width:100%;">📥 下载情景材料 (PDF)</button>'
@@ -7120,9 +7173,10 @@ async function bookSlot(slot) {
       matchStatusHtml = `
         <div style="margin-top:12px;padding:12px;background:#e8f5e9;border-radius:6px;color:#2e7d32;font-size:14px;font-weight:600;border:1px solid #4caf50;">
           🎉 匹配成功！<br>
-          您和另一位参与者都已预约此时间。<br>
-          ${TENCENT_MEETING_LABEL}
-        </div>`;
+          您和另一位参与者都已预约此时间。
+        </div>
+        ${renderTencentMeetingBanner()}
+        ${buildQuestionnaireReminderBlock()}`;
     } else {
       matchStatusHtml = `
         <div style="margin-top:12px;padding:12px;background:#fff3cd;border-radius:6px;color:#856404;font-size:14px;border:1px solid #ffc107;">
@@ -7178,6 +7232,7 @@ async function bookSlot(slot) {
         <p style="font-size:14px;">预约时间：<strong>${slot}</strong>（角色：${roleLabel}）</p>
         ${matchStatusHtml}
         ${downloadSection}
+        ${renderTencentMeetingBanner()}
         <div style="margin-top:16px;padding:16px;background:white;border-radius:10px;border:2px dashed var(--primary);">
           <div style="font-size:12px;color:var(--text-light);margin-bottom:6px;">您的实验研究编号：</div>
           <div class="id-display" style="margin:8px 0;">${escapeHtml(displayId) || '—'}</div>
@@ -7186,6 +7241,7 @@ async function bookSlot(slot) {
             相同分组编号的参与者属于同一实验组，将配对进行正式访谈。
           </div>
         </div>
+        ${buildQuestionnaireReminderBlock()}
         ${BOOKING_SCREENSHOT_NOTE}
         <button class="btn btn-primary" onclick="confirmBookingScreenshot()" style="margin-top:12px;width:100%;">确定，我已截图并已发给研究人员</button>
       </div>
@@ -7197,6 +7253,8 @@ async function bookSlot(slot) {
     // Suspect screenshot confirmation should happen after booking is done.
     if (bookingState.role === 'S') {
       setTimeout(() => showScreenshotModal(), 300);
+    } else {
+      setTimeout(() => showQuestionnaireReminderModal(), 600);
     }
 
     // Scroll to result
@@ -7210,8 +7268,8 @@ async function bookSlot(slot) {
 }
 
 function confirmBookingScreenshot() {
-  // After confirming screenshot, refresh the booking view
-  alert('感谢您的确认！请确保已截图保存。');
+  alert('感谢您的确认！请确保已截图保存，并记得在访谈前后按时填写问卷。');
+  showQuestionnaireReminderModal();
   $('bookingResult').classList.add('hidden');
   loadBookingSlots();
 }

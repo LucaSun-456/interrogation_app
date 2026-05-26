@@ -256,7 +256,13 @@ async function loadQuestionnaire() {
       return;
     }
     if (!st.ok) {
-      setStatus((st.error || '当前不可填写') + '（开放时间：' + (st.open_time || '-') + '）');
+      let msg = st.error || '当前不可填写';
+      if (st.open_time && st.close_time) {
+        msg += '（开放：' + st.open_time + ' — ' + st.close_time + '）';
+      } else if (st.open_time) {
+        msg += '（开放时间：' + st.open_time + '）';
+      }
+      setStatus(msg);
       return;
     }
 
@@ -278,7 +284,14 @@ async function loadQuestionnaire() {
 
     renderQuestions(qData.role, qData.questions || []);
     document.getElementById('questionCard').classList.remove('hidden');
-    setStatus(st.submitted ? '您已提交过该阶段问卷，重新提交将覆盖原记录。' : '问卷已开放，请填写并提交。', true);
+    let openHint = '';
+    if (st.open_time && st.close_time) {
+      openHint = '（请在 ' + st.open_time + ' 至 ' + st.close_time + ' 之间完成）';
+    }
+    setStatus(
+      (st.submitted ? '您已提交过该阶段问卷，重新提交将覆盖原记录。' : '问卷已开放，请填写并提交。') + openHint,
+      true
+    );
   } catch (e) {
     setStatus('加载失败：' + e.message);
   }
