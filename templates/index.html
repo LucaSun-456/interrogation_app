@@ -2314,11 +2314,56 @@ function syncRouteForScreen(screenId, replace) {
 function hideAll() {
   document.querySelectorAll('#app > .card').forEach(c => c.classList.add('hidden'));
 }
+
+let currentScreenId = null;
+
+function isTrainingAvatarSessionActive() {
+  const t = APP.trainingLiveAvatar;
+  if (!t) return false;
+  if (t.sessionToken) return true;
+  if (t.room) return true;
+  if (t.ws && (t.ws.readyState === WebSocket.OPEN || t.ws.readyState === WebSocket.CONNECTING)) {
+    return true;
+  }
+  return false;
+}
+
+function isLiveAvatarPracticeSessionActive() {
+  return !!(
+    liveAvatarSessionToken
+    || liveKitRoom
+    || (liveAvatarWS && (liveAvatarWS.readyState === WebSocket.OPEN || liveAvatarWS.readyState === WebSocket.CONNECTING))
+  );
+}
+
+/** Tear down LiveAvatar when navigating away from an interview screen (stops token burn). */
+async function disconnectAvatarOnLeaveScreen(fromScreen, toScreen) {
+  if (!fromScreen || fromScreen === toScreen) return;
+
+  if (fromScreen === 'screen-avatar-training-active' && toScreen !== 'screen-avatar-training-active') {
+    if (isTrainingAvatarSessionActive() || APP._avatarSessionKind === 'training') {
+      await cleanupTrainingAvatar();
+    }
+    return;
+  }
+
+  if (fromScreen === 'screen-interviewer' && toScreen !== 'screen-interviewer') {
+    if (isLiveAvatarPracticeSessionActive()) {
+      await cleanupLiveAvatar();
+    }
+  }
+}
+
 function showScreen(id, options) {
   if (window.DeviceCheck && DeviceCheck.isBlocked()) return;
   const opts = options || {};
+  const prevScreen = currentScreenId;
+  if (prevScreen && prevScreen !== id) {
+    void disconnectAvatarOnLeaveScreen(prevScreen, id);
+  }
   hideAll();
   $(id).classList.remove('hidden');
+  currentScreenId = id;
   if (opts.updateRoute !== false) {
     syncRouteForScreen(id, !!opts.replaceRoute);
   }
@@ -5053,44 +5098,54 @@ async function retryLiveAvatar() {
 }
 
 async function cleanupLiveAvatar() {
-  clearAvatarSessionTimer();
+  if (APP._liveAvatarCleanupInProgress) return;
+  APP._liveAvatarCleanupInProgress = true;
   try {
-    if (APP.livePracticeRecorder && APP.livePracticeRecorder.state === 'recording') {
-      APP.livePracticeRecorder.onstop = null;
-      APP.livePracticeRecorder.stop();
-    }
-  } catch (e) {}
-  APP.livePracticeRecorder = null;
-  APP.livePracticeChunks = [];
-  APP.livePracticeRecording = false;
+    clearAvatarSessionTimer();
+    APP._avatarSessionKind = null;
+    try {
+      if (APP.livePracticeRecorder && APP.livePracticeRecorder.state === 'recording') {
+        APP.livePracticeRecorder.onstop = null;
+        APP.livePracticeRecorder.stop();
+      }
+    } catch (e) {}
+    APP.livePracticeRecorder = null;
+    APP.livePracticeChunks = [];
+    APP.livePracticeRecording = false;
 
-  if (APP._keepAliveInterval) {
-    clearInterval(APP._keepAliveInterval);
-    APP._keepAliveInterval = null;
-  }
-  // Close WebSocket
-  if (liveAvatarWS) {
-    try {
-      liveAvatarWS.close();
-    } catch(e) {}
-    liveAvatarWS = null;
-  }
-  // Disconnect LiveKit
-  if (liveKitRoom) {
-    try {
-      liveKitRoom.disconnect();
-    } catch(e) {}
-    liveKitRoom = null;
-  }
-  // Stop server session
-  if (liveAvatarSessionToken) {
-    try {
-      await api('/api/avatar/stop', { session_token: liveAvatarSessionToken });
-    } catch(e) {}
+    if (APP._keepAliveInterval) {
+      clearInterval(APP._keepAliveInterval);
+      APP._keepAliveInterval = null;
+    }
+    const token = liveAvatarSessionToken;
+    if (liveAvatarWS) {
+      try {
+        liveAvatarWS.onclose = null;
+        liveAvatarWS.onerror = null;
+        liveAvatarWS.close();
+      } catch (e) {}
+      liveAvatarWS = null;
+    }
+    if (liveKitRoom) {
+      try {
+        liveKitRoom.disconnect();
+      } catch (e) {}
+      liveKitRoom = null;
+    }
+    liveAvatarSession = null;
+    liveAvatarConfig = null;
     liveAvatarSessionToken = null;
+    if (token) {
+      try {
+        await api('/api/avatar/stop', { session_token: token });
+      } catch (e) {}
+    }
+    isAvatarSpeaking = false;
+    liveAvatarVideoConnected = false;
+    showInterruptBtn(false);
+  } finally {
+    APP._liveAvatarCleanupInProgress = false;
   }
-  isAvatarSpeaking = false;
-  showInterruptBtn(false);
 }
 
 function loadLiveKitSDK() {
@@ -5609,6 +5664,9 @@ async function downloadInterviewerCasePdf() {
 APP.trainingSession = null; // Current active training session state
 
 async function showAvatarTrainingSessions() {
+  if (currentScreenId === 'screen-avatar-training-active') {
+    await cleanupTrainingAvatar();
+  }
   await ensureParticipantContext();
   const phone = APP.phone || bookingState.phone;
   if (!phone) {
@@ -5871,7 +5929,13 @@ async function connectTrainingLiveKit(url, token) {
     }
 
     const room = new LivekitClient.Room();
-    APP.trainingLiveAvatar = { room: room, connected: false, videoAttached: false };
+    const prevToken = APP.trainingLiveAvatar && APP.trainingLiveAvatar.sessionToken;
+    APP.trainingLiveAvatar = {
+      room: room,
+      connected: false,
+      videoAttached: false,
+      sessionToken: prevToken || null,
+    };
 
     const attachTrack = (track) => {
       try {
@@ -6218,35 +6282,45 @@ function showTrainingFeedback(feedback, sessionNum, avatarGuiltLabel) {
 }
 
 async function cleanupTrainingAvatar() {
-  clearAvatarSessionTimer();
+  if (APP._trainingAvatarCleanupInProgress) return;
+  APP._trainingAvatarCleanupInProgress = true;
   try {
-    if (APP.trainingIsRecording) stopTrainingRecording();
-  } catch(e) {}
-  const trainingToken = APP.trainingLiveAvatar && APP.trainingLiveAvatar.sessionToken;
-  if (trainingToken) {
+    clearAvatarSessionTimer();
+    APP._avatarSessionKind = null;
     try {
-      await api('/api/avatar/stop', { session_token: trainingToken });
-    } catch(e) {}
-  }
-  try {
+      if (APP.trainingIsRecording) stopTrainingRecording();
+    } catch (e) {}
+
+    const trainingToken = APP.trainingLiveAvatar && APP.trainingLiveAvatar.sessionToken;
     if (APP.trainingLiveAvatar && APP.trainingLiveAvatar.ws) {
-      APP.trainingLiveAvatar.ws.close();
+      try {
+        APP.trainingLiveAvatar.ws.onclose = null;
+        APP.trainingLiveAvatar.ws.onerror = null;
+        APP.trainingLiveAvatar.ws.close();
+      } catch (e) {}
     }
-  } catch(e) {}
-  try {
     if (APP.trainingLiveAvatar && APP.trainingLiveAvatar.room) {
-      APP.trainingLiveAvatar.room.disconnect();
+      try {
+        APP.trainingLiveAvatar.room.disconnect();
+      } catch (e) {}
     }
-  } catch(e) {}
-  APP.trainingLiveAvatar = null;
-  APP.trainingRecorder = null;
-  APP.trainingRecordChunks = [];
-  APP.trainingIsRecording = false;
-  const roomDiv = document.getElementById('training-livekit-room');
-  if (roomDiv) roomDiv.remove();
-  const videoContainer = $('trainingLiveVideoContainer');
-  if (videoContainer) {
-    videoContainer.innerHTML = '<div id="trainingVideoPlaceholder" style="color:#9ca3af;font-size:14px;text-align:center;padding:16px;">等待视频连接...</div>';
+    if (trainingToken) {
+      try {
+        await api('/api/avatar/stop', { session_token: trainingToken });
+      } catch (e) {}
+    }
+    APP.trainingLiveAvatar = null;
+    APP.trainingRecorder = null;
+    APP.trainingRecordChunks = [];
+    APP.trainingIsRecording = false;
+    const roomDiv = document.getElementById('training-livekit-room');
+    if (roomDiv) roomDiv.remove();
+    const videoContainer = $('trainingLiveVideoContainer');
+    if (videoContainer) {
+      videoContainer.innerHTML = '<div id="trainingVideoPlaceholder" style="color:#9ca3af;font-size:14px;text-align:center;padding:16px;">等待视频连接...</div>';
+    }
+  } finally {
+    APP._trainingAvatarCleanupInProgress = false;
   }
 }
 

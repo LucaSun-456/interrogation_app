@@ -1006,8 +1006,9 @@ class ExcelStore:
         with _excel_lock:
             wb = self._load()
             try:
+                pid_s = str(pid)
                 for p in self._read_all(wb, SHEET_PARTICIPANTS):
-                    if p["id"] == pid:
+                    if str(p.get("id")) == pid_s:
                         return p
                 return None
             finally:
@@ -1152,8 +1153,9 @@ class ExcelStore:
         with _excel_lock:
             wb = self._load()
             try:
+                iid = str(interviewer_id)
                 for g in self._read_all(wb, SHEET_GROUPS):
-                    if g.get("interviewer_id") == interviewer_id:
+                    if str(g.get("interviewer_id") or "") == iid:
                         return g
                 return None
             finally:
@@ -1204,8 +1206,9 @@ class ExcelStore:
         with _excel_lock:
             wb = self._load()
             try:
+                pid = str(participant_id)
                 for p in self._read_all(wb, SHEET_PROFILES):
-                    if p["participant_id"] == participant_id:
+                    if str(p.get("participant_id")) == pid:
                         return p
                 return None
             finally:
@@ -1907,6 +1910,68 @@ def _interviewer_appointment_paired_suspect(phone):
     if not suspect:
         return None, None, True
     return suspect.get("case_type") or "arson", suspect.get("guilt") or "Innocent", True
+
+
+def _normalize_suspect_profile_data(profile_data):
+    """Parse profile JSON from sheet; accept nested {profile: {...}} if present."""
+    if profile_data is None:
+        return None
+    pd = profile_data
+    if isinstance(pd, str):
+        try:
+            pd = json.loads(pd)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    if not isinstance(pd, dict):
+        return None
+    if isinstance(pd.get("profile"), dict):
+        pd = pd["profile"]
+    return pd
+
+
+def _paired_suspect_and_profile_for_interviewer(phone):
+    """
+    Return (suspect_participant, profile_data_dict) for a D-group interviewer.
+    Prefer groups sheet; fall back to suspect on the same booked time_slot
+    (same logic as case materials / PDF download).
+    """
+    p = store.get_participant(phone)
+    if not p or p.get("role") != "I":
+        return None, None
+
+    def _load_profile(suspect):
+        if not suspect:
+            return None, None
+        row = store.get_profile(suspect["id"])
+        if not row:
+            return suspect, None
+        return suspect, _normalize_suspect_profile_data(row.get("data"))
+
+    group = store.get_group_by_interviewer(p["id"])
+    if group and group.get("suspect_id"):
+        suspect = store.get_participant_by_id(group["suspect_id"])
+        found = _load_profile(suspect)
+        if found[0] and found[1]:
+            return found
+
+    booking = store.get_my_booking(phone)
+    if not booking:
+        return None, None
+
+    time_slot = (booking.get("time_slot") or "").strip()
+    if not time_slot or not _slot_has_both_roles(time_slot):
+        return None, None
+
+    for appt in store.get_appointments():
+        if appt.get("status") != "confirmed" or appt.get("role") != "S":
+            continue
+        if (appt.get("time_slot") or "").strip() != time_slot:
+            continue
+        suspect = store.get_participant((appt.get("phone") or "").strip())
+        if suspect:
+            return _load_profile(suspect)
+
+    return None, None
 
 
 def _interviewer_case_download_files(case_type):
@@ -4270,6 +4335,27 @@ def load_avatar_configs():
         return json.load(f)
 
 
+def _avatar_appearance_key(suspect_profile):
+    """D-group lookup key from suspect questionnaire (q2/q22/q23), or None."""
+    pd = _normalize_suspect_profile_data(suspect_profile)
+    if not pd:
+        return None
+
+    gender_raw = pd.get("q2", "")
+    is_male = "男" in str(gender_raw) or "Male" in str(gender_raw)
+    gender_key = "male" if is_male else "female"
+
+    glasses_raw = pd.get("q22", "")
+    has_glasses = str(glasses_raw).strip() in ("是", "Yes", "yes", "true", "1")
+    glasses_key = "glasses" if has_glasses else "noglasses"
+
+    hair_raw = pd.get("q23", "")
+    is_long = "长" in str(hair_raw) or "Long" in str(hair_raw)
+    hair_key = "long" if is_long else "short"
+
+    return f"{gender_key}_{glasses_key}_{hair_key}"
+
+
 def resolve_avatar_config(training_type, suspect_profile):
     avatars = load_avatar_configs()
 
@@ -4277,25 +4363,17 @@ def resolve_avatar_config(training_type, suspect_profile):
         return avatars.get("generic", {})
 
     specific = avatars.get("specific", {})
-    if not specific or not suspect_profile:
+    if not specific:
         return avatars.get("generic", {})
 
-    pd = json.loads(suspect_profile) if isinstance(suspect_profile, str) else suspect_profile
+    config_key = _avatar_appearance_key(suspect_profile)
+    if not config_key:
+        return avatars.get("generic", {})
 
-    gender_raw = pd.get("q2", "")
-    is_male = "男" in str(gender_raw) or "Male" in str(gender_raw)
-    gender_key = "male" if is_male else "female"
-
-    glasses_raw = pd.get("q22", "")
-    has_glasses = str(glasses_raw).strip() == "是"
-    glasses_key = "glasses" if has_glasses else "noglasses"
-
-    hair_raw = pd.get("q23", "")
-    is_long = "长" in str(hair_raw)
-    hair_key = "long" if is_long else "short"
-
-    config_key = f"{gender_key}_{glasses_key}_{hair_key}"
-    return specific.get(config_key, avatars.get("generic", {}))
+    chosen = specific.get(config_key)
+    if chosen:
+        return chosen
+    return avatars.get("generic", {})
 
 
 def build_avatar_system_prompt(suspect, profile_data):
@@ -4363,18 +4441,10 @@ def api_avatar_config():
 
     effective_type = training_type
 
-    suspect_profile = None
-    suspect = None
+    suspect, suspect_profile = _paired_suspect_and_profile_for_interviewer(phone)
     system_prompt = None
-
-    group = store.get_group_by_interviewer(p["id"])
-    if group and group.get("suspect_id"):
-        suspect = store.get_participant_by_id(group["suspect_id"])
-        if suspect:
-            profile_row = store.get_profile(suspect["id"])
-            if profile_row:
-                suspect_profile = profile_row["data"]
-                system_prompt = build_avatar_system_prompt(suspect, suspect_profile)
+    if suspect and suspect_profile:
+        system_prompt = build_avatar_system_prompt(suspect, suspect_profile)
 
     avatar_config = resolve_avatar_config(effective_type, suspect_profile)
 
@@ -4498,14 +4568,7 @@ def api_avatar_token():
         if not ts:
             return jsonify({"error": "请先通过训练列表开始本次训练"}), 400
 
-    suspect_profile = None
-    group = store.get_group_by_interviewer(p["id"])
-    if group and group.get("suspect_id"):
-        suspect = store.get_participant_by_id(group["suspect_id"])
-        if suspect:
-            profile_row = store.get_profile(suspect["id"])
-            if profile_row:
-                suspect_profile = profile_row["data"]
+    _, suspect_profile = _paired_suspect_and_profile_for_interviewer(phone)
 
     avatar_config = resolve_avatar_config(effective_type, suspect_profile)
     avatar_id = avatar_config.get("avatar_id", "")
@@ -4558,15 +4621,7 @@ def api_avatar_embed():
         return jsonify({"error": "此培训类型不支持虚拟审讯"}), 400
     effective_type = training_type
 
-    suspect_profile = None
-    suspect = None
-    group = store.get_group_by_interviewer(p["id"])
-    if group and group.get("suspect_id"):
-        suspect = store.get_participant_by_id(group["suspect_id"])
-        if suspect:
-            profile_row = store.get_profile(suspect["id"])
-            if profile_row:
-                suspect_profile = profile_row["data"]
+    _, suspect_profile = _paired_suspect_and_profile_for_interviewer(phone)
 
     avatar_config = resolve_avatar_config(effective_type, suspect_profile)
 
@@ -4618,15 +4673,7 @@ def api_avatar_session():
         if not ts:
             return jsonify({"error": "请先通过训练列表开始本次训练"}), 400
 
-    suspect_profile = None
-    suspect = None
-    group = store.get_group_by_interviewer(p["id"])
-    if group and group.get("suspect_id"):
-        suspect = store.get_participant_by_id(group["suspect_id"])
-        if suspect:
-            profile_row = store.get_profile(suspect["id"])
-            if profile_row:
-                suspect_profile = profile_row["data"]
+    _, suspect_profile = _paired_suspect_and_profile_for_interviewer(phone)
 
     avatar_config = resolve_avatar_config(effective_type, suspect_profile)
     avatar_id = avatar_config.get("avatar_id", "")
@@ -5225,16 +5272,7 @@ def api_avatar_training_start():
     avatar_setting = setting_info["setting"]
     avatar_guilt = setting_info["guilt"]
 
-    # Get suspect profile for avatar_specific
-    suspect = None
-    suspect_profile = None
-    group = store.get_group_by_interviewer(p["id"])
-    if group and group.get("suspect_id"):
-        suspect = store.get_participant_by_id(group["suspect_id"])
-        if suspect:
-            profile_row = store.get_profile(suspect["id"])
-            if profile_row:
-                suspect_profile = profile_row["data"]
+    suspect, suspect_profile = _paired_suspect_and_profile_for_interviewer(phone)
 
     # Get avatar visual config
     avatar_config = resolve_avatar_config(effective_type, suspect_profile)
@@ -5247,6 +5285,10 @@ def api_avatar_training_start():
     # Start the session in DB
     store.start_training_session(phone, p["id"], next_num, avatar_setting, avatar_guilt)
 
+    appearance_key = _avatar_appearance_key(suspect_profile) if effective_type == "avatar_specific" else "generic"
+    generic_id = (load_avatar_configs().get("generic") or {}).get("avatar_id", "")
+    using_generic = effective_type == "avatar_specific" and avatar_config.get("avatar_id") == generic_id
+
     return jsonify({
         "session_num": next_num,
         "training_type": effective_type,
@@ -5257,6 +5299,8 @@ def api_avatar_training_start():
         "elevenlabs_voice_id": avatar_config.get("elevenlabs_voice_id", ""),
         "opening_text": avatar_config.get("opening_text", "你有什么要问的？"),
         "system_prompt": system_prompt,
+        "avatar_appearance_key": appearance_key,
+        "avatar_using_generic_fallback": using_generic,
     })
 
 
@@ -5428,15 +5472,7 @@ def api_avatar_training_chat():
     avatar_setting = session.get("avatar_setting", "")
     avatar_guilt = session.get("avatar_guilt", "")
 
-    suspect = None
-    suspect_profile = None
-    group = store.get_group_by_interviewer(p["id"])
-    if group and group.get("suspect_id"):
-        suspect = store.get_participant_by_id(group["suspect_id"])
-        if suspect:
-            profile_row = store.get_profile(suspect["id"])
-            if profile_row:
-                suspect_profile = profile_row["data"]
+    suspect, suspect_profile = _paired_suspect_and_profile_for_interviewer(phone)
 
     system_prompt = build_avatar_training_system_prompt(
         effective_type, avatar_setting, avatar_guilt, suspect, suspect_profile,
@@ -5486,15 +5522,7 @@ def api_avatar_training_tts():
     training_type = p.get("training_type", "") if p else ""
 
     if training_type == "avatar_specific":
-        suspect_profile = None
-        group = store.get_group_by_interviewer(p["id"])
-        suspect = None
-        if group and group.get("suspect_id"):
-            suspect = store.get_participant_by_id(group["suspect_id"])
-            if suspect:
-                profile_row = store.get_profile(suspect["id"])
-                if profile_row:
-                    suspect_profile = profile_row["data"]
+        _, suspect_profile = _paired_suspect_and_profile_for_interviewer(phone)
         avatar_config = resolve_avatar_config("avatar_specific", suspect_profile)
     else:
         avatar_config = resolve_avatar_config("avatar_general", None)
