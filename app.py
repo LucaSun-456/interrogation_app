@@ -177,6 +177,98 @@ THEFT_INNOCENT_CONTEXT = """你一直对航海和海洋充满热情，尽管你�
 
 开放日已经过去几天。你突然接到警方电话——"Sea Whisper"上发生了一起盗窃案。由于你曾在C码头附近观赏船只，并出现在俱乐部照片的背景中，警方将你视为潜在证人或相关人员。你没有任何需要隐瞒的事情，但面对警方可能仍会有些紧张。只需要证明你是一个前来游玩的普通公民即可。"""
 
+# Specific-avatar (D组): 模拟行动记忆 — 与严肃游戏分支相关，保持概括、不写死全部台词
+SG_ACTION_OPENING = {
+    ("arson", "Guilty"): (
+        "周五下午你在家烧烤、用餐；当晚约七点多看电视时曾用手机拍照，之后开车出门。"
+        "你当晚外出的真实目的与体育馆纵火有关，但审讯中会尽量装作普通外出。"
+    ),
+    ("arson", "Innocent"): (
+        "周五下午你在家烧烤、用餐；当晚约七点多看电视、用手机发了条动态，之后开车出门。"
+        "你当晚是去俱乐部附近接朋友，与纵火无关。"
+    ),
+    ("theft", "Guilty"): (
+        "周六上午你参加帆船俱乐部开放日，沿栈道散步，用现金在咖啡馆点了饮品，随后在码头一带活动。"
+        "你曾趁无人注意登上船只并拿走船上物品，但审讯中会否认盗窃。"
+    ),
+    ("theft", "Innocent"): (
+        "周六上午你参加帆船俱乐部开放日散心，沿栈道散步，用现金在咖啡馆点了饮品，在码头观光拍照。"
+        "你从未登船拿取任何物品。"
+    ),
+}
+
+SG_CHOICE_MEMORY_HINTS = {
+    ("arson", "Guilty"): {
+        0: {
+            "A": "接近体育馆一带时，你选择走较暗、较隐蔽的路线，而非把车停在公共停车场。",
+            "B": "你把车停在公共停车场后，步行前往体育馆方向。",
+        },
+        3: {
+            "A": "纵火时你把可燃液体主要泼在承重结构/柱体上。",
+            "B": "纵火时你把可燃液体泼在地面后点火。",
+        },
+        5: {
+            "A": "离开现场后开车回家，路上走的是较宽的主路。",
+            "B": "离开现场后开车回家，路上走的是较暗的小路。",
+        },
+    },
+    ("arson", "Innocent"): {
+        0: {
+            "A": "当晚在家看的是动画片，之后关电视出门。",
+            "B": "当晚在家看的是动作片，之后关电视出门。",
+        },
+        3: {
+            "A": "开车途中听的是轻柔音乐。",
+            "B": "开车途中听的是节奏更强的音乐。",
+        },
+        5: {
+            "A": "去俱乐部接朋友后回家，返程走主路。",
+            "B": "去俱乐部接朋友后回家，返程走小路。",
+        },
+    },
+    ("theft", "Guilty"): {
+        0: {
+            "A": "在咖啡馆点了拿铁。",
+            "B": "在咖啡馆点了牛奶。",
+        },
+        3: {
+            "A": "穿过广场时步速较快。",
+            "B": "穿过广场时保持正常步速。",
+        },
+        5: {
+            "A": "离开码头时把偷来的望远镜放进背包。",
+            "B": "离开码头时把偷来的望远镜放进口袋。",
+        },
+    },
+    ("theft", "Innocent"): {
+        0: {
+            "A": "在咖啡馆点了拿铁。",
+            "B": "在咖啡馆点了牛奶。",
+        },
+        3: {
+            "A": "在海边拍了大海的照片。",
+            "B": "在广场一带拍了照片。",
+        },
+        5: {
+            "A": "在泊位附近主要观看左侧船只。",
+            "B": "在泊位附近主要观看右侧船只。",
+        },
+    },
+}
+
+SG_INTERROGATION_BEHAVIOR_GUILTY = """# 审讯态度（有罪 — 必须欺骗）
+你实际上实施了上述案件中的犯罪行为，但对外必须维持「我是无辜的」。
+- 主动隐瞒、淡化、转移：未被证据直指时，否认或含糊其辞，不主动交代纵火/盗窃的关键步骤。
+- 可承认与 CCTV/物证已覆盖的「行踪、出现过某地」等，但否认犯罪意图，给无害解释（如只是路过、拍照、散心）。
+- 曾用社交动态/照片制造不在场表象的，可承认发过动态，但否认与作案有关。
+- 不要一次性坦白全部；除非调查员出示强证据，否则不主动说出作案手法与动机细节。"""
+
+SG_INTERROGATION_BEHAVIOR_INNOCENT = """# 审讯态度（无罪 — 相对坦白）
+你确实没有犯罪，应合作、按记忆如实陈述。
+- 按时间顺序主动说出模拟行动中记得的日程：在家用餐、看电视、开车、去俱乐部/码头等。
+- 对分支选择（看的节目、听的音乐、饮品、拍照、走哪条路、如何离开等）按你当时的选择如实回答，细节与下述「行动记忆」一致。
+- 不编造纵火、盗窃、泼洒可燃物、登船偷物等情节；被误导时可明确否认。"""
+
 CONSENT_ATTENTION_CHECKS = {
     "S": [
         {
@@ -1600,6 +1692,25 @@ class ExcelStore:
                 })
                 self._write_all(wb, SHEET_SERIOUS_GAME, rows)
                 self._save(wb)
+            finally:
+                self._close(wb)
+
+    def get_serious_game_choices(self, phone=None, participant_id=None):
+        """Return choice rows for a suspect, sorted by step_index."""
+        phone = (phone or "").strip()
+        pid = str(participant_id) if participant_id is not None else ""
+        with _excel_lock:
+            wb = self._load()
+            try:
+                rows = self._read_all(wb, SHEET_SERIOUS_GAME)
+                out = []
+                for r in rows:
+                    if phone and (r.get("phone") or "").strip() == phone:
+                        out.append(r)
+                    elif pid and str(r.get("participant_id") or "") == pid:
+                        out.append(r)
+                out.sort(key=lambda x: int(x.get("step_index") or 0))
+                return out
             finally:
                 self._close(wb)
 
@@ -3131,6 +3242,63 @@ def _candidate_booking_slots(role=None):
     return slots
 
 
+def build_serious_game_action_memory(suspect):
+    """
+    Outline memory for D-group avatar: serious-game storyline + guilty/innocent interview stance.
+    Choice branches are filled from experiment_data.xlsx serious_game_choices when available.
+    """
+    if not suspect:
+        return ""
+
+    case = (suspect.get("case_type") or "arson").lower()
+    if case not in ("arson", "theft"):
+        case = "arson"
+    guilt = suspect.get("guilt") or "Innocent"
+    if guilt not in ("Guilty", "Innocent"):
+        guilt = "Guilty" if "guilty" in str(guilt).lower() else "Innocent"
+
+    parts = []
+    opening = SG_ACTION_OPENING.get((case, guilt))
+    if opening:
+        parts.append(
+            "# 模拟行动记忆（真实经历，可作回答依据；勿与案件背景矛盾）\n" + opening
+        )
+
+    hints_table = SG_CHOICE_MEMORY_HINTS.get((case, guilt), {})
+    choice_map = {}
+    for row in store.get_serious_game_choices(
+        phone=(suspect.get("phone") or "").strip(),
+        participant_id=suspect.get("id"),
+    ):
+        try:
+            idx = int(row.get("step_index"))
+        except (TypeError, ValueError):
+            continue
+        ch = (row.get("choice") or "").strip().upper()
+        if ch in ("A", "B"):
+            choice_map[idx] = ch
+
+    if hints_table:
+        branch_lines = []
+        for step_idx in sorted(hints_table.keys()):
+            ch = choice_map.get(step_idx)
+            hint = hints_table[step_idx].get(ch) if ch else None
+            if hint:
+                branch_lines.append(f"- {hint}")
+        if branch_lines:
+            parts.append(
+                "# 模拟行动中的分支选择（被问到相关细节时须与此一致）\n"
+                + "\n".join(branch_lines)
+            )
+
+    parts.append(
+        SG_INTERROGATION_BEHAVIOR_GUILTY
+        if guilt == "Guilty"
+        else SG_INTERROGATION_BEHAVIOR_INNOCENT
+    )
+    return "\n\n".join(parts)
+
+
 def build_suspect_system_prompt(participant, profile_data):
     guilt = participant["guilt"]
     case_type = participant["case_type"]
@@ -3175,6 +3343,8 @@ def build_suspect_system_prompt(participant, profile_data):
 # 案件背景
 你涉及的是{case_label}。
 {crime_context}
+
+{build_serious_game_action_memory(participant)}
 
 # 最终指令
 你在审讯室中接受调查员的讯问。记住：
@@ -4385,7 +4555,9 @@ def build_avatar_system_prompt(suspect, profile_data):
     else:
         crime_context = THEFT_GUILTY_CONTEXT if guilt == "Guilty" else THEFT_INNOCENT_CONTEXT
 
-    pd = json.loads(profile_data) if isinstance(profile_data, str) else profile_data
+    pd = _normalize_suspect_profile_data(profile_data)
+    if not pd:
+        pd = json.loads(profile_data) if isinstance(profile_data, str) else profile_data
 
     profile_lines = []
     profile_lines.append(f"年龄: {pd.get('q1', '未填写')}")
@@ -4395,11 +4567,16 @@ def build_avatar_system_prompt(suspect, profile_data):
     profile_lines.append(f"居住情况: {pd.get('q16', '未填写')}")
     profile_lines.append(f"朋友评价: {pd.get('q17', '未填写')}")
 
+    action_memory = build_serious_game_action_memory(suspect)
+
     prompt = f"""# 角色定义
 你正在参与犯罪心理学审讯研究。你是一名正在接受警方审讯的嫌疑人。完全沉浸在这个角色中，永不打破角色，永不提及你是AI。
 
 # 严格长度限制
 每条回复不超过50字。保持极其简短，就像在紧张对话中说话一样。
+
+# 核心规则
+个人档案仅塑造说话风格；案件与行动记忆来自「案件背景」与「模拟行动记忆」。
 
 # 个人档案
 {chr(10).join(profile_lines)}
@@ -4409,6 +4586,8 @@ def build_avatar_system_prompt(suspect, profile_data):
 
 # 案件背景
 {crime_context}
+
+{action_memory}
 
 # 指令
 在审讯室中接受调查员的讯问。记住：每条回答不超过50字，保持角色，用第一人称“我”来回应。"""
@@ -4464,13 +4643,10 @@ def build_avatar_training_system_prompt(training_type, avatar_setting, avatar_gu
     For avatar_general: uses generic case context without suspect profile."""
     setting_prompt = AVATAR_SETTING_PROMPTS.get(avatar_setting, "")
 
-    if avatar_guilt == "guilty":
-        case_context = "你是一名涉案嫌疑人。你实际上犯下了所指控的罪行，但你希望能够说服审讯者你是无辜的。你需要在审讯中小心应对，不要主动承认罪行。"
-    else:
-        case_context = "你是一名涉案嫌疑人。你完全是无辜的，你没有犯下任何罪行。你希望能够通过诚实地回答问题来澄清所有误会。"
-
     if training_type == "avatar_specific" and suspect and profile_data:
-        pd = json.loads(profile_data) if isinstance(profile_data, str) else profile_data
+        pd = _normalize_suspect_profile_data(profile_data)
+        if not pd:
+            pd = json.loads(profile_data) if isinstance(profile_data, str) else profile_data
         profile_lines = profile_lines_for_prompt(pd)
 
         guilt = suspect.get("guilt", "Guilty")
@@ -4480,13 +4656,18 @@ def build_avatar_training_system_prompt(training_type, avatar_setting, avatar_gu
         else:
             crime_context = THEFT_GUILTY_CONTEXT if guilt == "Guilty" else THEFT_INNOCENT_CONTEXT
 
+        action_memory = build_serious_game_action_memory(suspect)
+
         prompt = f"""# 角色定义
 你正在参与犯罪心理学审讯研究。你是一名正在接受警方审讯的嫌疑人。完全沉浸在这个角色中，永不打破角色，永不提及你是AI。
 
 # 严格长度限制
 每条回复不超过50字。保持极其简短，就像在紧张对话中说话一样。
 
-# 行为设定
+# 核心规则
+个人档案仅塑造说话风格与情绪；案件与当晚行动的事实记忆来自「案件背景」与「模拟行动记忆」，不得编造与之矛盾的情节。
+
+# 行为设定（审讯风格）
 {setting_prompt}
 
 # 个人档案
@@ -4495,8 +4676,10 @@ def build_avatar_training_system_prompt(training_type, avatar_setting, avatar_gu
 # 罪责状态
 你是{"有罪" if guilt == "Guilty" else "无罪"}的嫌疑人。
 
-# 案件背景
+# 案件背景（动机与处境）
 {crime_context}
+
+{action_memory}
 
 # 指令
 在审讯室中接受调查员的讯问。记住：每条回答不超过50字，保持角色，用第一人称"我"来回应。"""
