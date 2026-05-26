@@ -1548,7 +1548,7 @@
     <p style="font-size:13px;color:var(--text-light);margin-bottom:4px;">
       每个时间段有<strong>两个名额</strong>：<span class="avail-tag suspect">嫌疑人</span> 和 <span class="avail-tag interviewer">审讯者</span>。
       当同一个时间段<strong>嫌疑人和审讯者都预约后</strong>，该时间段即配对成功。<br>
-      <span id="bookingTimeRangeHint">可预约时间范围：<strong>从现在起 24 小时之后</strong>至<strong>一周内</strong>（嫌疑人）。</span>
+      <span id="bookingTimeRangeHint">可预约时间范围：<strong>从现在起 24 小时之后</strong>至<strong>5 天内</strong>（嫌疑人）。</span>
     </p>
     <p style="font-size:12px;color:var(--text-light);margin-bottom:4px;">
       💡 <strong style="color:#e65100;">建议优先选择已有对方角色预约的时间段（橙色高亮）</strong>，这样可以快速完成配对，尽早开展正式访谈。
@@ -1640,7 +1640,7 @@
       正式访谈需与<strong>嫌疑人预约同一时段</strong>才能配对。若您选择无人预约的时段，可能长期无法配对，从而<strong>无法完成实验</strong>。
     </p>
     <p style="font-size:13px;color:var(--text);margin-bottom:12px;line-height:1.8;">
-      <strong>24 小时后至一周内</strong>的时段：可自由选择空闲时间。<br>
+      <strong>24 小时后至 5 天内</strong>的时段：可自由选择空闲时间。<br>
       <strong>未来 24 小时内</strong>的时段：仅可选择<strong>已有嫌疑人预约</strong>的时间（界面中以橙色标注）。
     </p>
     <p style="font-size:13px;color:#856404;margin-bottom:20px;line-height:1.8;background:#fff8e1;padding:10px;border-radius:8px;">
@@ -5700,7 +5700,7 @@ function renderBookingSlotsForInterviewer() {
   let html = '<h3>请选择一个时间段预约</h3>';
   html += `<p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">您的角色：<strong>${roleLabel}</strong></p>`;
   html += `<p style="font-size:12px;color:var(--text-light);margin-bottom:12px;line-height:1.6;">
-    <strong>24 小时后至一周内</strong>可自由选择；<strong>未来 24 小时内</strong>仅可预约<strong>已有嫌疑人预约</strong>的时段。
+    <strong>24 小时后至 5 天内</strong>可自由选择；<strong>未来 24 小时内</strong>仅可预约<strong>已有嫌疑人预约</strong>的时段。
   </p>`;
   if (waitingSuspectSlots > 0) {
     html += `
@@ -6875,9 +6875,9 @@ function renderBookingUI() {
   const hintEl = $('bookingTimeRangeHint');
   if (hintEl) {
     if (role === 'I') {
-      hintEl.innerHTML = '审讯者：<strong>24 小时后至一周内</strong>可自由选择；<strong>未来 24 小时内</strong>仅可预约<strong>已有嫌疑人预约</strong>的时段。请优先选择橙色标注时段。';
+      hintEl.innerHTML = '审讯者：<strong>24 小时后至 5 天内</strong>可自由选择；<strong>未来 24 小时内</strong>仅可预约<strong>已有嫌疑人预约</strong>的时段。请优先选择橙色标注时段。';
     } else {
-      hintEl.innerHTML = '可预约时间范围：<strong>从现在起 24 小时之后</strong>至<strong>一周内</strong>（<strong>嫌疑人</strong>）。';
+      hintEl.innerHTML = '可预约时间范围：<strong>从现在起 24 小时之后</strong>至<strong>5 天内</strong>（<strong>嫌疑人</strong>）。';
     }
   }
 
@@ -6990,7 +6990,7 @@ function renderBookingUI() {
         <div style="background:#fff8e1;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
           <div style="font-weight:700;font-size:13px;color:#e65100;">💡 审讯者预约提示</div>
           <div style="font-size:12px;color:#856404;margin-top:4px;line-height:1.6;">
-            请<strong>优先选择已有嫌疑人预约</strong>的时段（橙色标注），以免无法配对。24 小时后至一周内可自由选择；未来 24 小时内仅可预约嫌疑人已约时段。
+            请<strong>优先选择已有嫌疑人预约</strong>的时段（橙色标注），以免无法配对。24 小时后至 5 天内可自由选择；未来 24 小时内仅可预约嫌疑人已约时段。
           </div>
         </div>`;
     }
