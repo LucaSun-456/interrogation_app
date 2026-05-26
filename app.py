@@ -46,6 +46,7 @@ LEGACY_EXCEL_FILE = os.path.join(BASE_DIR, "experiment_data.xlsx")
 _excel_lock = threading.Lock()
 
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+DEEPSEEK_CHAT_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
 LIVEAVATAR_API_KEY = os.environ.get("LIVEAVATAR_API_KEY")
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
@@ -180,11 +181,11 @@ THEFT_INNOCENT_CONTEXT = """你一直对航海和海洋充满热情，尽管你�
 # Specific-avatar (D组): 模拟行动记忆 — 与严肃游戏分支相关，保持概括、不写死全部台词
 SG_ACTION_OPENING = {
     ("arson", "Guilty"): (
-        "周五下午你在家烧烤、用餐；当晚约七点多看电视时曾用手机拍照，之后开车出门。"
+        "周六下午你在家烧烤、用餐；当晚约七点多看电视时曾用手机拍照，之后开车出门。"
         "你当晚外出的真实目的与体育馆纵火有关，但审讯中会尽量装作普通外出。"
     ),
     ("arson", "Innocent"): (
-        "周五下午你在家烧烤、用餐；当晚约七点多看电视、用手机发了条动态，之后开车出门。"
+        "周六下午你在家烧烤、用餐；当晚约七点多看电视、用手机发了条动态，之后开车出门。"
         "你当晚是去俱乐部附近接朋友，与纵火无关。"
     ),
     ("theft", "Guilty"): (
@@ -268,6 +269,21 @@ SG_INTERROGATION_BEHAVIOR_INNOCENT = """# 审讯态度（无罪 — 相对坦白
 - 按时间顺序主动说出模拟行动中记得的日程：在家用餐、看电视、开车、去俱乐部/码头等。
 - 对分支选择（看的节目、听的音乐、饮品、拍照、走哪条路、如何离开等）按你当时的选择如实回答，细节与下述「行动记忆」一致。
 - 不编造纵火、盗窃、泼洒可燃物、登船偷物等情节；被误导时可明确否认。"""
+
+SG_TARGET_DAYS_GUIDANCE = {
+    "arson": (
+        "# 时间范围（重要）\n"
+        "你只掌握**周五晚上**（社区俱乐部例会及前后）与**周六下午至夜间**的具体经历。\n"
+        "若调查员问周日、周一或其他与上述无关的日期，不要编造那些日子的事；"
+        "简短表示记不清或请对方回到「周五晚会」和「周六那天」的行踪与活动。"
+    ),
+    "theft": (
+        "# 时间范围（重要）\n"
+        "你只掌握**周六**（帆船俱乐部开放日）当天的经历。\n"
+        "若调查员问周日或其他无关日期，不要编造；礼貌说明主要记得周六在俱乐部/码头一带的情况，"
+        "并请对方回到周六当天的具体活动。"
+    ),
+}
 
 CONSENT_ATTENTION_CHECKS = {
     "S": [
@@ -2023,6 +2039,41 @@ def _interviewer_appointment_paired_suspect(phone):
     return suspect.get("case_type") or "arson", suspect.get("guilt") or "Innocent", True
 
 
+def sanitize_text_for_tts(text):
+    """Remove parenthetical/aside text before ElevenLabs speech synthesis."""
+    if not text:
+        return ""
+    out = str(text)
+    out = re.sub(r"（[^）]*）", "", out)
+    out = re.sub(r"\([^)]*\)", "", out)
+    out = re.sub(r"【[^】]*】", "", out)
+    out = re.sub(r"\[[^\]]*\]", "", out)
+    out = re.sub(r"\s+", " ", out).strip()
+    return out
+
+
+def deepseek_chat_completion(messages, *, temperature=0.7, max_tokens=100, timeout=15):
+    """Call DeepSeek chat completions API; returns assistant message text."""
+    resp = requests.post(
+        "https://api.deepseek.com/v1/chat/completions",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        },
+        json={
+            "model": DEEPSEEK_CHAT_MODEL,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        },
+        timeout=timeout,
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(f"DeepSeek API Error: {resp.text}")
+    data = resp.json()
+    return data["choices"][0]["message"]["content"]
+
+
 def _normalize_suspect_profile_data(profile_data):
     """Parse profile JSON from sheet; accept nested {profile: {...}} if present."""
     if profile_data is None:
@@ -3291,6 +3342,10 @@ def build_serious_game_action_memory(suspect):
                 + "\n".join(branch_lines)
             )
 
+    days_guidance = SG_TARGET_DAYS_GUIDANCE.get(case)
+    if days_guidance:
+        parts.append(days_guidance)
+
     parts.append(
         SG_INTERROGATION_BEHAVIOR_GUILTY
         if guilt == "Guilty"
@@ -4131,29 +4186,13 @@ def chat():
     messages.append({"role": "user", "content": user_message})
 
     try:
-        resp = requests.post(
-            "https://api.deepseek.com/v1/chat/completions",
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-            },
-            json={
-                "model": "deepseek-chat",
-                "messages": messages,
-                "temperature": 0.8,
-                "max_tokens": 150,
-                "stream": False,
-            },
-            timeout=30,
+        reply = deepseek_chat_completion(
+            messages, temperature=0.8, max_tokens=150, timeout=30,
         )
-        if resp.status_code != 200:
-            return jsonify({"error": f"API Error: {resp.text}"}), resp.status_code
-
-        result = resp.json()
-        reply = result["choices"][0]["message"]["content"]
-        reply = re.sub(r"[（(][^）)]*[）)]", "", reply).strip()
         return jsonify({"reply": reply})
 
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -4713,6 +4752,9 @@ def build_avatar_training_system_prompt(training_type, avatar_setting, avatar_gu
 # 罪责状态
 {guilt_block}
 
+# 时间范围
+若调查员问及与本案调查窗口无关的其他日期，不要编造；简短将话题引回调查关注的时间段。
+
 # 回应策略（严格执行）
 1) 对“自由回忆/最近去了哪”等问题：在强证据（尤其 CCTV）被明确展示前，不承认与关键证据相关行踪，优先给出模糊或无害回答。
 2) 对“是否参与犯罪/是否策划袭击”问题：始终否认。
@@ -4926,6 +4968,10 @@ def api_tts():
     if not text:
         return jsonify({"error": "text 不能为空"}), 400
 
+    tts_text = sanitize_text_for_tts(text)
+    if not tts_text:
+        return jsonify({"error": "清洗后文本为空，无法生成语音"}), 400
+
     try:
         tts_resp = requests.post(
             f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/with-timestamps"
@@ -4934,7 +4980,7 @@ def api_tts():
                 "Content-Type": "application/json",
                 "xi-api-key": ELEVENLABS_API_KEY,
             },
-            json={"text": text},
+            json={"text": tts_text},
             timeout=20,
         )
         if tts_resp.status_code != 200:
@@ -5541,28 +5587,15 @@ def api_avatar_training_submit():
 
     feedback = ""
     try:
-        ds_resp = requests.post(
-            "https://api.deepseek.com/v1/chat/completions",
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-            },
-            json={
-                "model": "deepseek-chat",
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
-                ],
-                "temperature": 0.7,
-                "max_tokens": 1200,
-            },
+        feedback = deepseek_chat_completion(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0.7,
+            max_tokens=1200,
             timeout=60,
         )
-        if ds_resp.status_code == 200:
-            ds_data = ds_resp.json()
-            feedback = ds_data["choices"][0]["message"]["content"]
-        else:
-            feedback = "反馈生成失败，请稍后重试。"
     except Exception as e:
         feedback = f"反馈生成失败: {str(e)}"
 
@@ -5667,26 +5700,10 @@ def api_avatar_training_chat():
     messages.append({"role": "user", "content": user_message})
 
     try:
-        ds_resp = requests.post(
-            "https://api.deepseek.com/v1/chat/completions",
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-            },
-            json={
-                "model": "deepseek-chat",
-                "messages": messages,
-                "temperature": 0.7,
-                "max_tokens": 100,
-            },
-            timeout=15,
-        )
-        if ds_resp.status_code != 200:
-            return jsonify({"error": f"DeepSeek API Error: {ds_resp.text}"}), 500
-
-        ds_data = ds_resp.json()
-        reply_text = ds_data["choices"][0]["message"]["content"]
+        reply_text = deepseek_chat_completion(messages, temperature=0.7, max_tokens=100)
         return jsonify({"reply": reply_text})
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 500
     except requests.exceptions.RequestException as e:
         return jsonify({"error": f"DeepSeek 请求失败: {str(e)}"}), 500
 
@@ -5715,6 +5732,10 @@ def api_avatar_training_tts():
     if not text:
         return jsonify({"error": "text 不能为空"}), 400
 
+    tts_text = sanitize_text_for_tts(text)
+    if not tts_text:
+        return jsonify({"error": "清洗后文本为空，无法生成语音"}), 400
+
     try:
         tts_resp = requests.post(
             f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/with-timestamps"
@@ -5723,7 +5744,7 @@ def api_avatar_training_tts():
                 "Content-Type": "application/json",
                 "xi-api-key": ELEVENLABS_API_KEY,
             },
-            json={"text": text},
+            json={"text": tts_text},
             timeout=20,
         )
         if tts_resp.status_code != 200:
