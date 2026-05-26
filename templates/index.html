@@ -1069,6 +1069,89 @@
     font-size: 13px;
   }
 
+  .avatar-phase-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    background: #f7f9fc;
+    border: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text);
+    min-height: 44px;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .avatar-phase-bar.is-active {
+    background: #eff6ff;
+    border-color: #93c5fd;
+  }
+  .avatar-phase-bar.is-speaking {
+    background: #f0fdf4;
+    border-color: #86efac;
+  }
+  .avatar-phase-bar.is-error {
+    background: #fef2f2;
+    border-color: #fca5a5;
+    color: #b91c1c;
+  }
+  .avatar-phase-bar.dark {
+    background: #16213e;
+    border-color: #2a2a4a;
+    color: #cbd5e1;
+  }
+  .avatar-phase-bar.dark.is-active {
+    background: #1e3a5f;
+    border-color: #3b82f6;
+  }
+  .avatar-phase-bar.dark.is-speaking {
+    background: #1a3328;
+    border-color: #4caf50;
+    color: #d1fae5;
+  }
+  .avatar-phase-bar.dark.is-error {
+    background: #3d1f1f;
+    border-color: #ff6b6b;
+    color: #fecaca;
+  }
+  .avatar-phase-dot {
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #94a3b8;
+  }
+  .avatar-phase-bar.is-active .avatar-phase-dot {
+    background: #3b82f6;
+    animation: avatar-phase-pulse 1.2s ease-in-out infinite;
+  }
+  .avatar-phase-bar.is-speaking .avatar-phase-dot {
+    background: #22c55e;
+    animation: avatar-phase-pulse 0.75s ease-in-out infinite;
+  }
+  .avatar-phase-bar.is-error .avatar-phase-dot {
+    background: #ef4444;
+    animation: none;
+  }
+  @keyframes avatar-phase-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.45; transform: scale(0.82); }
+  }
+  .avatar-phase-text {
+    flex: 1;
+    line-height: 1.45;
+  }
+  .avatar-phase-timer {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 600;
+    margin-top: 2px;
+  }
+  .avatar-phase-bar.dark .avatar-phase-timer {
+    color: #ffc107;
+  }
+
 </style>
 <script src="/static/device-check.js" defer></script>
 </head>
@@ -1423,6 +1506,12 @@
     </p>
     <div id="trainingLiveVideoContainer" style="width:100%;background:#000;border-radius:8px;min-height:280px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;position:relative;overflow:hidden;">
       <div id="trainingVideoPlaceholder" style="color:#9ca3af;font-size:14px;text-align:center;padding:16px;">等待视频连接...</div>
+    </div>
+    <div id="trainingAvatarPhaseBar" class="avatar-phase-bar is-active" aria-live="polite">
+      <span class="avatar-phase-dot" aria-hidden="true"></span>
+      <div class="avatar-phase-text">
+        <div id="trainingAvatarPhaseText">正在连接 Avatar…</div>
+      </div>
     </div>
     <div id="trainingChatArea" class="hidden" aria-hidden="true">
       <div id="trainingChatPlaceholder"></div>
@@ -4508,7 +4597,57 @@ APP.livePracticeRecorder = null;
 APP.livePracticeChunks = [];
 APP.livePracticeRecording = false;
 
+const AVATAR_PHASE_META = {
+  connecting: { label: '正在连接 Avatar…', mod: 'active' },
+  ready: { label: 'Avatar 已就绪，请开始提问', mod: '' },
+  transcribing: { label: '正在识别您的语音…', mod: 'active' },
+  thinking: { label: 'Avatar 正在思考…', mod: 'active' },
+  preparing: { label: 'Avatar 正在准备发言…', mod: 'active' },
+  speaking: { label: 'Avatar 正在发言…', mod: 'speaking' },
+  interrupted: { label: '发言已打断', mod: '' },
+  error: { label: '发生错误', mod: 'error' },
+  ended: { label: '访谈已结束', mod: 'error' },
+};
+
+function setAvatarPhase(target, phase, detail) {
+  const meta = AVATAR_PHASE_META[phase] || AVATAR_PHASE_META.ready;
+  const text = (detail != null && detail !== '') ? detail : meta.label;
+  const isTraining = target === 'training';
+  const bar = $(isTraining ? 'trainingAvatarPhaseBar' : 'avatarPhaseBar');
+  const textEl = $(isTraining ? 'trainingAvatarPhaseText' : 'avatarPhaseText');
+  if (!bar || !textEl) return;
+  bar.classList.remove('is-active', 'is-speaking', 'is-error');
+  if (meta.mod) bar.classList.add('is-' + meta.mod);
+  textEl.textContent = text;
+}
+
+function handleAvatarSpeakStarted(target) {
+  setAvatarPhase(target, 'speaking');
+  if (target === 'live') {
+    isAvatarSpeaking = true;
+    showInterruptBtn(true);
+  } else if (APP.trainingLiveAvatar) {
+    APP.trainingLiveAvatar.isSpeaking = true;
+  }
+}
+
+function handleAvatarSpeakEnded(target) {
+  if (target === 'live') {
+    isAvatarSpeaking = false;
+    showInterruptBtn(false);
+  } else if (APP.trainingLiveAvatar) {
+    APP.trainingLiveAvatar.isSpeaking = false;
+  }
+  if (APP.trainingSession || target === 'live') {
+    setAvatarPhase(target, 'ready');
+  }
+}
+
 function updateAvatarStatus(msg, isError) {
+  if ($('avatarPhaseBar')) {
+    setAvatarPhase('live', isError ? 'error' : 'connecting', msg);
+    return;
+  }
   const el = $('avatarStatus');
   if (el) {
     el.textContent = msg;
@@ -4572,13 +4711,14 @@ async function onAvatarSessionTimeout(kind) {
     if ($('trainingRecordBtn')) $('trainingRecordBtn').disabled = true;
     if ($('trainingRecordStatus')) $('trainingRecordStatus').textContent = '已达 10 分钟上限';
     await cleanupTrainingAvatar();
+    setAvatarPhase('training', 'ended', '已达 10 分钟上限，访谈已结束');
     $('submitTrainingJudgmentBtn').classList.remove('hidden');
     const t = $('trainingSessionTimer');
     if (t) t.textContent = '已结束（10 分钟）';
   } else {
     alert('本次访谈已达 10 分钟上限，已自动结束。');
     await cleanupLiveAvatar();
-    updateAvatarStatus('⏱️ 已达 10 分钟上限，会话已结束', true);
+    setAvatarPhase('live', 'ended', '已达 10 分钟上限，会话已结束');
     const t = $('avatarSessionTimer');
     if (t) t.textContent = '已结束（10 分钟）';
   }
@@ -4605,9 +4745,12 @@ async function initLiveAvatar(data) {
           </div>
         </div>
       </div>
-      <div id="avatarStatus" style="padding:8px 16px;color:#aaa;font-size:12px;text-align:center;background:#16213e;">
-        🔄 正在连接 LiveAvatar 服务...
-        <span id="avatarSessionTimer" style="display:block;margin-top:6px;color:#ffc107;font-weight:600;"></span>
+      <div id="avatarPhaseBar" class="avatar-phase-bar dark is-active" aria-live="polite">
+        <span class="avatar-phase-dot" aria-hidden="true"></span>
+        <div class="avatar-phase-text">
+          <div id="avatarPhaseText">正在连接 LiveAvatar 服务…</div>
+          <div id="avatarSessionTimer" class="avatar-phase-timer"></div>
+        </div>
       </div>
       <div id="avatarChatInput" style="background:#16213e;border-top:1px solid #2a2a4a;padding:12px 16px;">
         <p style="font-size:12px;color:#9ca3af;margin:0 0 10px 0;line-height:1.5;">语音讯问：点击「开始录音」说话，再次点击「停止录音」将自动转写并发送。</p>
@@ -4780,7 +4923,7 @@ async function connectLiveAvatar() {
       markStep(3, 'skip', '步骤 4/4: 使用 LiveKit 数据通道（无 WS）');
     }
     if (liveAvatarVideoConnected) {
-      updateAvatarStatus('🎤 LITE 模式已就绪 — 使用下方录音按钮开始语音讯问');
+      setAvatarPhase('live', 'ready', '🎤 Avatar 已就绪 — 使用下方录音按钮开始语音讯问');
       updateAvatarLoadingMsg('');
     } else {
       updateAvatarStatus('⚠️ 命令通道已就绪，但视频流未到达（可重试连接）', true);
@@ -4818,13 +4961,11 @@ function connectLiveAvatarWebSocket(wsUrl) {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
-          // Handle agent events
-          if (msg.type === 'agent.speak_started') {
-            isAvatarSpeaking = true;
-            showInterruptBtn(true);
-          } else if (msg.type === 'agent.speak_ended') {
-            isAvatarSpeaking = false;
-            showInterruptBtn(false);
+          const evt = msg.type || msg.event_type || '';
+          if (evt === 'agent.speak_started' || evt === 'avatar.speak_started') {
+            handleAvatarSpeakStarted('live');
+          } else if (evt === 'agent.speak_ended' || evt === 'avatar.speak_ended') {
+            handleAvatarSpeakEnded('live');
           }
         } catch (e) {
           console.warn('[LiveAvatar] WS message parse error:', e);
@@ -4869,7 +5010,10 @@ function interruptAvatar() {
     }));
     isAvatarSpeaking = false;
     showInterruptBtn(false);
-    updateAvatarStatus('⏹️ 已打断');
+    setAvatarPhase('live', 'interrupted');
+    setTimeout(() => {
+      if (!isAvatarSpeaking) setAvatarPhase('live', 'ready');
+    }, 800);
   }
 }
 
@@ -4929,7 +5073,7 @@ async function processAvatarChatMessage(text) {
 
   APP.chatHistory.push({ role: 'user', content: trimmed });
 
-  updateAvatarStatus('💬 DeepSeek 正在生成回答...');
+  setAvatarPhase('live', 'thinking');
 
   try {
     const chatResp = await api('/api/chat', {
@@ -4940,7 +5084,7 @@ async function processAvatarChatMessage(text) {
     const reply = chatResp.reply;
 
     APP.chatHistory.push({ role: 'assistant', content: reply });
-    updateAvatarStatus('🔊 正在转换为语音...');
+    setAvatarPhase('live', 'preparing');
 
     const ttsResp = await api('/api/tts', {
       text: reply,
@@ -4949,14 +5093,14 @@ async function processAvatarChatMessage(text) {
     const audioBase64 = ttsResp.audio;
 
     if (!audioBase64) {
-      updateAvatarStatus('⚠️ TTS 未返回音频，请重试', true);
+      setAvatarPhase('live', 'error', '语音生成失败，请重试');
       APP.chatHistory.pop();
       APP.chatHistory.pop();
       return;
     }
 
     const chunks = splitPcmToChunks(audioBase64);
-    updateAvatarStatus('🔊 正在播放 Avatar 语音回复...');
+    setAvatarPhase('live', 'speaking');
 
     const eventId = generateUUID();
     if (liveAvatarWS && liveAvatarWS.readyState === WebSocket.OPEN) {
@@ -4971,15 +5115,17 @@ async function processAvatarChatMessage(text) {
         type: 'agent.speak_end',
         event_id: eventId,
       }));
-      updateAvatarStatus('✅ 语音已发送');
+      setTimeout(() => {
+        if (!isAvatarSpeaking) setAvatarPhase('live', 'ready');
+      }, 1200);
     } else {
-      updateAvatarStatus('⚠️ WebSocket 未连接，无法播放语音。回复: ' + reply, true);
+      setAvatarPhase('live', 'error', 'WebSocket 未连接，无法播放语音');
     }
 
     await persistAvatarPracticeTranscript();
     refreshInterviewTranscriptBody();
   } catch (err) {
-    updateAvatarStatus('❌ 对话失败: ' + err.message, true);
+    setAvatarPhase('live', 'error', '对话失败：' + err.message);
     APP.chatHistory.pop();
   }
 }
@@ -5015,6 +5161,7 @@ async function startLivePracticeRecording() {
       const st = $('livePracticeRecordStatus');
       if (btn) btn.textContent = '🎙️ 开始录音';
       if (st) st.textContent = '正在识别语音...';
+      setAvatarPhase('live', 'transcribing');
 
       const audioBlob = new Blob(APP.livePracticeChunks, { type: 'audio/webm' });
       APP.livePracticeChunks = [];
@@ -5837,6 +5984,7 @@ async function startAvatarTrainingSessionInternal(sessionNum) {
     if ($('trainingRecordBtn')) $('trainingRecordBtn').disabled = false;
     if ($('trainingRecordStatus')) $('trainingRecordStatus').textContent = '待录音';
     if ($('trainingVideoPlaceholder')) $('trainingVideoPlaceholder').classList.remove('hidden');
+    setAvatarPhase('training', 'connecting', '正在启动 Avatar 会话…');
 
     // Initialize LiveAvatar for training
     closeInterviewTranscriptModal();
@@ -5866,53 +6014,36 @@ APP.trainingIsRecording = false;
 
 async function initTrainingAvatar(sessionData) {
   await cleanupTrainingAvatar();
+  setAvatarPhase('training', 'connecting', '正在创建会话…');
 
   let wsUrl, livekitUrl, livekitToken;
 
   try {
     const sessionNum = sessionData.session_num || (APP.trainingSession && APP.trainingSession.sessionNum);
-    // Step 1: Create token
-    updateTrainingStatus('创建会话令牌...');
+    setAvatarPhase('training', 'connecting', '正在获取会话令牌…');
     const tokenResp = await api('/api/avatar/token', { phone: APP.phone, session_num: sessionNum });
     const sessionToken = tokenResp.session_token;
-    updateTrainingStatus('会话已创建，正在启动...');
+    setAvatarPhase('training', 'connecting', '正在启动 Avatar 会话…');
 
-    // Step 2: Start session
     const sessionResp = await api('/api/avatar/session', { phone: APP.phone, session_num: sessionNum });
     wsUrl = sessionResp.ws_url;
     livekitUrl = sessionResp.livekit_url;
     livekitToken = sessionResp.livekit_token;
     APP.trainingLiveAvatar = APP.trainingLiveAvatar || {};
     APP.trainingLiveAvatar.sessionToken = sessionResp.session_token || sessionToken;
-    updateTrainingStatus('正在加载 LiveKit SDK...');
+    setAvatarPhase('training', 'connecting', '正在连接视频…');
 
-    // Step 3: Load LiveKit SDK and connect
     await loadLiveKitSDK();
     await connectTrainingLiveKit(livekitUrl, livekitToken);
-    updateTrainingStatus('正在连接 WebSocket...');
+    setAvatarPhase('training', 'connecting', '正在连接语音通道…');
 
-    // Step 4: Connect WebSocket
     connectTrainingWebSocket(wsUrl);
-    updateTrainingStatus('');
 
-    $('trainingChatPlaceholder').classList.remove('hidden');
-    $('trainingChatPlaceholder').innerHTML = 'Avatar 已就绪，请开始您的访谈。';
+    setAvatarPhase('training', 'ready', 'Avatar 已就绪，请开始语音访谈');
     startAvatarSessionTimer('training');
   } catch (err) {
-    updateTrainingStatus('');
+    setAvatarPhase('training', 'error', '启动失败：' + err.message);
     showError('启动训练 Avatar 失败: ' + err.message);
-  }
-}
-
-function updateTrainingStatus(msg) {
-  const el = $('trainingChatPlaceholder');
-  if (el) {
-    if (msg) {
-      el.classList.remove('hidden');
-      el.innerHTML = '⏳ ' + msg;
-    } else {
-      el.classList.add('hidden');
-    }
   }
 }
 
@@ -5935,6 +6066,7 @@ async function connectTrainingLiveKit(url, token) {
       connected: false,
       videoAttached: false,
       sessionToken: prevToken || null,
+      isSpeaking: false,
     };
 
     const attachTrack = (track) => {
@@ -5951,8 +6083,9 @@ async function connectTrainingLiveKit(url, token) {
           container.innerHTML = '';
           container.appendChild(videoEl);
           APP.trainingLiveAvatar.videoAttached = true;
-          $('trainingChatPlaceholder').classList.remove('hidden');
-          $('trainingChatPlaceholder').innerHTML = 'Avatar 已就绪，请开始语音访谈。';
+          if (!APP.trainingLiveAvatar.isSpeaking) {
+            setAvatarPhase('training', 'ready', 'Avatar 已就绪，请开始语音访谈');
+          }
         } else if (track.kind === 'audio') {
           track.attach();
         }
@@ -6001,6 +6134,15 @@ function connectTrainingWebSocket(wsUrl) {
 }
 
 function handleTrainingWSMessage(msg) {
+  const evt = msg.event_type || msg.type || '';
+  if (evt === 'agent.speak_started' || evt === 'avatar.speak_started') {
+    handleAvatarSpeakStarted('training');
+    return;
+  }
+  if (evt === 'agent.speak_ended' || evt === 'avatar.speak_ended') {
+    handleAvatarSpeakEnded('training');
+    return;
+  }
   if (msg.event_type === 'avatar.transcription') {
     const text = msg.text || '';
     if (text) {
@@ -6054,8 +6196,9 @@ async function processTrainingUserMessage(message) {
   // Interrupt current speech first
   await interruptTrainingAvatar();
 
+  setAvatarPhase('training', 'thinking');
+
   try {
-    // Get DeepSeek response
     const chatResp = await api('/api/avatar-training/chat', {
       phone: APP.phone,
       session_num: APP.trainingSession.sessionNum,
@@ -6068,19 +6211,19 @@ async function processTrainingUserMessage(message) {
     appendTrainingChatMessage('avatar', reply);
     APP.trainingSession.transcript.push({ role: 'avatar', text: reply });
 
-    // Get TTS
+    setAvatarPhase('training', 'preparing');
+
     const ttsResp = await api('/api/avatar-training/tts', {
       phone: APP.phone,
       text: reply,
     });
 
-    // Send audio chunks via WebSocket
     if (APP.trainingLiveAvatar && APP.trainingLiveAvatar.wsReady && ttsResp.audio) {
+      setAvatarPhase('training', 'speaking');
       const chunks = splitPcmToChunks(ttsResp.audio);
 
       const speakEventId = generateUUID();
 
-      // Send first chunk with response command
       sendTrainingWSCommand({
         event_id: speakEventId,
         event_type: 'agent.speak',
@@ -6088,7 +6231,6 @@ async function processTrainingUserMessage(message) {
         audio: chunks[0],
       });
 
-      // Send remaining chunks
       for (let i = 1; i < chunks.length; i++) {
         await sleep(50);
         sendTrainingWSCommand({
@@ -6098,12 +6240,18 @@ async function processTrainingUserMessage(message) {
         });
       }
 
-      // Send speak end
       await sleep(50);
       sendTrainingWSCommand({
         event_id: speakEventId,
         event_type: 'agent.speak_end',
       });
+      setTimeout(() => {
+        if (!APP.trainingLiveAvatar || !APP.trainingLiveAvatar.isSpeaking) {
+          setAvatarPhase('training', 'ready');
+        }
+      }, 1200);
+    } else if (ttsResp.audio) {
+      setAvatarPhase('training', 'ready');
     }
 
     try {
@@ -6117,6 +6265,7 @@ async function processTrainingUserMessage(message) {
     }
     updateTrainingQuestionCountUI();
   } catch (err) {
+    setAvatarPhase('training', 'error', '对话失败：' + err.message);
     appendTrainingChatMessage('system', '错误: ' + err.message);
   }
 }
@@ -6150,6 +6299,7 @@ async function startTrainingRecording() {
       APP.trainingIsRecording = false;
       if ($('trainingRecordBtn')) $('trainingRecordBtn').textContent = '🎙️ 开始录音';
       if ($('trainingRecordStatus')) $('trainingRecordStatus').textContent = '正在识别语音...';
+      setAvatarPhase('training', 'transcribing');
 
       const audioBlob = new Blob(APP.trainingRecordChunks, { type: 'audio/webm' });
       if (!audioBlob.size) {
@@ -6201,6 +6351,8 @@ async function transcribeInterviewAudio(audioBlob) {
 async function interruptTrainingAvatar() {
   if (APP.trainingLiveAvatar && APP.trainingLiveAvatar.ws && APP.trainingLiveAvatar.wsReady) {
     sendTrainingWSCommand({ event_type: 'agent.interrupt' });
+    APP.trainingLiveAvatar.isSpeaking = false;
+    setAvatarPhase('training', 'interrupted');
     await sleep(100);
   }
 }
@@ -6213,6 +6365,7 @@ async function endTrainingSession() {
   if (APP.trainingIsRecording) stopTrainingRecording();
   if ($('trainingRecordBtn')) $('trainingRecordBtn').disabled = true;
   if ($('trainingRecordStatus')) $('trainingRecordStatus').textContent = '会话已结束';
+  setAvatarPhase('training', 'ended', '本次访谈已结束，请提交判断');
   await cleanupTrainingAvatar();
   $('submitTrainingJudgmentBtn').classList.remove('hidden');
 }
