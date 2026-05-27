@@ -1741,6 +1741,22 @@
   </div>
 </div>
 
+<!-- Case download reminder (case info) -->
+<div class="number-reminder-overlay" id="caseDownloadReminderModal">
+  <div class="number-reminder-modal" style="text-align:left;max-width:440px;">
+    <div class="warning-icon" style="text-align:center;">📥</div>
+    <h3 style="color:var(--primary);border:none;margin-bottom:8px;text-align:center;">建议先下载案件材料</h3>
+    <p style="font-size:13px;color:var(--text);margin-bottom:12px;line-height:1.85;">
+      建议您<strong>先下载并保存本页的案件材料（PDF）</strong>，以便在正式实验/正式访谈中随时查阅与参考。
+    </p>
+    <div style="display:flex;gap:8px;flex-direction:column;">
+      <button class="btn-primary" onclick="downloadCaseInfoPdfs()" style="padding:12px 40px;font-size:15px;width:100%;">📥 立即下载案件材料</button>
+      <button class="btn btn-outline" onclick="proceedAfterCaseDownloadReminder()" style="padding:12px 40px;font-size:14px;width:100%;">我已下载 / 稍后下载，继续下一步 →</button>
+      <button class="btn btn-outline" onclick="closeCaseDownloadReminderModal()" style="padding:10px 40px;font-size:13px;width:100%;">先不继续（返回）</button>
+    </div>
+  </div>
+</div>
+
 <!-- Screenshot confirmation modal -->
 <div class="screenshot-modal-overlay" id="screenshotModal">
   <div class="screenshot-modal">
@@ -5562,6 +5578,10 @@ async function showCaseInfo() {
 }
 
 function goToNextAfterCaseInfo() {
+  handleCaseInfoNextClick();
+}
+
+function goToNextAfterCaseInfoDirect() {
   configureCaseInfoNextButton();
   $('caseInfoNextBtn').click();
 }
@@ -6732,6 +6752,43 @@ function renderPdfDownloadLinksHtml(files, title) {
   });
   html += '</div>';
   return html;
+}
+
+// ====== Download reminder (case info) ======
+function showCaseDownloadReminderModal() {
+  const el = $('caseDownloadReminderModal');
+  if (el) el.classList.add('show');
+}
+
+function closeCaseDownloadReminderModal() {
+  const el = $('caseDownloadReminderModal');
+  if (el) el.classList.remove('show');
+}
+
+function hasCaseInfoDownloads() {
+  return Array.isArray(APP.caseDownloadFiles) && APP.caseDownloadFiles.length > 0;
+}
+
+function handleCaseInfoNextClick() {
+  if (hasCaseInfoDownloads() && !sessionStorage.getItem('case_download_reminded')) {
+    showCaseDownloadReminderModal();
+    return;
+  }
+  goToNextAfterCaseInfoDirect();
+}
+
+function proceedAfterCaseDownloadReminder() {
+  sessionStorage.setItem('case_download_reminded', '1');
+  closeCaseDownloadReminderModal();
+  goToNextAfterCaseInfoDirect();
+}
+
+async function downloadCaseInfoPdfs() {
+  try {
+    await downloadInterviewerCasePdf();
+  } catch (e) {
+    alert('下载失败: ' + (e && e.message ? e.message : e));
+  }
 }
 
 async function buildBookingDownloadSection(isMatched) {

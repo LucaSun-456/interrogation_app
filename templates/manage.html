@@ -97,8 +97,17 @@
 
   .group-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    grid-template-columns: repeat(4, 1fr);
     gap: 10px;
+  }
+  @media (max-width: 1100px) {
+    .group-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 820px) {
+    .group-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 520px) {
+    .group-grid { grid-template-columns: 1fr; }
   }
   .group-card {
     border: 1px solid var(--border);
@@ -453,6 +462,20 @@
 <div class="card">
   <h2>参与实验结果（组别看板）</h2>
   <div class="count" id="participantCount">加载中...</div>
+  <div class="table-pager" style="margin-bottom:10px;">
+    <label>组号搜索</label>
+    <input id="groupBoardSearch" placeholder="如 004" oninput="groupBoardApply()" style="height:34px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-size:13px;width:140px;">
+    <label style="margin-left:8px;">每页显示</label>
+    <select id="groupBoardPageSize" onchange="groupBoardChangePageSize()">
+      <option value="8" selected>8</option>
+      <option value="16">16</option>
+      <option value="24">24</option>
+    </select>
+    <span>组</span>
+    <button type="button" class="btn btn-outline" id="groupBoardPrevBtn" onclick="groupBoardPrev()">上一页</button>
+    <span class="pager-info" id="groupBoardPagerInfo">第 1 / 1 页</span>
+    <button type="button" class="btn btn-outline" id="groupBoardNextBtn" onclick="groupBoardNext()">下一页</button>
+  </div>
   <div id="groupGrid" class="group-grid"></div>
 </div>
 
@@ -690,6 +713,13 @@ const CALENDAR_DAYS_PER_VIEW = 3;
 const TABLE_PAGE = {
   participant: { page: 1, size: 5, rows: [] },
   appointment: { page: 1, size: 5, rows: [] },
+};
+
+const GROUP_BOARD_PAGE = {
+  page: 1,
+  size: 8,
+  query: '',
+  keys: [],
 };
 
 function getAuthHeaders() {
@@ -1006,7 +1036,7 @@ function renderGroupGrid(participants, appointments) {
     if (a.status === 'confirmed') info.apptConfirmedPhones.add(a.phone);
   });
 
-  const keys = Array.from(groupMap.keys()).sort((a, b) => Number(a) - Number(b));
+  let keys = Array.from(groupMap.keys()).sort((a, b) => Number(a) - Number(b));
   const host = document.getElementById('groupGrid');
   if (!keys.length) {
     host.innerHTML = '<div class="empty" style="grid-column:1/-1;">暂无符合条件的数据</div>';
@@ -1026,33 +1056,76 @@ function renderGroupGrid(participants, appointments) {
     });
   });
 
-  host.innerHTML = keys.map(g => {
+  // Apply board search + pagination (default 8 groups: 4 columns × 2 rows)
+  const q = (GROUP_BOARD_PAGE.query || '').trim();
+  if (q) {
+    keys = keys.filter(g => String(g).includes(q));
+  }
+  GROUP_BOARD_PAGE.keys = keys;
+  const total = keys.length;
+  const totalPages = Math.max(1, Math.ceil(total / GROUP_BOARD_PAGE.size) || 1);
+  if (GROUP_BOARD_PAGE.page > totalPages) GROUP_BOARD_PAGE.page = totalPages;
+  if (GROUP_BOARD_PAGE.page < 1) GROUP_BOARD_PAGE.page = 1;
+  const start = (GROUP_BOARD_PAGE.page - 1) * GROUP_BOARD_PAGE.size;
+  const pageKeys = keys.slice(start, start + GROUP_BOARD_PAGE.size);
+
+  const pagerInfo = document.getElementById('groupBoardPagerInfo');
+  if (pagerInfo) {
+    pagerInfo.textContent = `第 ${GROUP_BOARD_PAGE.page} / ${totalPages} 页（共 ${total} 组）`;
+  }
+  const prevBtn = document.getElementById('groupBoardPrevBtn');
+  const nextBtn = document.getElementById('groupBoardNextBtn');
+  if (prevBtn) prevBtn.disabled = GROUP_BOARD_PAGE.page <= 1;
+  if (nextBtn) nextBtn.disabled = GROUP_BOARD_PAGE.page >= totalPages;
+
+  if (!pageKeys.length) {
+    host.innerHTML = '<div class="empty" style="grid-column:1/-1;">暂无符合条件的数据</div>';
+    return;
+  }
+
+  host.innerHTML = pageKeys.map(g => {
     const info = groupMap.get(g);
     const members = info.participants;
-    const suspectCount = members.filter(p => p.role === 'S').length;
-    const interviewerCount = members.filter(p => p.role === 'I').length;
-    const completedCount = members.filter(p => Number(p.completed) === 1).length;
     const bookedCount = members.filter(p => info.apptConfirmedPhones.has(p.phone)).length;
-    const bothReady = suspectCount >= 1 && interviewerCount >= 1 && bookedCount >= 2;
-    const allCompleted = members.length > 0 && completedCount === members.length;
+    const anyBooked = bookedCount > 0;
+    const allCompleted = members.length > 0 && members.every(p => Number(p.completed) === 1);
     const gEsc = String(g).replace(/"/g, '&quot;');
     return `
       <div class="group-card group-card-clickable" role="button" tabindex="0"
         data-group="${gEsc}" onclick="openGroupDetailModal(this.dataset.group)"
         onkeydown="if(event.key==='Enter')openGroupDetailModal(this.dataset.group)">
-        <div class="group-title">第 ${g} 组 <span style="font-size:11px;font-weight:400;color:var(--text-light);">点击查看详情</span></div>
-        <div class="group-row"><span>组内人数</span><strong>${members.length}</strong></div>
-        <div class="group-row"><span>嫌疑人</span><span>${suspectCount}</span></div>
-        <div class="group-row"><span>审讯者</span><span>${interviewerCount}</span></div>
-        <div class="group-row"><span>已完成实验</span><span>${completedCount}/${members.length || 0}</span></div>
-        <div class="group-row"><span>已确认预约</span><span>${bookedCount}/${members.length || 0}</span></div>
-        <div style="margin-top:8px;">
-          <span class="badge ${allCompleted ? 'badge-ok' : 'badge-warn'}">${allCompleted ? '全员已完成' : '有人未完成'}</span>
-          <span class="badge ${bothReady ? 'badge-ok' : 'badge-warn'}">${bothReady ? '双方已预约' : '预约未齐'}</span>
-        </div>
+        <div class="group-title">第 ${g} 组 <span style="font-size:11px;font-weight:400;color:var(--text-light);">点击查看</span></div>
+        <div class="group-row"><span>已完成</span><span class="badge ${allCompleted ? 'badge-ok' : 'badge-warn'}">${allCompleted ? '是' : '否'}</span></div>
+        <div class="group-row"><span>已预约</span><span class="badge ${anyBooked ? 'badge-ok' : 'badge-warn'}">${anyBooked ? '是' : '否'}</span></div>
       </div>
     `;
   }).join('');
+}
+
+function groupBoardApply() {
+  const q = (document.getElementById('groupBoardSearch')?.value || '').trim();
+  GROUP_BOARD_PAGE.query = q;
+  GROUP_BOARD_PAGE.page = 1;
+  applyFiltersAndRender();
+}
+
+function groupBoardChangePageSize() {
+  const raw = document.getElementById('groupBoardPageSize')?.value;
+  const n = parseInt(raw, 10);
+  GROUP_BOARD_PAGE.size = [8, 16, 24].includes(n) ? n : 8;
+  GROUP_BOARD_PAGE.page = 1;
+  applyFiltersAndRender();
+}
+
+function groupBoardPrev() {
+  if (GROUP_BOARD_PAGE.page > 1) GROUP_BOARD_PAGE.page -= 1;
+  applyFiltersAndRender();
+}
+
+function groupBoardNext() {
+  const totalPages = Math.max(1, Math.ceil((GROUP_BOARD_PAGE.keys || []).length / GROUP_BOARD_PAGE.size) || 1);
+  if (GROUP_BOARD_PAGE.page < totalPages) GROUP_BOARD_PAGE.page += 1;
+  applyFiltersAndRender();
 }
 
 function buildMemberDetailCard(p, roleTitle, roleCls) {
@@ -1085,6 +1158,55 @@ function buildMemberDetailCard(p, roleTitle, roleCls) {
     </div>`;
 }
 
+function stepItemHtml(done, label, detail) {
+  const mark = done ? '✅' : '⬜';
+  const color = done ? '#15803d' : '#6b7280';
+  const sub = detail ? `<div style="font-size:12px;color:var(--text-light);margin-top:4px;line-height:1.5;">${detail}</div>` : '';
+  return `<div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:white;">
+    <div style="font-weight:700;color:${color};">${mark} ${label}</div>${sub}
+  </div>`;
+}
+
+function groupHasBothRolesConfirmedBooking(info) {
+  const roles = new Set((info.appointments || []).filter(a => a.status === 'confirmed').map(a => a.role));
+  return roles.has('S') && roles.has('I');
+}
+
+function buildRoleStepsHtml(role, p, groupInfo) {
+  const appt = getConfirmedAppointment(p.phone);
+  const qs = getQuestionnaireStatus(p.phone);
+  const matched = groupHasBothRolesConfirmedBooking(groupInfo);
+  const tt = p.training_type || '';
+
+  const steps = [];
+  if (role === 'S') {
+    steps.push({ done: Number(p.attention_passed) === 1, label: '通过注意力检测', detail: '阅读案件背景并完成检测题' });
+    steps.push({ done: Number(p.game_completed) === 1, label: '完成模拟行动游戏', detail: '完成 serious game' });
+    steps.push({ done: Number(p.profile_completed) === 1, label: '填写个人信息问卷', detail: '提交个人档案' });
+    steps.push({ done: !!appt, label: '预约正式访谈时间', detail: appt ? `已确认：${appt.time_slot}` : '尚未确认预约' });
+    steps.push({ done: matched, label: '与审讯者配对成功', detail: matched ? '同一时段双方均已确认' : '等待对方确认同一时段' });
+    steps.push({ done: !!qs.pre, label: '访谈前问卷', detail: qs.pre ? '已提交' : '未提交' });
+    steps.push({ done: !!qs.post, label: '访谈后问卷', detail: qs.post ? '已提交' : '未提交' });
+    steps.push({ done: Number(p.completed) === 1, label: '完成实验并获取编号', detail: p.full_id ? `编号：${p.full_id}` : '' });
+  } else if (role === 'I') {
+    steps.push({ done: !!appt, label: '预约正式访谈时间', detail: appt ? `已确认：${appt.time_slot}` : '尚未确认预约' });
+    const trainingDone =
+      (tt === 'control' && Number(p.control_attention_passed) === 1) ||
+      (tt !== 'control' && Number(p.sue_attention_passed) === 1);
+    steps.push({ done: !!tt, label: '分配实验条件', detail: tt ? `培训类型：${trainingLabel(tt)}` : '尚未分配（通常预约后分配）' });
+    steps.push({ done: trainingDone, label: '完成培训与注意力检测', detail: trainingDone ? '已通过' : '未通过/未完成' });
+    steps.push({ done: matched, label: '与嫌疑人配对成功', detail: matched ? '同一时段双方均已确认' : '等待对方确认同一时段' });
+    const caseInfoDone = ['case_info_done', 'theory_practice', 'avatar_training', 'finalize'].includes(String(p.flow_step || '').trim()) || Number(p.completed) === 1;
+    steps.push({ done: caseInfoDone, label: '阅读案件信息与证据', detail: caseInfoDone ? '已进入后续流程' : '未完成/未记录' });
+    steps.push({ done: Number(p.completed) === 1, label: '完成实验并获取编号', detail: p.full_id ? `编号：${p.full_id}` : '' });
+    steps.push({ done: !!qs.pre, label: '访谈前问卷', detail: qs.pre ? '已提交' : '未提交' });
+    steps.push({ done: !!qs.post, label: '访谈后问卷', detail: qs.post ? '已提交' : '未提交' });
+  }
+
+  const grid = steps.map(s => stepItemHtml(s.done, s.label, s.detail)).join('');
+  return `<div style="display:grid;grid-template-columns:1fr;gap:10px;">${grid}</div>`;
+}
+
 function openGroupDetailModal(groupName) {
   const info = APP.groupDetailByName.get(String(groupName));
   const titleEl = document.getElementById('groupDetailModalTitle');
@@ -1094,26 +1216,31 @@ function openGroupDetailModal(groupName) {
 
   if (titleEl) titleEl.textContent = `第 ${groupName} 组 · 详情`;
 
-  const suspects = info.members.filter(p => p.role === 'S');
-  const interviewers = info.members.filter(p => p.role === 'I');
-  const others = info.members.filter(p => p.role !== 'S' && p.role !== 'I');
+  const suspect = info.members.find(p => p.role === 'S') || null;
+  const interviewer = info.members.find(p => p.role === 'I') || null;
 
   let html = '<div class="detail-grid-2">';
-  if (suspects.length) {
-    html += suspects.map(p => buildMemberDetailCard(p, '嫌疑人', 's')).join('');
+  if (suspect) {
+    html += `<div class="member-detail-card s">
+      <h4>嫌疑人</h4>
+      <div class="detail-row"><span class="lbl">编号</span><span>${suspect.full_id || '-'}</span></div>
+      <div class="detail-row"><span class="lbl">手机号</span><span>${suspect.phone || '-'}</span></div>
+      <div style="margin-top:10px;">${buildRoleStepsHtml('S', suspect, info)}</div>
+    </div>`;
   } else {
     html += '<div class="member-detail-card s"><h4>嫌疑人</h4><p style="color:var(--text-light);">本组暂无嫌疑人记录</p></div>';
   }
-  if (interviewers.length) {
-    html += interviewers.map(p => buildMemberDetailCard(p, '审讯者', 'i')).join('');
+  if (interviewer) {
+    html += `<div class="member-detail-card i">
+      <h4>审讯者</h4>
+      <div class="detail-row"><span class="lbl">编号</span><span>${interviewer.full_id || '-'}</span></div>
+      <div class="detail-row"><span class="lbl">手机号</span><span>${interviewer.phone || '-'}</span></div>
+      <div style="margin-top:10px;">${buildRoleStepsHtml('I', interviewer, info)}</div>
+    </div>`;
   } else {
     html += '<div class="member-detail-card i"><h4>审讯者</h4><p style="color:var(--text-light);">本组暂无审讯者记录</p></div>';
   }
   html += '</div>';
-
-  if (others.length) {
-    html += '<div style="margin-top:12px;">' + others.map(p => buildMemberDetailCard(p, '其他', '')).join('') + '</div>';
-  }
 
   const slots = new Set();
   info.appointments.filter(a => a.status === 'confirmed').forEach(a => {
