@@ -197,6 +197,29 @@
     margin-bottom: 8px;
     color: #1f2937;
   }
+  .slot-pick-btn {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 8px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 12px;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .slot-pick-btn:hover:not(:disabled) {
+    border-color: var(--primary);
+    background: #f0f7ff;
+  }
+  .slot-pick-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: #f3f4f6;
+  }
+  .slot-pick-btn.is-current {
+    border-color: var(--primary);
+    background: #e8f2ff;
+  }
 
   .participant-filters {
     display: grid;
@@ -669,6 +692,19 @@
       <button type="button" class="admin-modal-close" onclick="closeSlotConfigModal()">关闭</button>
     </div>
     <div class="admin-modal-body" id="slotConfigModalBody">
+      <div class="empty">加载中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- 修改预约时间悬浮窗 -->
+<div class="admin-modal-overlay" id="rescheduleModal" onclick="if(event.target===this)closeRescheduleModal()">
+  <div class="admin-modal slot-modal" onclick="event.stopPropagation()">
+    <div class="admin-modal-header">
+      <h3 id="rescheduleModalTitle">修改预约时间</h3>
+      <button type="button" class="admin-modal-close" onclick="closeRescheduleModal()">关闭</button>
+    </div>
+    <div class="admin-modal-body" id="rescheduleModalBody">
       <div class="empty">加载中...</div>
     </div>
   </div>
@@ -1421,6 +1457,11 @@ function renderParticipantTable(participants) {
         <td class="profile-cell">${profileStr}</td>
         <td style="white-space:nowrap;">
           <button class="btn btn-outline" style="font-size:11px;padding:3px 8px;margin-bottom:4px;" onclick="editParticipantGroup('${(p.phone || '').replace(/'/g, "\\'")}', '${p.group_name || ''}', '${(p.full_id || '').replace(/'/g, "\\'")}')">改组别</button>
+          ${(() => {
+            const ap = APP.appointmentByPhone.get(p.phone);
+            if (!ap || ap.status !== 'confirmed') return '';
+            return `<button class="btn btn-outline" style="font-size:11px;padding:3px 8px;margin-bottom:4px;" onclick="openRescheduleModal(${ap.id}, '${(p.phone || '').replace(/'/g, "\\'")}', '${p.role || ''}', '${(ap.time_slot || '').replace(/'/g, "\\'")}')">改预约</button>`;
+          })()}
           <button class="btn btn-danger" style="font-size:11px;padding:3px 8px;" onclick="deleteParticipant(${p.id})">删除</button>
         </td>
       </tr>
@@ -1447,7 +1488,12 @@ function renderAppointmentTable(appointments) {
         <td>${a.time_slot || '-'}</td>
         <td style="color:${statusColor};font-weight:700;">${statusLabel}</td>
         <td>${a.booked_at || '-'}</td>
-        <td><button class="btn btn-danger" onclick="deleteAppointment(${a.id})">删除</button></td>
+        <td style="white-space:nowrap;">
+          ${a.status === 'confirmed'
+            ? `<button class="btn btn-outline" style="font-size:11px;padding:3px 8px;margin-right:4px;" onclick="openRescheduleModal(${a.id}, '${(a.phone || '').replace(/'/g, "\\'")}', '${a.role || ''}', '${(a.time_slot || '').replace(/'/g, "\\'")}')">改时间</button>`
+            : ''}
+          <button class="btn btn-danger" style="font-size:11px;padding:3px 8px;" onclick="deleteAppointment(${a.id})">删除</button>
+        </td>
       </tr>
     `;
   }).join('');
@@ -1613,6 +1659,147 @@ async function toggleSlot(slot, enabled) {
   } catch (err) {
     alert('设置时段失败: ' + err.message);
     loadSlotConfig();
+  }
+}
+
+let rescheduleContext = null;
+let rescheduleSelectedDay = null;
+let rescheduleSlotsCache = null;
+
+function slotAvailableForReschedule(slotInfo, role, currentSlot) {
+  if (!slotInfo || !role) return false;
+  if (slotInfo.slot === currentSlot) return true;
+  const roles = slotInfo.roles_booked || [];
+  return !roles.includes(role);
+}
+
+function openRescheduleModal(aid, phone, role, currentSlot) {
+  rescheduleContext = { aid, phone, role, currentSlot: currentSlot || '' };
+  rescheduleSelectedDay = null;
+  rescheduleSlotsCache = null;
+  const modal = document.getElementById('rescheduleModal');
+  const title = document.getElementById('rescheduleModalTitle');
+  if (title) {
+    title.textContent = `修改预约时间 · ${phone || ''}（${roleLabel(role)}）`;
+  }
+  if (modal) modal.classList.add('show');
+  loadRescheduleSlots();
+}
+
+function closeRescheduleModal() {
+  const modal = document.getElementById('rescheduleModal');
+  if (modal) modal.classList.remove('show');
+  rescheduleContext = null;
+  rescheduleSelectedDay = null;
+}
+
+function renderRescheduleSlots() {
+  const wrap = document.getElementById('rescheduleModalBody');
+  if (!wrap || !rescheduleContext) return;
+  const ctx = rescheduleContext;
+  const slots = rescheduleSlotsCache || [];
+  const dayMap = buildSlotDayMap(slots);
+  const days = Array.from(dayMap.keys()).sort();
+
+  if (!days.length) {
+    wrap.innerHTML = '<div class="empty">暂无可用时段</div>';
+    return;
+  }
+
+  if (!rescheduleSelectedDay) {
+    let html = `<p class="count" style="margin-bottom:12px;">当前预约：<strong>${ctx.currentSlot || '无'}</strong>。选择日期后挑选新时段（管理员可改至未开放时段）。</p>`;
+    html += '<div class="slot-modal-grid-5">';
+    days.forEach(day => {
+      const items = dayMap.get(day) || [];
+      const pickable = items.filter(s => slotAvailableForReschedule(s, ctx.role, ctx.currentSlot)).length;
+      html += `<button type="button" class="slot-day-btn" onclick="openRescheduleDay('${day}')">
+        <div style="font-weight:700;">${day}</div>
+        <div class="sub">可选 ${pickable}/${items.length} 档</div>
+      </button>`;
+    });
+    html += '</div>';
+    wrap.innerHTML = html;
+    return;
+  }
+
+  const items = (dayMap.get(rescheduleSelectedDay) || []).sort((a, b) => a.time.localeCompare(b.time));
+  let html = `<div class="slot-detail-head">
+    <button type="button" class="btn btn-outline" style="font-size:12px;padding:6px 12px;" onclick="backToRescheduleDayList()">← 返回日期列表</button>
+    <strong style="font-size:14px;">${rescheduleSelectedDay}</strong>
+    <span class="count">点击时段确认修改</span>
+  </div>`;
+  html += '<div class="slot-modal-grid-5">';
+  items.forEach(s => {
+    const available = slotAvailableForReschedule(s, ctx.role, ctx.currentSlot);
+    const roles = (s.roles_booked || []).map(r => r === 'S' ? '嫌疑人' : '审讯者').join('、') || '无';
+    const isCurrent = s.slot === ctx.currentSlot;
+    const status = isCurrent ? '当前预约' : (available ? '可选' : '该角色已满');
+    const openHint = s.enabled ? '' : ' · 未开放';
+    const slotEsc = s.slot.replace(/'/g, "\\'");
+    html += `<button type="button" class="slot-pick-btn${isCurrent ? ' is-current' : ''}"
+      ${available ? '' : 'disabled'}
+      onclick="confirmReschedule('${slotEsc}')">
+      <div style="font-weight:700;">${s.time}</div>
+      <div style="font-size:11px;color:#6b7280;margin-top:4px;">${status}${openHint}</div>
+      <div style="font-size:11px;color:#6b7280;">已约：${roles}</div>
+    </button>`;
+  });
+  html += '</div>';
+  wrap.innerHTML = html;
+}
+
+function openRescheduleDay(day) {
+  rescheduleSelectedDay = day;
+  renderRescheduleSlots();
+}
+
+function backToRescheduleDayList() {
+  rescheduleSelectedDay = null;
+  renderRescheduleSlots();
+}
+
+async function loadRescheduleSlots() {
+  const wrap = document.getElementById('rescheduleModalBody');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="empty">加载时段中...</div>';
+  try {
+    const headers = getAuthHeaders();
+    if (!headers.Authorization) { promptForPassword(); return; }
+    const ctx = rescheduleContext || {};
+    const resp = await fetch('/api/admin/appointment-slots?role=' + encodeURIComponent(ctx.role || ''), { headers });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    rescheduleSlotsCache = data.slots || [];
+    renderRescheduleSlots();
+  } catch (err) {
+    wrap.innerHTML = `<div class="empty" style="color:var(--accent);">时段加载失败：${err.message}</div>`;
+  }
+}
+
+async function confirmReschedule(newSlot) {
+  if (!rescheduleContext || !newSlot) return;
+  const ctx = rescheduleContext;
+  if (newSlot === ctx.currentSlot) {
+    alert('所选时段与当前预约相同，无需修改。');
+    return;
+  }
+  if (!confirm(`确定将 ${ctx.phone} 的预约从\n${ctx.currentSlot || '无'}\n改为\n${newSlot} ？`)) return;
+  try {
+    const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
+    if (!headers.Authorization) { promptForPassword(); return; }
+    const resp = await fetch(`/api/admin/appointments/${ctx.aid}/reschedule`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ time_slot: newSlot }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '修改失败');
+    const matched = data.is_matched ? '（已与对方配对）' : '（等待配对）';
+    alert(`预约时间已更新为 ${data.time_slot}${matched}`);
+    closeRescheduleModal();
+    loadData();
+  } catch (err) {
+    alert('修改失败：' + err.message);
   }
 }
 

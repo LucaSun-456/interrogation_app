@@ -1440,6 +1440,30 @@ class ExcelStore:
             finally:
                 self._close(wb)
 
+    def get_appointment_by_id(self, aid):
+        for a in self.get_appointments():
+            if a.get("id") == aid:
+                return a
+        return None
+
+    def update_appointment_by_id(self, aid, **kwargs):
+        with _excel_lock:
+            wb = self._load()
+            try:
+                appointments = self._read_all(wb, SHEET_APPOINTMENTS)
+                found = False
+                for a in appointments:
+                    if a.get("id") == aid:
+                        a.update(kwargs)
+                        found = True
+                        break
+                if found:
+                    self._write_all(wb, SHEET_APPOINTMENTS, appointments)
+                    self._save(wb)
+                return found
+            finally:
+                self._close(wb)
+
     def cancel_appointment(self, phone):
         return self.update_appointment(phone, status="cancelled")
 
@@ -3079,6 +3103,135 @@ def _sync_slot_participants_flow_step(time_slot, is_matched):
         step = (p.get("flow_step") or "").strip()
         if step in ("booking", "booking_wait", ""):
             store.update_participant(ph, flow_step="booking_matched")
+
+
+def _refresh_slot_match_state(time_slot):
+    """Reconcile booking_wait / booking_matched for all participants on a slot."""
+    if not time_slot:
+        return
+    is_matched = _slot_has_both_roles(time_slot)
+    if is_matched:
+        _sync_slot_participants_flow_step(time_slot, True)
+        return
+    for appt in store.get_appointments():
+        if appt.get("status") != "confirmed":
+            continue
+        if (appt.get("time_slot") or "").strip() != time_slot:
+            continue
+        ph = (appt.get("phone") or "").strip()
+        if not ph:
+            continue
+        p = store.get_participant(ph)
+        if not p:
+            continue
+        step = (p.get("flow_step") or "").strip()
+        if step == "booking_matched":
+            store.update_participant(ph, flow_step="booking_wait")
+        elif step in ("booking", ""):
+            store.update_participant(ph, flow_step="booking_wait")
+
+
+def admin_reschedule_appointment(aid, new_time_slot):
+    """Admin-only: move a confirmed appointment to another slot (bypasses user booking rules)."""
+    appt = store.get_appointment_by_id(aid)
+    if not appt:
+        raise ValueError("未找到预约")
+    if appt.get("status") != "confirmed":
+        raise ValueError("只能修改已确认的预约")
+
+    phone = (appt.get("phone") or "").strip()
+    role = appt.get("role")
+    old_slot = (appt.get("time_slot") or "").strip()
+    new_time_slot = (new_time_slot or "").strip()
+
+    if not new_time_slot:
+        raise ValueError("预约时间不能为空")
+    if not phone or role not in ("S", "I"):
+        raise ValueError("预约数据无效")
+
+    if new_time_slot == old_slot:
+        return {
+            "success": True,
+            "unchanged": True,
+            "appointment_id": aid,
+            "phone": phone,
+            "role": role,
+            "time_slot": old_slot,
+        }
+
+    try:
+        datetime.strptime(new_time_slot, "%Y-%m-%d %H:%M")
+    except ValueError:
+        raise ValueError("时间格式无效，须为 YYYY-MM-DD HH:MM")
+
+    if new_time_slot not in _candidate_booking_slots(role):
+        raise ValueError(
+            f"该时间段不在可选范围内（有效时段为 {BOOKING_MAX_DAYS} 天内的标准预约窗口）"
+        )
+
+    slot_bookings = store.get_slot_bookings()
+    booked_roles = slot_bookings.get(new_time_slot, set())
+    if role in booked_roles:
+        role_label = "嫌疑人" if role == "S" else "审讯者"
+        raise ValueError(f"目标时段已有{role_label}预约，请选择其他时段")
+
+    if not store.get_participant(phone):
+        raise ValueError("未找到参与者")
+
+    if not store.update_appointment_by_id(aid, time_slot=new_time_slot):
+        raise ValueError("更新预约失败")
+
+    group_name, full_id = assign_participant_group_on_booking(phone, new_time_slot)
+
+    training_type = None
+    if role == "I":
+        training_type = assign_interviewer_training_type(phone, new_time_slot)
+    elif role == "S":
+        for other in store.get_appointments():
+            if (
+                other.get("status") == "confirmed"
+                and other.get("role") == "I"
+                and (other.get("time_slot") or "").strip() == new_time_slot
+            ):
+                training_type = assign_interviewer_training_type(
+                    (other.get("phone") or "").strip(),
+                    new_time_slot,
+                )
+
+    is_matched_new = _slot_has_both_roles(new_time_slot)
+    store.update_participant(
+        phone,
+        flow_step="booking_matched" if is_matched_new else "booking_wait",
+    )
+    _sync_slot_participants_flow_step(new_time_slot, is_matched_new)
+
+    if old_slot:
+        _refresh_slot_match_state(old_slot)
+        for other in store.get_appointments():
+            if (
+                other.get("status") == "confirmed"
+                and other.get("role") == "I"
+                and (other.get("time_slot") or "").strip() == old_slot
+            ):
+                assign_interviewer_training_type(
+                    (other.get("phone") or "").strip(),
+                    old_slot,
+                )
+
+    _reconcile_group_allocations()
+
+    return {
+        "success": True,
+        "appointment_id": aid,
+        "phone": phone,
+        "role": role,
+        "old_time_slot": old_slot,
+        "time_slot": new_time_slot,
+        "is_matched": is_matched_new,
+        "group_name": group_name,
+        "full_id": full_id,
+        "training_type": training_type,
+    }
 
 
 def _participant_display_id(p):
@@ -6139,15 +6292,29 @@ def admin_delete_appointment(aid):
     return jsonify({"success": True})
 
 
+@app.route("/api/admin/appointments/<int:aid>/reschedule", methods=["POST"])
+@admin_required
+def admin_reschedule_appointment_route(aid):
+    data = request.get_json() or {}
+    time_slot = (data.get("time_slot") or "").strip()
+    try:
+        result = admin_reschedule_appointment(aid, time_slot)
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
 @app.route("/api/admin/appointment-slots")
 @admin_required
 def admin_get_appointment_slots():
     """Return all candidate slots with enabled/booking status for admin UI."""
+    role_arg = (request.args.get("role") or "").strip().upper()
+    role = role_arg if role_arg in ("S", "I") else None
     disabled = store.get_disabled_slots()
     slot_bookings = store.get_slot_bookings()
     fully_booked = store.get_confirmed_slot_set()
     slots = []
-    for s in _candidate_booking_slots():
+    for s in _candidate_booking_slots(role):
         roles = list(slot_bookings.get(s, set()))
         slots.append({
             "slot": s,
@@ -6157,6 +6324,7 @@ def admin_get_appointment_slots():
         })
     return jsonify({
         "slots": slots,
+        "role": role,
         "min_hours": BOOKING_MIN_HOURS,
         "max_days": BOOKING_MAX_DAYS,
         "time_windows": [
