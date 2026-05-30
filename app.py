@@ -3247,6 +3247,289 @@ def _participant_display_id(p):
         return ""
 
 
+def _admin_progress_step(status, label, detail=""):
+    """One checklist row for admin UI: done | current | pending | failed | skipped."""
+    return {"status": status, "label": label, "detail": detail}
+
+
+def _admin_training_type_label(training_type):
+    labels = {
+        "control": "A 组（对照）",
+        "theory_sue": "B 组（理论+SUE）",
+        "avatar_general": "C 组（通用 Avatar）",
+        "avatar_specific": "D 组（专项 Avatar）",
+    }
+    return labels.get(training_type or "", training_type or "未分配")
+
+
+def _interviewer_sue_training_steps(p):
+    """Split SUE-style training into intro (optional) / material / principle / attention."""
+    tt = (p.get("training_type") or "").strip()
+    fs = (p.get("flow_step") or "").strip()
+    sue_pass = int(p.get("sue_attention_passed") or 0) == 1
+    steps = []
+
+    intro_map = {
+        "avatar_specific": ("avatar_specific_intro_done", "阅读 D 组专项说明"),
+        "avatar_general": ("avatar_general_intro_done", "阅读 C 组通用说明"),
+    }
+
+    if tt in intro_map:
+        intro_key, intro_label = intro_map[tt]
+        if sue_pass or fs in ("sue_material_done", "sue_principle_done", "booking", "booking_wait", "booking_matched", "case_info_done", "theory_practice", "avatar_training", "finalize", "done"):
+            intro_status = "done"
+        elif fs == intro_key:
+            intro_status = "done"
+        else:
+            intro_status = "current"
+        steps.append(_admin_progress_step(intro_status, intro_label, "已完成说明阅读" if intro_status == "done" else "进行中"))
+
+    material_label = "阅读 SUE 培训材料"
+    principle_label = "SUE 原则理解检测"
+    attention_label = "SUE 注意力检测（EFM）"
+
+    post_material = {
+        "sue_principle_done", "booking", "booking_wait", "booking_matched",
+        "case_info_done", "theory_practice", "avatar_training", "finalize", "done",
+    }
+    post_principle = post_material - {"sue_principle_done"}
+
+    if sue_pass:
+        mat_st, prin_st, att_st = "done", "done", "done"
+    elif fs == "sue_principle_done":
+        mat_st, prin_st, att_st = "done", "done", "current"
+    elif fs == "sue_material_done":
+        mat_st, prin_st, att_st = "done", "current", "pending"
+    elif tt in intro_map and fs == intro_map[tt][0]:
+        mat_st, prin_st, att_st = "current", "pending", "pending"
+    elif tt == "theory_sue" and fs in ("", "booking", "booking_wait", "booking_matched"):
+        mat_st, prin_st, att_st = "current", "pending", "pending"
+    else:
+        mat_st, prin_st, att_st = "pending", "pending", "pending"
+
+    if fs in post_material and not sue_pass and mat_st != "done":
+        mat_st = "done"
+    if fs in post_principle and not sue_pass and prin_st != "done":
+        prin_st = "done"
+
+    attempts = int(p.get("sue_attention_attempts") or 0)
+    att_detail = "已通过" if att_st == "done" else (
+        f"进行中（第 {attempts} 次尝试，最多 2 次）" if att_st == "current" and attempts else
+        ("未开始" if att_st == "pending" else "进行中")
+    )
+
+    steps.append(_admin_progress_step(mat_st, material_label, "已完成材料阅读" if mat_st == "done" else "进行中"))
+    steps.append(_admin_progress_step(prin_st, principle_label, "已通过" if prin_st == "done" else ("进行中" if prin_st == "current" else "未开始")))
+    steps.append(_admin_progress_step(att_st, attention_label, att_detail))
+    return steps
+
+
+def build_participant_admin_progress(
+    p,
+    booking=None,
+    matched=False,
+    qs_pre=False,
+    qs_post=False,
+    training_sessions=0,
+    blacklisted=False,
+):
+    """Detailed stage breakdown for admin management UI."""
+    phone = (p.get("phone") or "").strip()
+    role = p.get("role")
+    steps = []
+
+    if int(p.get("attention_failed") or 0) == 1 or blacklisted:
+        fail_detail = "注意力检测未通过或已被拉黑，无法继续"
+        if int(p.get("sue_attention_attempts") or 0) >= 2:
+            fail_detail = "SUE 注意力检测 2 次均未通过"
+        return {
+            "stage_label": "已终止",
+            "stage_short": "已终止",
+            "stage_tone": "failed",
+            "steps": [_admin_progress_step("failed", "实验已终止", fail_detail)],
+        }
+
+    consent_needed = consent_attention_required(p)
+    consent_done = int(p.get("consent_attention_passed") or 0) == 1
+    if consent_needed:
+        c_status = "done" if consent_done else "current"
+        steps.append(_admin_progress_step(
+            c_status, "知情同意理解检测",
+            "已通过" if consent_done else "未完成",
+        ))
+    elif consent_done:
+        steps.append(_admin_progress_step("done", "知情同意理解检测", "已通过"))
+
+    if role == "S":
+        att_pass = int(p.get("attention_passed") or 0) == 1
+        game_done = int(p.get("game_completed") or 0) == 1
+        profile_done = int(p.get("profile_completed") or 0) == 1
+        has_booking = bool(booking and booking.get("status") == "confirmed")
+        completed = int(p.get("completed") or 0) == 1
+
+        steps.append(_admin_progress_step(
+            "done" if att_pass else "current",
+            "案件背景注意力检测",
+            "已通过" if att_pass else "阅读案件背景并完成检测题",
+        ))
+        steps.append(_admin_progress_step(
+            "done" if game_done else ("current" if att_pass else "pending"),
+            "完成模拟行动游戏",
+            "已完成" if game_done else ("进行中" if att_pass else "未开始"),
+        ))
+        steps.append(_admin_progress_step(
+            "done" if profile_done else ("current" if game_done else "pending"),
+            "填写个人信息问卷",
+            "已提交" if profile_done else ("进行中" if game_done else "未开始"),
+        ))
+        steps.append(_admin_progress_step(
+            "done" if has_booking else ("current" if profile_done else "pending"),
+            "预约正式访谈时间",
+            booking.get("time_slot", "") if has_booking else "尚未确认预约",
+        ))
+        steps.append(_admin_progress_step(
+            "done" if matched else ("current" if has_booking else "pending"),
+            "与审讯者配对成功",
+            "同一时段双方均已确认" if matched else "等待审讯者确认同一时段",
+        ))
+        steps.append(_admin_progress_step(
+            "done" if qs_pre else ("current" if matched else "pending"),
+            "访谈前问卷",
+            "已提交" if qs_pre else "未提交",
+        ))
+        steps.append(_admin_progress_step(
+            "done" if qs_post else ("current" if qs_pre else "pending"),
+            "访谈后问卷",
+            "已提交" if qs_post else "未提交",
+        ))
+        steps.append(_admin_progress_step(
+            "done" if completed else "pending",
+            "完成实验并获取编号",
+            p.get("full_id") or "",
+        ))
+
+    elif role == "I":
+        tt = (p.get("training_type") or "").strip()
+        has_booking = bool(booking and booking.get("status") == "confirmed")
+        ctrl_pass = int(p.get("control_attention_passed") or 0) == 1
+        sue_pass = int(p.get("sue_attention_passed") or 0) == 1
+        training_done = ctrl_pass if tt == "control" else sue_pass
+        fs = (p.get("flow_step") or "").strip()
+        completed = int(p.get("completed") or 0) == 1
+
+        steps.append(_admin_progress_step(
+            "done" if has_booking else "current",
+            "预约正式访谈时间",
+            booking.get("time_slot", "") if has_booking else "尚未确认预约",
+        ))
+        steps.append(_admin_progress_step(
+            "done" if tt else ("current" if has_booking else "pending"),
+            "分配实验条件",
+            _admin_training_type_label(tt) if tt else "预约后自动分配",
+        ))
+
+        if tt == "control":
+            if ctrl_pass:
+                steps.append(_admin_progress_step("done", "阅读对照组材料", "已完成"))
+                steps.append(_admin_progress_step("done", "对照组注意力检测", "已通过"))
+            else:
+                steps.append(_admin_progress_step(
+                    "current" if tt else "pending",
+                    "阅读对照组材料",
+                    "进行中" if tt else "未开始",
+                ))
+                steps.append(_admin_progress_step("pending", "对照组注意力检测", "未开始"))
+        elif tt in ("theory_sue", "avatar_general", "avatar_specific"):
+            steps.extend(_interviewer_sue_training_steps(p))
+        elif tt:
+            steps.append(_admin_progress_step("pending", "培训与检测", "未知培训类型"))
+
+        steps.append(_admin_progress_step(
+            "done" if matched else ("current" if training_done and has_booking else "pending"),
+            "与嫌疑人配对成功",
+            "同一时段双方均已确认" if matched else "等待嫌疑人确认同一时段",
+        ))
+
+        case_done = fs in ("case_info_done", "theory_practice", "avatar_training", "finalize", "done") or completed
+        case_current = training_done and matched and not case_done
+        steps.append(_admin_progress_step(
+            "done" if case_done else ("current" if case_current else "pending"),
+            "阅读案件信息与证据",
+            "已进入后续流程" if case_done else ("进行中" if case_current else "未开始"),
+        ))
+
+        if tt in ("avatar_specific", "avatar_general"):
+            sessions_done = training_sessions >= 6
+            sess_status = "done" if sessions_done else ("current" if case_done else "pending")
+            steps.append(_admin_progress_step(
+                sess_status,
+                "虚拟审讯训练（6 次）",
+                f"已完成 {training_sessions}/6" if training_sessions else "未开始",
+            ))
+        elif tt == "theory_sue":
+            tp_done = completed or fs in ("theory_practice", "avatar_training", "finalize", "done")
+            tp_current = case_done and not tp_done
+            steps.append(_admin_progress_step(
+                "done" if tp_done else ("current" if tp_current else "pending"),
+                "Avatar 练习审讯",
+                "已完成" if tp_done else ("进行中" if tp_current else "未开始"),
+            ))
+        elif tt == "control":
+            fin_done = completed or fs in ("finalize", "done")
+            fin_current = case_done and not fin_done
+            steps.append(_admin_progress_step(
+                "done" if fin_done else ("current" if fin_current else "pending"),
+                "确认完成实验",
+                "已完成" if fin_done else ("待确认" if fin_current else "未开始"),
+            ))
+
+        steps.append(_admin_progress_step(
+            "done" if qs_pre else ("current" if completed else "pending"),
+            "访谈前问卷",
+            "已提交" if qs_pre else "未提交",
+        ))
+        steps.append(_admin_progress_step(
+            "done" if qs_post else ("current" if qs_pre else "pending"),
+            "访谈后问卷",
+            "已提交" if qs_post else "未提交",
+        ))
+        steps.append(_admin_progress_step(
+            "done" if completed else "pending",
+            "完成实验并获取编号",
+            p.get("full_id") or "",
+        ))
+    else:
+        steps.append(_admin_progress_step("pending", "未知角色", ""))
+
+    stage_label = "进行中"
+    stage_tone = "progress"
+    for s in steps:
+        if s["status"] == "current":
+            stage_label = s["label"]
+            break
+        if s["status"] == "failed":
+            stage_label = s["label"]
+            stage_tone = "failed"
+            break
+    else:
+        if steps and all(s["status"] == "done" for s in steps):
+            stage_label = "全部完成"
+            stage_tone = "done"
+        elif steps:
+            for s in steps:
+                if s["status"] == "pending":
+                    stage_label = s["label"]
+                    break
+
+    return {
+        "stage_label": stage_label,
+        "stage_short": stage_label[:20] + ("…" if len(stage_label) > 20 else ""),
+        "stage_tone": stage_tone,
+        "steps": steps,
+        "training_sessions": training_sessions if role == "I" else 0,
+    }
+
+
 def compute_participant_resume(p, booking=None):
     """Return (resume_step, resume_label) for continuing the experiment flow."""
     if int(p.get("attention_failed") or 0) == 1:
@@ -6213,13 +6496,58 @@ def admin_results():
     for a in availabilities:
         a["slots"] = parse_slots(a.get("slots", "[]"))
 
+    booking_by_phone = {}
+    for appt in appointments:
+        if appt.get("status") == "confirmed":
+            ph = (appt.get("phone") or "").strip()
+            if ph:
+                booking_by_phone[ph] = appt
+
+    slot_roles = {}
+    for appt in appointments:
+        if appt.get("status") != "confirmed":
+            continue
+        slot = (appt.get("time_slot") or "").strip()
+        if slot:
+            slot_roles.setdefault(slot, set()).add(appt.get("role"))
+
+    qs_phones = {"pre": set(), "post": set()}
+    for q in interview_questionnaires:
+        ph = (q.get("phone") or "").strip()
+        phase = (q.get("phase") or "").strip().lower()
+        if ph and phase in qs_phones:
+            qs_phones[phase].add(ph)
+
+    enriched = []
+    for p in participants:
+        phone = (p.get("phone") or "").strip()
+        booking = booking_by_phone.get(phone)
+        slot = (booking.get("time_slot") or "").strip() if booking else ""
+        roles = slot_roles.get(slot, set()) if slot else set()
+        matched = "S" in roles and "I" in roles
+        training_sessions = (
+            store.count_completed_training_sessions(phone)
+            if p.get("role") == "I" else 0
+        )
+        row = dict(p)
+        row["admin_progress"] = build_participant_admin_progress(
+            p,
+            booking=booking,
+            matched=matched,
+            qs_pre=phone in qs_phones["pre"],
+            qs_post=phone in qs_phones["post"],
+            training_sessions=training_sessions,
+            blacklisted=store.is_phone_blacklisted(phone),
+        )
+        enriched.append(row)
+
     max_g = _max_assigned_group_number()
     try:
         next_group = _next_available_group_number()
     except ValueError:
         next_group = None
     return jsonify({
-        "participants": participants,
+        "participants": enriched,
         "availabilities": availabilities,
         "appointments": appointments,
         "interview_questionnaires": interview_questionnaires,

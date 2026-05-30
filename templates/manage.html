@@ -221,6 +221,24 @@
     background: #e8f2ff;
   }
 
+  .stage-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 999px;
+    line-height: 1.4;
+    max-width: 180px;
+    white-space: normal;
+  }
+  .stage-badge.done { background: #dcfce7; color: #15803d; }
+  .stage-badge.progress { background: #dbeafe; color: #1d4ed8; }
+  .stage-badge.failed { background: #fee2e2; color: #b91c1c; }
+  .step-status-current { color: #1d4ed8 !important; }
+  .step-status-pending { color: #6b7280 !important; }
+  .step-status-failed { color: #b91c1c !important; }
+  .step-mark-current::before { content: '▶ '; }
+
   .participant-filters {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
@@ -526,6 +544,7 @@
 
 <div class="card">
   <h2>参与者明细</h2>
+  <p class="count" style="margin-bottom:10px;">「当前阶段」列显示进行中的步骤；点击组别看板卡片可查看完整步骤清单（✅ 已完成 · ▶ 进行中 · ⬜ 未开始 · ❌ 已终止）</p>
   <div class="participant-filters">
     <div class="filter-item">
       <label>手机号</label>
@@ -619,7 +638,7 @@
           <th>案件</th>
           <th>有罪/无辜</th>
           <th>培训类型</th>
-          <th>是否完成</th>
+          <th>当前阶段</th>
           <th>访谈问卷</th>
           <th>档案</th>
           <th>操作</th>
@@ -789,6 +808,29 @@ function caseLabel(ct) {
 
 function guiltLabel(g) {
   return g === 'Guilty' ? '有罪' : g === 'Innocent' ? '无辜' : '-';
+}
+
+function renderStageBadge(p) {
+  const prog = p.admin_progress || {};
+  const tone = prog.stage_tone || 'progress';
+  const label = prog.stage_label || (Number(p.completed) === 1 ? '全部完成' : '进行中');
+  const doneHint = Number(p.completed) === 1 ? '<div style="font-size:10px;color:#15803d;margin-top:4px;">实验已完成</div>' : '';
+  return `<span class="stage-badge ${tone}" title="${label}">${label}</span>${doneHint}`;
+}
+
+function stepStatusMark(status) {
+  if (status === 'done') return '✅';
+  if (status === 'current') return '▶';
+  if (status === 'failed') return '❌';
+  if (status === 'skipped') return '—';
+  return '⬜';
+}
+
+function stepStatusClass(status) {
+  if (status === 'done') return 'step-status-done';
+  if (status === 'current') return 'step-status-current';
+  if (status === 'failed') return 'step-status-failed';
+  return 'step-status-pending';
 }
 
 function getFilters() {
@@ -1187,19 +1229,20 @@ function buildMemberDetailCard(p, roleTitle, roleCls) {
       <div class="detail-row"><span class="lbl">ID</span><span>${p.id}</span></div>
       ${extra}
       <div class="detail-row"><span class="lbl">完成</span><span>${Number(p.completed) === 1 ? '已完成' : '未完成'}</span></div>
+      <div class="detail-row"><span class="lbl">当前阶段</span><span>${(p.admin_progress && p.admin_progress.stage_label) || p.flow_step || '-'}</span></div>
       <div class="detail-row"><span class="lbl">预约</span><span>${appt ? appt.time_slot + '（已确认）' : '未确认预约'}</span></div>
       <div class="detail-row"><span class="lbl">全部预约</span><span>${apptLines}</span></div>
       <div class="detail-row"><span class="lbl">问卷</span><span>前${qs.pre ? '✓' : '✗'} · 后${qs.post ? '✓' : '✗'}</span></div>
-      <div class="detail-row"><span class="lbl">流程</span><span>${p.flow_step || '-'}</span></div>
+      <div class="detail-row"><span class="lbl">流程标记</span><span>${p.flow_step || '-'}</span></div>
     </div>`;
 }
 
-function stepItemHtml(done, label, detail) {
-  const mark = done ? '✅' : '⬜';
-  const color = done ? '#15803d' : '#6b7280';
+function stepItemHtml(status, label, detail) {
+  const mark = stepStatusMark(status);
+  const colorCls = stepStatusClass(status);
   const sub = detail ? `<div style="font-size:12px;color:var(--text-light);margin-top:4px;line-height:1.5;">${detail}</div>` : '';
   return `<div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:white;">
-    <div style="font-weight:700;color:${color};">${mark} ${label}</div>${sub}
+    <div class="step-mark ${colorCls}" style="font-weight:700;">${mark} ${label}</div>${sub}
   </div>`;
 }
 
@@ -1209,6 +1252,11 @@ function groupHasBothRolesConfirmedBooking(info) {
 }
 
 function buildRoleStepsHtml(role, p, groupInfo) {
+  if (p.admin_progress && Array.isArray(p.admin_progress.steps) && p.admin_progress.steps.length) {
+    const grid = p.admin_progress.steps.map(s => stepItemHtml(s.status, s.label, s.detail || '')).join('');
+    return `<div style="display:grid;grid-template-columns:1fr;gap:10px;">${grid}</div>`;
+  }
+
   const appt = getConfirmedAppointment(p.phone);
   const qs = getQuestionnaireStatus(p.phone);
   const matched = groupHasBothRolesConfirmedBooking(groupInfo);
@@ -1216,30 +1264,27 @@ function buildRoleStepsHtml(role, p, groupInfo) {
 
   const steps = [];
   if (role === 'S') {
-    steps.push({ done: Number(p.attention_passed) === 1, label: '通过注意力检测', detail: '阅读案件背景并完成检测题' });
-    steps.push({ done: Number(p.game_completed) === 1, label: '完成模拟行动游戏', detail: '完成 serious game' });
-    steps.push({ done: Number(p.profile_completed) === 1, label: '填写个人信息问卷', detail: '提交个人档案' });
-    steps.push({ done: !!appt, label: '预约正式访谈时间', detail: appt ? `已确认：${appt.time_slot}` : '尚未确认预约' });
-    steps.push({ done: matched, label: '与审讯者配对成功', detail: matched ? '同一时段双方均已确认' : '等待对方确认同一时段' });
-    steps.push({ done: !!qs.pre, label: '访谈前问卷', detail: qs.pre ? '已提交' : '未提交' });
-    steps.push({ done: !!qs.post, label: '访谈后问卷', detail: qs.post ? '已提交' : '未提交' });
-    steps.push({ done: Number(p.completed) === 1, label: '完成实验并获取编号', detail: p.full_id ? `编号：${p.full_id}` : '' });
+    steps.push({ status: Number(p.attention_passed) === 1 ? 'done' : 'current', label: '通过注意力检测', detail: '阅读案件背景并完成检测题' });
+    steps.push({ status: Number(p.game_completed) === 1 ? 'done' : 'pending', label: '完成模拟行动游戏', detail: '完成 serious game' });
+    steps.push({ status: Number(p.profile_completed) === 1 ? 'done' : 'pending', label: '填写个人信息问卷', detail: '提交个人档案' });
+    steps.push({ status: !!appt ? 'done' : 'pending', label: '预约正式访谈时间', detail: appt ? `已确认：${appt.time_slot}` : '尚未确认预约' });
+    steps.push({ status: matched ? 'done' : 'pending', label: '与审讯者配对成功', detail: matched ? '同一时段双方均已确认' : '等待对方确认同一时段' });
+    steps.push({ status: !!qs.pre ? 'done' : 'pending', label: '访谈前问卷', detail: qs.pre ? '已提交' : '未提交' });
+    steps.push({ status: !!qs.post ? 'done' : 'pending', label: '访谈后问卷', detail: qs.post ? '已提交' : '未提交' });
+    steps.push({ status: Number(p.completed) === 1 ? 'done' : 'pending', label: '完成实验并获取编号', detail: p.full_id ? `编号：${p.full_id}` : '' });
   } else if (role === 'I') {
-    steps.push({ done: !!appt, label: '预约正式访谈时间', detail: appt ? `已确认：${appt.time_slot}` : '尚未确认预约' });
-    const trainingDone =
-      (tt === 'control' && Number(p.control_attention_passed) === 1) ||
-      (tt !== 'control' && Number(p.sue_attention_passed) === 1);
-    steps.push({ done: !!tt, label: '分配实验条件', detail: tt ? `培训类型：${trainingLabel(tt)}` : '尚未分配（通常预约后分配）' });
-    steps.push({ done: trainingDone, label: '完成培训与注意力检测', detail: trainingDone ? '已通过' : '未通过/未完成' });
-    steps.push({ done: matched, label: '与嫌疑人配对成功', detail: matched ? '同一时段双方均已确认' : '等待对方确认同一时段' });
+    steps.push({ status: !!appt ? 'done' : 'current', label: '预约正式访谈时间', detail: appt ? `已确认：${appt.time_slot}` : '尚未确认预约' });
+    steps.push({ status: !!tt ? 'done' : 'pending', label: '分配实验条件', detail: tt ? `培训类型：${trainingLabel(tt)}` : '尚未分配（通常预约后分配）' });
+    steps.push({ status: Number(p.sue_attention_passed) === 1 || Number(p.control_attention_passed) === 1 ? 'done' : 'current', label: '完成培训与注意力检测', detail: '（旧版汇总项，请刷新数据）' });
+    steps.push({ status: matched ? 'done' : 'pending', label: '与嫌疑人配对成功', detail: matched ? '同一时段双方均已确认' : '等待对方确认同一时段' });
     const caseInfoDone = ['case_info_done', 'theory_practice', 'avatar_training', 'finalize'].includes(String(p.flow_step || '').trim()) || Number(p.completed) === 1;
-    steps.push({ done: caseInfoDone, label: '阅读案件信息与证据', detail: caseInfoDone ? '已进入后续流程' : '未完成/未记录' });
-    steps.push({ done: Number(p.completed) === 1, label: '完成实验并获取编号', detail: p.full_id ? `编号：${p.full_id}` : '' });
-    steps.push({ done: !!qs.pre, label: '访谈前问卷', detail: qs.pre ? '已提交' : '未提交' });
-    steps.push({ done: !!qs.post, label: '访谈后问卷', detail: qs.post ? '已提交' : '未提交' });
+    steps.push({ status: caseInfoDone ? 'done' : 'pending', label: '阅读案件信息与证据', detail: caseInfoDone ? '已进入后续流程' : '未完成/未记录' });
+    steps.push({ status: Number(p.completed) === 1 ? 'done' : 'pending', label: '完成实验并获取编号', detail: p.full_id ? `编号：${p.full_id}` : '' });
+    steps.push({ status: !!qs.pre ? 'done' : 'pending', label: '访谈前问卷', detail: qs.pre ? '已提交' : '未提交' });
+    steps.push({ status: !!qs.post ? 'done' : 'pending', label: '访谈后问卷', detail: qs.post ? '已提交' : '未提交' });
   }
 
-  const grid = steps.map(s => stepItemHtml(s.done, s.label, s.detail)).join('');
+  const grid = steps.map(s => stepItemHtml(s.status, s.label, s.detail)).join('');
   return `<div style="display:grid;grid-template-columns:1fr;gap:10px;">${grid}</div>`;
 }
 
@@ -1261,6 +1306,7 @@ function openGroupDetailModal(groupName) {
       <h4>嫌疑人</h4>
       <div class="detail-row"><span class="lbl">编号</span><span>${suspect.full_id || '-'}</span></div>
       <div class="detail-row"><span class="lbl">手机号</span><span>${suspect.phone || '-'}</span></div>
+      <div class="detail-row"><span class="lbl">当前阶段</span><span>${(suspect.admin_progress && suspect.admin_progress.stage_label) || '-'}</span></div>
       <div style="margin-top:10px;">${buildRoleStepsHtml('S', suspect, info)}</div>
     </div>`;
   } else {
@@ -1271,6 +1317,8 @@ function openGroupDetailModal(groupName) {
       <h4>审讯者</h4>
       <div class="detail-row"><span class="lbl">编号</span><span>${interviewer.full_id || '-'}</span></div>
       <div class="detail-row"><span class="lbl">手机号</span><span>${interviewer.phone || '-'}</span></div>
+      <div class="detail-row"><span class="lbl">培训</span><span>${trainingLabel(interviewer.training_type)}</span></div>
+      <div class="detail-row"><span class="lbl">当前阶段</span><span>${(interviewer.admin_progress && interviewer.admin_progress.stage_label) || '-'}</span></div>
       <div style="margin-top:10px;">${buildRoleStepsHtml('I', interviewer, info)}</div>
     </div>`;
   } else {
@@ -1452,7 +1500,7 @@ function renderParticipantTable(participants) {
         <td>${caseLabel(p.case_type)}</td>
         <td>${guiltLabel(p.guilt)}</td>
         <td>${trainingLabel(p.training_type)}</td>
-        <td>${Number(p.completed) === 1 ? '<span class="badge badge-ok">已完成</span>' : '<span class="badge badge-warn">未完成</span>'}</td>
+        <td>${renderStageBadge(p)}</td>
         <td>${qHtml}</td>
         <td class="profile-cell">${profileStr}</td>
         <td style="white-space:nowrap;">
