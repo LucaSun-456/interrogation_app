@@ -2605,10 +2605,11 @@ window.addEventListener('hashchange', applyRouteToScreen);
 window.addEventListener('popstate', applyRouteToScreen);
 setTimeout(() => applyRouteToScreen(), 0);
 
-async function api(url, body) {
+async function api(url, body, options) {
   if (window.DeviceCheck && DeviceCheck.isBlocked()) {
     throw new Error('请使用电脑（台式机或笔记本电脑）打开本实验系统。');
   }
+  const opts = options || {};
   const resp = await fetch(url, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -2621,7 +2622,16 @@ async function api(url, body) {
   } catch (e) {
     throw new Error('服务器返回了无效响应，请刷新页面重试。');
   }
-  if (!resp.ok) throw new Error(data.error || '请求失败');
+  if (!resp.ok) {
+    const allowed = opts.allowStatuses || [];
+    if (allowed.includes(resp.status)) {
+      return { ...data, _httpStatus: resp.status };
+    }
+    const err = new Error(data.error || '请求失败');
+    err.status = resp.status;
+    err.data = data;
+    throw err;
+  }
   return data;
 }
 
@@ -2635,19 +2645,19 @@ async function register() {
   showLoading('正在分配实验条件...');
 
   try {
-    const result = await api('/api/register', { phone });
+    const result = await api('/api/register', { phone }, { allowStatuses: [409] });
+    if (result._httpStatus === 409) {
+      $('loadingText').textContent = '该手机号已注册，正在恢复您的进度...';
+      await resumeParticipant(phone);
+      return;
+    }
     APP.participant = result;
     APP.role = result.role;
     hideLoading();
     showConsent();
   } catch (err) {
     hideLoading();
-    // If already registered, try to resume
-    if (err.message && err.message.includes('已注册')) {
-      resumeParticipant(phone);
-      return;
-    }
-    showError(err.message);
+    showError(err.message || '注册失败，请重试。');
   }
 }
 
