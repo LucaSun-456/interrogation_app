@@ -5689,29 +5689,34 @@ function loadLiveKitSDK() {
   return new Promise((resolve, reject) => {
     if (window.LivekitClient) { resolve(); return; }
 
-    const cdnSources = [
-      'https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js',
-      'https://unpkg.com/livekit-client@2/dist/livekit-client.umd.min.js',
-      'https://cdn.jsdelivr.net/npm/@livekit/client-sdk@2/dist/livekit-client.umd.min.js',
+    const sources = [
+      '/static/js/livekit-client.umd.js',
+      'https://cdn.jsdelivr.net/npm/livekit-client@2.9.9/dist/livekit-client.umd.js',
+      'https://unpkg.com/livekit-client@2.9.9/dist/livekit-client.umd.js',
+      'https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.js',
     ];
 
     let triedCount = 0;
 
     function tryNext() {
-      if (triedCount >= cdnSources.length) {
-        reject(new Error('LiveKit SDK 加载失败：所有CDN源均不可用'));
+      if (triedCount >= sources.length) {
+        reject(new Error('LiveKit SDK 加载失败：本地与 CDN 均不可用，请联系研究人员检查服务器 static/js 目录'));
         return;
       }
-      const src = cdnSources[triedCount];
+      const src = sources[triedCount];
       triedCount++;
       const script = document.createElement('script');
       script.src = src;
+      script.async = true;
       script.onload = () => {
         if (window.LivekitClient) { resolve(); }
-        else { tryNext(); }
+        else {
+          console.warn('LiveKit script loaded but LivekitClient missing:', src);
+          tryNext();
+        }
       };
       script.onerror = () => {
-        console.warn('LiveKit CDN failed:', src);
+        console.warn('LiveKit load failed:', src);
         tryNext();
       };
       document.head.appendChild(script);
