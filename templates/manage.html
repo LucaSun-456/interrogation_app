@@ -239,6 +239,21 @@
   .step-status-failed { color: #b91c1c !important; }
   .step-mark-current::before { content: '▶ '; }
 
+  #adminLoadingOverlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(255,255,255,0.85);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 14px;
+    color: #374151;
+  }
+  #adminLoadingOverlay.show { display: flex; }
+
   .participant-filters {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
@@ -438,6 +453,8 @@
 </style>
 </head>
 <body>
+<div id="adminLoadingOverlay"><div class="spinner" style="width:36px;height:36px;border:3px solid #e5e7eb;border-top-color:var(--primary);border-radius:50%;animation:spin 0.8s linear infinite;"></div><span id="adminLoadingText">正在加载数据…</span></div>
+<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
 <div id="fileProtocolWarning" style="display:none; background:#e74c3c; color:white; padding:16px 20px; border-radius:8px; margin-bottom:16px; font-size:14px; line-height:1.8;">
   <strong>错误：</strong>你正在以 <code>file://</code> 协议直接打开此页面，API 请求无法使用。<br>
   请通过 Flask 服务器访问：
@@ -447,7 +464,7 @@
 <h1>审讯实验系统 - 数据管理</h1>
 <div class="toolbar">
   <a href="/" class="nav-link">← 返回首页</a>
-  <button class="btn btn-refresh" onclick="loadData()">刷新数据</button>
+  <button class="btn btn-refresh" onclick="loadData({ reconcile: true })">刷新数据</button>
   <button class="btn btn-outline" onclick="downloadExperimentData()">📥 下载数据文件 (Excel)</button>
   <button class="btn btn-danger" onclick="purgeUnbookedParticipants()">清理超时未预约</button>
   <span class="count" id="purgeHint">参与者再次登录时，若注册超 24 小时仍未预约将被拒绝；也可点击下方按钮手动批量清理。</span>
@@ -522,8 +539,11 @@
 
 <div class="card">
   <h2>预约时段管理</h2>
-  <p class="count" style="margin-bottom:10px;">默认时段：上午 9:30–11:00、下午 14:00–17:00、晚上 19:30–21:00（每 30 分钟一档），开放未来 24 小时至 5 天内。</p>
-  <button type="button" class="btn btn-refresh" onclick="openSlotConfigModal()">打开预约时段管理</button>
+  <p class="count" style="margin-bottom:10px;">默认时段：下午 15:00–17:00、晚上 19:00–21:30（每 30 分钟一档），开放未来 24 小时至 3 天内。</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+    <button type="button" class="btn btn-refresh" onclick="openSlotConfigModal()">打开预约时段管理</button>
+    <button type="button" class="btn btn-primary" onclick="applyDefaultAppointmentSlots()">一键启用默认时段</button>
+  </div>
 </div>
 
 <div class="card">
@@ -1289,6 +1309,10 @@ function buildRoleStepsHtml(role, p, groupInfo) {
 }
 
 function openGroupDetailModal(groupName) {
+  openGroupDetailModalAsync(groupName);
+}
+
+async function openGroupDetailModalAsync(groupName) {
   const info = APP.groupDetailByName.get(String(groupName));
   const titleEl = document.getElementById('groupDetailModalTitle');
   const bodyEl = document.getElementById('groupDetailModalBody');
@@ -1296,9 +1320,38 @@ function openGroupDetailModal(groupName) {
   if (!info || !bodyEl || !modal) return;
 
   if (titleEl) titleEl.textContent = `第 ${groupName} 组 · 详情`;
+  modal.classList.add('show');
+  bodyEl.innerHTML = '<div class="empty">正在加载步骤详情…</div>';
 
   const suspect = info.members.find(p => p.role === 'S') || null;
   const interviewer = info.members.find(p => p.role === 'I') || null;
+  const phones = [suspect, interviewer].filter(Boolean).map(p => p.phone).filter(Boolean);
+
+  if (phones.length) {
+    try {
+      const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
+      const resp = await fetch('/api/admin/participant-progress', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ phones }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const progressMap = data.progress || {};
+        [suspect, interviewer].forEach(p => {
+          if (!p || !p.phone) return;
+          const full = progressMap[p.phone];
+          if (full) {
+            p.admin_progress = { ...(p.admin_progress || {}), ...full };
+            const cached = APP.participantByPhone.get(p.phone);
+            if (cached) cached.admin_progress = p.admin_progress;
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('participant-progress load failed', err);
+    }
+  }
 
   let html = '<div class="detail-grid-2">';
   if (suspect) {
@@ -1336,7 +1389,6 @@ function openGroupDetailModal(groupName) {
   html += `<p class="completed-meta" style="margin-top:14px;">本组已确认预约时段：${slotNote}</p>`;
 
   bodyEl.innerHTML = html;
-  modal.classList.add('show');
 }
 
 function closeGroupDetailModal() {
@@ -1710,6 +1762,26 @@ async function toggleSlot(slot, enabled) {
   }
 }
 
+async function applyDefaultAppointmentSlots() {
+  if (!confirm('将启用未来 3 天内所有默认时段（下午 15:00–17:00、晚上 19:00–21:30，每 30 分钟一档）。确定执行？')) return;
+  try {
+    const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
+    if (!headers.Authorization) { promptForPassword(); return; }
+    const resp = await fetch('/api/admin/appointment-slots/apply-defaults', {
+      method: 'POST',
+      headers,
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '设置失败');
+    alert(`已启用 ${data.enabled_count || 0} 个默认预约时段。`);
+    if (document.getElementById('slotConfigModal')?.classList.contains('show')) {
+      loadSlotConfig();
+    }
+  } catch (err) {
+    alert('一键设置失败：' + err.message);
+  }
+}
+
 let rescheduleContext = null;
 let rescheduleSelectedDay = null;
 let rescheduleSlotsCache = null;
@@ -1851,12 +1923,31 @@ async function confirmReschedule(newSlot) {
   }
 }
 
-async function loadData() {
+async function loadData(options) {
+  const opts = options || {};
+  const overlay = document.getElementById('adminLoadingOverlay');
+  const loadingText = document.getElementById('adminLoadingText');
+  if (overlay) overlay.classList.add('show');
+  if (loadingText) {
+    loadingText.textContent = opts.reconcile
+      ? '正在刷新并校验组别数据…'
+      : '正在加载数据…';
+  }
   try {
     const headers = getAuthHeaders();
-    if (!headers.Authorization) { promptForPassword(); return; }
-    const resp = await fetch('/api/admin/results', { headers });
-    if (resp.status === 401) { sessionStorage.removeItem('admin_password'); promptForPassword(); return; }
+    if (!headers.Authorization) {
+      if (overlay) overlay.classList.remove('show');
+      promptForPassword();
+      return;
+    }
+    const url = opts.reconcile ? '/api/admin/results?reconcile=1' : '/api/admin/results';
+    const resp = await fetch(url, { headers });
+    if (resp.status === 401) {
+      sessionStorage.removeItem('admin_password');
+      if (overlay) overlay.classList.remove('show');
+      promptForPassword();
+      return;
+    }
     if (!resp.ok) throw new Error('HTTP ' + resp.status + ': ' + resp.statusText);
     const data = await resp.json();
     APP.participants = data.participants || [];
@@ -1883,6 +1974,8 @@ async function loadData() {
   } catch (err) {
     console.error('loadData error:', err);
     document.getElementById('groupGrid').innerHTML = `<div class="empty" style="grid-column:1/-1;color:var(--accent);">加载失败：${err.message}</div>`;
+  } finally {
+    if (overlay) overlay.classList.remove('show');
   }
 }
 

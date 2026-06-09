@@ -647,6 +647,7 @@ SHEET_COLUMNS = {
         "consent_attention_passed", "attention_passed", "attention_failed",
         "sue_attention_passed", "sue_attention_attempts", "control_attention_passed",
         "game_completed", "profile_completed", "completed", "flow_step",
+        "case_evidence_recap_passed",
         "created_at", "avatar_practice_transcript",
         "training_avatar_order", "training_ui_order",
     ],
@@ -677,14 +678,14 @@ def inject_app_meta():
 
 
 BOOKING_MIN_HOURS = 24
-BOOKING_MAX_DAYS = 5
+BOOKING_MAX_DAYS = 3
 UNBOOKED_PURGE_HOURS = 24
 MAX_GROUPS = 112
 BOOKING_SLOT_WINDOWS = [
-    ("09:30", "11:00"),
-    ("14:00", "17:00"),
-    ("19:30", "21:00"),
+    ("15:00", "17:00"),
+    ("19:00", "21:30"),
 ]
+BOOKING_SLOT_WINDOW_LABELS = ("下午", "晚上")
 BOOKING_SLOT_STEP_MINUTES = 30
 QUESTIONNAIRE_PRE_OPEN_MINUTES_BEFORE = 5
 QUESTIONNAIRE_POST_OPEN_MINUTES_AFTER_SLOT_START = 5
@@ -1101,6 +1102,14 @@ class ExcelStore:
             disabled.add(slot_str)
         self.set_meta(META_DISABLED_SLOTS, json.dumps(sorted(disabled), ensure_ascii=False))
 
+    def enable_all_candidate_slots(self, candidate_slots):
+        """Enable every slot in the default candidate list; leave other disabled entries unchanged."""
+        candidates = set(candidate_slots or [])
+        disabled = self.get_disabled_slots()
+        new_disabled = {s for s in disabled if s not in candidates}
+        self.set_meta(META_DISABLED_SLOTS, json.dumps(sorted(new_disabled), ensure_ascii=False))
+        return len(candidates)
+
     # ---- Participants ----
 
     def get_participant(self, phone):
@@ -1134,6 +1143,22 @@ class ExcelStore:
             finally:
                 self._close(wb)
 
+    def get_admin_snapshot(self):
+        """Load all admin-dashboard sheets in one workbook read (avoids N+1 opens)."""
+        with _excel_lock:
+            wb = self._load()
+            try:
+                return {
+                    "participants": self._read_all(wb, SHEET_PARTICIPANTS),
+                    "appointments": self._read_all(wb, SHEET_APPOINTMENTS),
+                    "questionnaires": self._read_all(wb, SHEET_INTERVIEW_QUESTIONNAIRES),
+                    "overrides": self._read_all(wb, SHEET_QUESTIONNAIRE_OVERRIDES),
+                    "training_sessions": self._read_all(wb, SHEET_TRAINING_SESSIONS),
+                    "meta": self._read_all(wb, SHEET_META),
+                }
+            finally:
+                self._close(wb)
+
     def add_participant(self, **kwargs):
         with _excel_lock:
             wb = self._load()
@@ -1151,6 +1176,7 @@ class ExcelStore:
                 kwargs.setdefault("profile_completed", 0)
                 kwargs.setdefault("completed", 0)
                 kwargs.setdefault("flow_step", "")
+                kwargs.setdefault("case_evidence_recap_passed", 0)
                 kwargs.setdefault("created_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                 participants.append(kwargs)
                 self._write_all(wb, SHEET_PARTICIPANTS, participants)
@@ -3068,6 +3094,7 @@ ALLOWED_FLOW_STEPS = frozenset({
     "booking_wait",
     "booking_matched",
     "case_info_done",
+    "case_evidence_recap",
     "theory_practice",
     "avatar_training",
 })
@@ -3332,6 +3359,7 @@ def build_participant_admin_progress(
     qs_post=False,
     training_sessions=0,
     blacklisted=False,
+    include_steps=True,
 ):
     """Detailed stage breakdown for admin management UI."""
     phone = (p.get("phone") or "").strip()
@@ -3451,11 +3479,19 @@ def build_participant_admin_progress(
         ))
 
         case_done = fs in ("case_info_done", "theory_practice", "avatar_training", "finalize", "done") or completed
-        case_current = training_done and matched and not case_done
+        recap_passed = int(p.get("case_evidence_recap_passed") or 0) == 1
+        case_read_current = training_done and matched and not recap_passed and not case_done
+        case_read_done = recap_passed or case_done or fs == "case_evidence_recap"
         steps.append(_admin_progress_step(
-            "done" if case_done else ("current" if case_current else "pending"),
+            "done" if case_read_done else ("current" if case_read_current else "pending"),
             "阅读案件信息与证据",
-            "已进入后续流程" if case_done else ("进行中" if case_current else "未开始"),
+            "已阅读" if case_read_done else ("进行中" if case_read_current else "未开始"),
+        ))
+        recap_current = case_read_done and not recap_passed and not case_done
+        steps.append(_admin_progress_step(
+            "done" if recap_passed or case_done else ("current" if recap_current else "pending"),
+            "口头复述证据信息",
+            "已通过审核" if (recap_passed or case_done) else ("进行中" if recap_current else "未开始"),
         ))
 
         if tt in ("avatar_specific", "avatar_general"):
@@ -3525,8 +3561,8 @@ def build_participant_admin_progress(
         "stage_label": stage_label,
         "stage_short": stage_label[:20] + ("…" if len(stage_label) > 20 else ""),
         "stage_tone": stage_tone,
-        "steps": steps,
         "training_sessions": training_sessions if role == "I" else 0,
+        **({"steps": steps} if include_steps else {}),
     }
 
 
@@ -3584,6 +3620,15 @@ def compute_participant_resume(p, booking=None):
         return "booking_wait", "等待与嫌疑人配对同一时段"
 
     flow_step = (p.get("flow_step") or "").strip()
+    recap_passed = int(p.get("case_evidence_recap_passed") or 0) == 1
+    before_case_done = flow_step not in (
+        "case_info_done", "theory_practice", "avatar_training", "finalize", "done",
+    )
+
+    if before_case_done:
+        if flow_step == "case_evidence_recap" and not recap_passed:
+            return "case_evidence_recap", "口头复述案件证据材料"
+        return "case_info", "阅读配对案件的背景与证据"
 
     if training_type in ("avatar_specific", "avatar_general"):
         done_sessions = store.count_completed_training_sessions(phone)
@@ -3808,6 +3853,18 @@ def _interviewer_booking_error(slot_dt, time_slot):
                 "请优先选择「嫌疑人已约」的时段，或选择 24 小时之后的空闲时段。"
             )
     return f"预约时间须在现在起至 {BOOKING_MAX_DAYS} 天以内"
+
+
+def _booking_slot_windows_for_api():
+    labels = list(BOOKING_SLOT_WINDOW_LABELS)
+    return [
+        {
+            "label": labels[i] if i < len(labels) else f"时段{i + 1}",
+            "start": w[0],
+            "end": w[1],
+        }
+        for i, w in enumerate(BOOKING_SLOT_WINDOWS)
+    ]
 
 
 def _candidate_booking_slots(role=None):
@@ -5648,6 +5705,7 @@ def api_lookup_participant():
             "flow_step": (p.get("flow_step") or "").strip(),
             "sue_attention_passed": int(p.get("sue_attention_passed") or 0),
             "control_attention_passed": int(p.get("control_attention_passed") or 0),
+            "case_evidence_recap_passed": int(p.get("case_evidence_recap_passed") or 0),
             "resume_step": resume_step,
             "resume_label": resume_label,
             # Suspect fields for case background / showSuspectFlow
@@ -5954,6 +6012,20 @@ def api_case_info():
         "suspect_guilt": access.get("suspect_guilt", ""),
         "time_slot": access.get("time_slot"),
     })
+
+
+@app.route("/api/case-evidence-recap/complete", methods=["POST"])
+def api_case_evidence_recap_complete():
+    """Mark interviewer evidence oral recap as passed (after recording + simulated review)."""
+    data = request.get_json() or {}
+    phone = (data.get("phone") or "").strip()
+    p = store.get_participant(phone)
+    if not p:
+        return jsonify({"error": "未找到参与者"}), 404
+    if p.get("role") != "I":
+        return jsonify({"error": "仅审讯者需要完成证据复述"}), 403
+    store.update_participant(phone, case_evidence_recap_passed=1)
+    return jsonify({"success": True})
 
 
 # ====== Avatar Training Sessions (6-session requirement) ======
@@ -6481,80 +6553,189 @@ def parse_slots(slots_str):
         return []
 
 
-@app.route("/api/admin/results")
-@admin_required
-def admin_results():
-    """Return all data for admin management page."""
-    _reconcile_group_allocations()
-    participants = store.get_all_participants()
-    availabilities = store.get_availabilities()
-    appointments = store.get_appointments()
-    interview_questionnaires = store.get_interview_questionnaires()
-    questionnaire_overrides = store.get_all_questionnaire_overrides()
+ADMIN_PARTICIPANT_OMIT_FIELDS = frozenset({
+    "avatar_practice_transcript",
+})
 
-    # Clean up slots for JSON response (parse JSON string → list)
-    for a in availabilities:
-        a["slots"] = parse_slots(a.get("slots", "[]"))
+ADMIN_QUESTIONNAIRE_ANSWER_PREVIEW = 400
+
+
+def _blacklist_set_from_meta(meta_rows):
+    for m in meta_rows or []:
+        if m.get("key") == META_BLACKLIST_PHONES:
+            raw = m.get("value", "[]")
+            try:
+                phones = json.loads(raw) if isinstance(raw, str) else (raw or [])
+            except Exception:
+                phones = []
+            return set(phones)
+    return set()
+
+
+def _training_session_counts(sessions_rows):
+    counts = {}
+    for s in sessions_rows or []:
+        if not (s.get("judgment") and s.get("feedback")):
+            continue
+        phone = (s.get("phone") or "").strip()
+        if phone:
+            counts[phone] = counts.get(phone, 0) + 1
+    return counts
+
+
+def _groups_in_use_from_snapshot(participants, appointments):
+    booked = {
+        (a.get("phone") or "").strip()
+        for a in appointments
+        if a.get("status") == "confirmed" and (a.get("phone") or "").strip()
+    }
+    used = set()
+    for p in participants:
+        phone = (p.get("phone") or "").strip()
+        if phone not in booked:
+            continue
+        n = _parse_group_number(p.get("group_name"))
+        if n > 0:
+            used.add(n)
+    return used
+
+
+def _slim_participant_for_admin(p):
+    return {k: v for k, v in p.items() if k not in ADMIN_PARTICIPANT_OMIT_FIELDS}
+
+
+def _slim_questionnaire_for_admin(q):
+    row = dict(q)
+    ans = row.get("answers_json") or ""
+    if isinstance(ans, str) and len(ans) > ADMIN_QUESTIONNAIRE_ANSWER_PREVIEW:
+        row["answers_json"] = ans[:ADMIN_QUESTIONNAIRE_ANSWER_PREVIEW] + "…"
+        row["answers_truncated"] = True
+    return row
+
+
+def _build_admin_list_context(snapshot):
+    """Pre-index snapshot data for fast per-participant admin progress."""
+    participants = snapshot["participants"]
+    appointments = snapshot["appointments"]
+    questionnaires = snapshot["questionnaires"]
 
     booking_by_phone = {}
-    for appt in appointments:
-        if appt.get("status") == "confirmed":
-            ph = (appt.get("phone") or "").strip()
-            if ph:
-                booking_by_phone[ph] = appt
-
     slot_roles = {}
     for appt in appointments:
         if appt.get("status") != "confirmed":
             continue
+        ph = (appt.get("phone") or "").strip()
         slot = (appt.get("time_slot") or "").strip()
+        if ph:
+            booking_by_phone[ph] = appt
         if slot:
             slot_roles.setdefault(slot, set()).add(appt.get("role"))
 
     qs_phones = {"pre": set(), "post": set()}
-    for q in interview_questionnaires:
+    for q in questionnaires:
         ph = (q.get("phone") or "").strip()
         phase = (q.get("phase") or "").strip().lower()
         if ph and phase in qs_phones:
             qs_phones[phase].add(ph)
 
+    return {
+        "booking_by_phone": booking_by_phone,
+        "slot_roles": slot_roles,
+        "qs_phones": qs_phones,
+        "blacklist": _blacklist_set_from_meta(snapshot.get("meta")),
+        "training_counts": _training_session_counts(snapshot.get("training_sessions")),
+    }
+
+
+def _participant_admin_progress(p, ctx, include_steps=False):
+    phone = (p.get("phone") or "").strip()
+    booking = ctx["booking_by_phone"].get(phone)
+    slot = (booking.get("time_slot") or "").strip() if booking else ""
+    roles = ctx["slot_roles"].get(slot, set()) if slot else set()
+    matched = "S" in roles and "I" in roles
+    training_sessions = ctx["training_counts"].get(phone, 0) if p.get("role") == "I" else 0
+    return build_participant_admin_progress(
+        p,
+        booking=booking,
+        matched=matched,
+        qs_pre=phone in ctx["qs_phones"]["pre"],
+        qs_post=phone in ctx["qs_phones"]["post"],
+        training_sessions=training_sessions,
+        blacklisted=phone in ctx["blacklist"],
+        include_steps=include_steps,
+    )
+
+
+@app.route("/api/admin/results")
+@admin_required
+def admin_results():
+    """Return admin dashboard data (optimized single Excel read)."""
+    reconcile = request.args.get("reconcile", "").strip().lower() in ("1", "true", "yes")
+    if reconcile:
+        _reconcile_group_allocations()
+
+    snapshot = store.get_admin_snapshot()
+    participants = snapshot["participants"]
+    appointments = snapshot["appointments"]
+    ctx = _build_admin_list_context(snapshot)
+
     enriched = []
     for p in participants:
-        phone = (p.get("phone") or "").strip()
-        booking = booking_by_phone.get(phone)
-        slot = (booking.get("time_slot") or "").strip() if booking else ""
-        roles = slot_roles.get(slot, set()) if slot else set()
-        matched = "S" in roles and "I" in roles
-        training_sessions = (
-            store.count_completed_training_sessions(phone)
-            if p.get("role") == "I" else 0
-        )
-        row = dict(p)
-        row["admin_progress"] = build_participant_admin_progress(
-            p,
-            booking=booking,
-            matched=matched,
-            qs_pre=phone in qs_phones["pre"],
-            qs_post=phone in qs_phones["post"],
-            training_sessions=training_sessions,
-            blacklisted=store.is_phone_blacklisted(phone),
-        )
+        row = _slim_participant_for_admin(p)
+        row["admin_progress"] = _participant_admin_progress(p, ctx, include_steps=False)
         enriched.append(row)
 
-    max_g = _max_assigned_group_number()
-    try:
-        next_group = _next_available_group_number()
-    except ValueError:
-        next_group = None
+    used_groups = _groups_in_use_from_snapshot(participants, appointments)
+    max_g = max(used_groups) if used_groups else 0
+    next_group = None
+    for n in range(1, MAX_GROUPS + 1):
+        if n not in used_groups:
+            next_group = f"{n:03d}"
+            break
+
+    questionnaires = [_slim_questionnaire_for_admin(q) for q in snapshot["questionnaires"]]
+
     return jsonify({
         "participants": enriched,
-        "availabilities": availabilities,
         "appointments": appointments,
-        "interview_questionnaires": interview_questionnaires,
-        "questionnaire_overrides": questionnaire_overrides,
+        "interview_questionnaires": questionnaires,
+        "questionnaire_overrides": snapshot["overrides"],
         "max_group_number": max_g,
         "next_group_number": next_group,
     })
+
+
+@app.route("/api/admin/participant-progress", methods=["POST"])
+@admin_required
+def admin_participant_progress():
+    """Load full step checklist for one or more participants (group detail modal)."""
+    data = request.get_json() or {}
+    raw_phones = data.get("phones")
+    if not raw_phones:
+        one = (data.get("phone") or "").strip()
+        raw_phones = [one] if one else []
+    phones = []
+    for ph in raw_phones:
+        ph = (ph or "").strip()
+        if ph and ph not in phones:
+            phones.append(ph)
+    if not phones:
+        return jsonify({"error": "请提供 phone 或 phones"}), 400
+
+    snapshot = store.get_admin_snapshot()
+    by_phone = {
+        (p.get("phone") or "").strip(): p
+        for p in snapshot["participants"]
+    }
+    ctx = _build_admin_list_context(snapshot)
+    progress = {}
+    for phone in phones:
+        p = by_phone.get(phone)
+        if not p:
+            progress[phone] = None
+            continue
+        progress[phone] = _participant_admin_progress(p, ctx, include_steps=True)
+    return jsonify({"progress": progress})
 
 
 @app.route("/api/admin/participants/group", methods=["POST"])
@@ -6655,9 +6836,21 @@ def admin_get_appointment_slots():
         "role": role,
         "min_hours": BOOKING_MIN_HOURS,
         "max_days": BOOKING_MAX_DAYS,
-        "time_windows": [
-            {"label": "上午", "start": w[0], "end": w[1]} for w in BOOKING_SLOT_WINDOWS
-        ],
+        "time_windows": _booking_slot_windows_for_api(),
+    })
+
+
+@app.route("/api/admin/appointment-slots/apply-defaults", methods=["POST"])
+@admin_required
+def admin_apply_default_appointment_slots():
+    """Enable all default booking slots within the configured date range (one-click)."""
+    candidates = _candidate_booking_slots()
+    count = store.enable_all_candidate_slots(candidates)
+    return jsonify({
+        "success": True,
+        "enabled_count": count,
+        "max_days": BOOKING_MAX_DAYS,
+        "time_windows": _booking_slot_windows_for_api(),
     })
 
 

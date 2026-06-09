@@ -1432,6 +1432,28 @@
     </div>
   </div>
 
+  </div>
+
+  <!-- ===== INTERVIEWER: Evidence oral recap (after case info) ===== -->
+  <div class="card hidden" id="screen-case-evidence-recap">
+    <h2>证据信息复述</h2>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:12px;line-height:1.75;">
+      请根据刚才阅读的案件<strong>背景与证据材料</strong>，用自己的话口头复述关键证据信息。
+    </p>
+    <p class="sg-recap-hint">点击下方按钮开始录音，录音满 30 秒后可提交；最长 1 分钟将自动停止。提交后系统将自动审核。</p>
+    <div class="sg-recap-timer" id="caseEvidenceRecapTimer">00:00</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+      <button class="btn btn-primary" id="caseEvidenceRecapRecordBtn" onclick="toggleCaseEvidenceRecapRecording()" style="flex:1;">🎙️ 开始录音</button>
+      <span id="caseEvidenceRecapRecordStatus" style="font-size:12px;color:var(--text-light);">待录音</span>
+    </div>
+    <div class="sg-recap-waveform-wrap" id="caseEvidenceRecapWaveformWrap">
+      <canvas id="caseEvidenceRecapWaveform" class="sg-recap-waveform hidden"></canvas>
+      <div id="caseEvidenceRecapWaveformIdle" class="sg-recap-waveform-idle">开始录音后将显示实时波形</div>
+    </div>
+    <button class="btn btn-primary hidden" id="caseEvidenceRecapSubmitBtn" onclick="submitCaseEvidenceRecap()" style="width:100%;margin-top:12px;margin-bottom:8px;">提交复述</button>
+    <button class="btn btn-outline" onclick="showCaseInfo()" style="width:100%;">← 返回案件信息</button>
+  </div>
+
   <!-- ===== INTERVIEWER SCREEN: Assignment ===== -->
   <div class="card hidden" id="screen-interviewer">
     <h2>您的角色：审讯者</h2>
@@ -1448,7 +1470,7 @@
     <div class="info-row" style="margin-top:12px;"><span class="label">您的组别</span><span class="value badge badge-blue" id="caseInfoGroup"></span></div>
     <div id="caseInfoDownloads" style="margin-top:12px;"></div>
     <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
-      <button class="btn btn-primary" id="caseInfoNextBtn" onclick="goToNextAfterCaseInfo()" style="flex:1;">我已阅读完毕，继续</button>
+      <button class="btn btn-primary" id="caseInfoNextBtn" onclick="goToNextAfterCaseInfo()" style="flex:1;">我已阅读完毕，复述证据信息 →</button>
     </div>
   </div>
 
@@ -1548,7 +1570,7 @@
     <p style="font-size:13px;color:var(--text-light);margin-bottom:4px;">
       每个时间段有<strong>两个名额</strong>：<span class="avail-tag suspect">嫌疑人</span> 和 <span class="avail-tag interviewer">审讯者</span>。
       当同一个时间段<strong>嫌疑人和审讯者都预约后</strong>，该时间段即配对成功。<br>
-      <span id="bookingTimeRangeHint">可预约时间范围：<strong>从现在起 24 小时之后</strong>至<strong>5 天内</strong>（嫌疑人）。</span>
+      <span id="bookingTimeRangeHint">可预约时间范围：<strong>从现在起 24 小时之后</strong>至<strong>3 天内</strong>（嫌疑人）。</span>
     </p>
     <p style="font-size:12px;color:var(--text-light);margin-bottom:4px;">
       💡 <strong style="color:#e65100;">建议优先选择已有对方角色预约的时间段（橙色高亮）</strong>，这样可以快速完成配对，尽早开展正式访谈。
@@ -1640,7 +1662,7 @@
       正式访谈需与<strong>嫌疑人预约同一时段</strong>才能配对。若您选择无人预约的时段，可能长期无法配对，从而<strong>无法完成实验</strong>。
     </p>
     <p style="font-size:13px;color:var(--text);margin-bottom:12px;line-height:1.8;">
-      <strong>24 小时后至 5 天内</strong>的时段：可自由选择空闲时间。<br>
+      <strong>24 小时后至 3 天内</strong>的时段：可自由选择空闲时间。<br>
       <strong>未来 24 小时内</strong>的时段：仅可选择<strong>已有嫌疑人预约</strong>的时间（界面中以橙色标注）。
     </p>
     <p style="font-size:13px;color:#856404;margin-bottom:20px;line-height:1.8;background:#fff8e1;padding:10px;border-radius:8px;">
@@ -1681,6 +1703,23 @@
       全部视频结束后，您将<strong>口头复述动机与当晚经历</strong>，并由系统进行审核。
     </p>
     <button class="btn-primary" onclick="confirmSgWatchReminder()" style="padding:12px 40px;font-size:15px;width:auto;">我已了解，继续</button>
+  </div>
+</div>
+
+<!-- Case evidence recap AI review -->
+<div class="number-reminder-overlay" id="caseEvidenceAiReviewModal">
+  <div class="number-reminder-modal">
+    <div class="ai-review-progress"></div>
+    <h3 style="color:var(--primary);border:none;margin-bottom:8px;">正在审核</h3>
+    <p style="font-size:13px;color:var(--text-light);line-height:1.7;">正在由 AI 审核您的证据复述，请稍候…</p>
+  </div>
+</div>
+<div class="number-reminder-overlay" id="caseEvidenceAiPassModal">
+  <div class="number-reminder-modal">
+    <div class="warning-icon">✅</div>
+    <h3 style="color:var(--success);border:none;margin-bottom:8px;">审核通过</h3>
+    <p style="font-size:13px;color:var(--text);margin-bottom:20px;line-height:1.7;">您的证据复述已通过审核，请继续下一步。</p>
+    <button class="btn-primary" onclick="confirmCaseEvidenceAiPass()" style="padding:12px 40px;font-size:15px;width:auto;">继续</button>
   </div>
 </div>
 
@@ -2431,6 +2470,7 @@ const SCREEN_ROUTE_MAP = {
   'screen-attention': '#/flow/attention-check',
   'screen-game': '#/flow/serious-game',
   'screen-sg-recap': '#/flow/sg-recap',
+  'screen-case-evidence-recap': '#/flow/case-evidence-recap',
   'screen-profile': '#/flow/profile',
   'screen-interviewer': '#/flow/interviewer-training',
   'screen-guided-reader': '#/flow/guided-reader',
@@ -3084,6 +3124,10 @@ async function continueParticipantFlow(lookup) {
     await showCaseInfo();
     return;
   }
+  if (step === 'case_evidence_recap') {
+    showCaseEvidenceRecap();
+    return;
+  }
   if (step === 'avatar_training') {
     await showAvatarTrainingSessions();
     return;
@@ -3537,6 +3581,237 @@ function confirmSgAiPass() {
   $('sgAiPassModal').classList.remove('show');
   APP.sg_recap_passed = true;
   showProfile();
+}
+
+// ====== Case evidence recap (interviewer) ======
+const CASE_EVIDENCE_RECAP_MIN_SEC = 30;
+const CASE_EVIDENCE_RECAP_MAX_SEC = 60;
+let caseEvidenceRecapRecording = false;
+let caseEvidenceRecapMediaRecorder = null;
+let caseEvidenceRecapStream = null;
+let caseEvidenceRecapChunks = [];
+let caseEvidenceRecapStartedAt = null;
+let caseEvidenceRecapTimerInterval = null;
+let caseEvidenceRecapTotalMs = 0;
+let caseEvidenceRecapAudioCtx = null;
+let caseEvidenceRecapAnalyser = null;
+let caseEvidenceRecapWaveformRaf = null;
+
+function getCaseEvidenceRecapElapsedSec() {
+  let ms = caseEvidenceRecapTotalMs;
+  if (caseEvidenceRecapRecording && caseEvidenceRecapStartedAt) {
+    ms += Date.now() - caseEvidenceRecapStartedAt;
+  }
+  return ms / 1000;
+}
+
+function updateCaseEvidenceRecapTimerDisplay() {
+  const elapsedSec = getCaseEvidenceRecapElapsedSec();
+  const m = Math.floor(elapsedSec / 60);
+  const s = Math.floor(elapsedSec % 60);
+  const timer = $('caseEvidenceRecapTimer');
+  if (timer) timer.textContent = String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  const submitBtn = $('caseEvidenceRecapSubmitBtn');
+  if (submitBtn && !caseEvidenceRecapRecording && elapsedSec >= CASE_EVIDENCE_RECAP_MIN_SEC) {
+    submitBtn.classList.remove('hidden');
+  }
+}
+
+function startCaseEvidenceRecapWaveform(stream) {
+  const canvas = $('caseEvidenceRecapWaveform');
+  const idle = $('caseEvidenceRecapWaveformIdle');
+  if (canvas) canvas.classList.remove('hidden');
+  if (idle) idle.classList.add('hidden');
+  const AC = window.AudioContext || window.webkitAudioContext;
+  caseEvidenceRecapAudioCtx = new AC();
+  const source = caseEvidenceRecapAudioCtx.createMediaStreamSource(stream);
+  caseEvidenceRecapAnalyser = caseEvidenceRecapAudioCtx.createAnalyser();
+  caseEvidenceRecapAnalyser.fftSize = 256;
+  source.connect(caseEvidenceRecapAnalyser);
+  drawCaseEvidenceRecapWaveform();
+}
+
+function drawCaseEvidenceRecapWaveform() {
+  const canvas = $('caseEvidenceRecapWaveform');
+  if (!canvas || !caseEvidenceRecapAnalyser) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width = canvas.offsetWidth || 300;
+  const h = canvas.height = 80;
+  const bufferLength = caseEvidenceRecapAnalyser.frequencyBinCount;
+  const dataArray = new Uint8Array(bufferLength);
+  caseEvidenceRecapAnalyser.getByteTimeDomainData(dataArray);
+  ctx.fillStyle = '#f0f4f8';
+  ctx.fillRect(0, 0, w, h);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#2563eb';
+  ctx.beginPath();
+  const sliceWidth = w / bufferLength;
+  let x = 0;
+  for (let i = 0; i < bufferLength; i++) {
+    const v = dataArray[i] / 128.0;
+    const y = (v * h) / 2;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+    x += sliceWidth;
+  }
+  ctx.lineTo(w, h / 2);
+  ctx.stroke();
+  caseEvidenceRecapWaveformRaf = requestAnimationFrame(drawCaseEvidenceRecapWaveform);
+}
+
+function stopCaseEvidenceRecapWaveform() {
+  if (caseEvidenceRecapWaveformRaf) {
+    cancelAnimationFrame(caseEvidenceRecapWaveformRaf);
+    caseEvidenceRecapWaveformRaf = null;
+  }
+  if (caseEvidenceRecapAudioCtx) {
+    caseEvidenceRecapAudioCtx.close().catch(() => {});
+    caseEvidenceRecapAudioCtx = null;
+  }
+  caseEvidenceRecapAnalyser = null;
+  const canvas = $('caseEvidenceRecapWaveform');
+  const idle = $('caseEvidenceRecapWaveformIdle');
+  if (canvas) canvas.classList.add('hidden');
+  if (idle) idle.classList.remove('hidden');
+}
+
+function resetCaseEvidenceRecapUi() {
+  if (caseEvidenceRecapRecording) stopCaseEvidenceRecapRecording(true);
+  stopCaseEvidenceRecapWaveform();
+  caseEvidenceRecapChunks = [];
+  caseEvidenceRecapTotalMs = 0;
+  if (caseEvidenceRecapTimerInterval) {
+    clearInterval(caseEvidenceRecapTimerInterval);
+    caseEvidenceRecapTimerInterval = null;
+  }
+  const btn = $('caseEvidenceRecapRecordBtn');
+  if (btn) {
+    btn.textContent = '🎙️ 开始录音';
+    btn.disabled = false;
+  }
+  const st = $('caseEvidenceRecapRecordStatus');
+  if (st) st.textContent = '待录音';
+  const submitBtn = $('caseEvidenceRecapSubmitBtn');
+  if (submitBtn) submitBtn.classList.add('hidden');
+  updateCaseEvidenceRecapTimerDisplay();
+}
+
+async function showCaseEvidenceRecap() {
+  resetCaseEvidenceRecapUi();
+  await saveFlowStep('case_evidence_recap');
+  showScreen('screen-case-evidence-recap');
+}
+
+async function toggleCaseEvidenceRecapRecording() {
+  if (caseEvidenceRecapRecording) {
+    stopCaseEvidenceRecapRecording(false);
+    return;
+  }
+  if (getCaseEvidenceRecapElapsedSec() >= CASE_EVIDENCE_RECAP_MAX_SEC) {
+    alert('已达最长录音时间（1 分钟），请提交复述。');
+    return;
+  }
+  try {
+    caseEvidenceRecapStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    alert('无法访问麦克风：' + (err.message || err));
+    return;
+  }
+  caseEvidenceRecapChunks = [];
+  caseEvidenceRecapMediaRecorder = new MediaRecorder(caseEvidenceRecapStream);
+  caseEvidenceRecapMediaRecorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) caseEvidenceRecapChunks.push(e.data);
+  };
+  caseEvidenceRecapMediaRecorder.onstop = () => {
+    if (caseEvidenceRecapStream) {
+      caseEvidenceRecapStream.getTracks().forEach((t) => t.stop());
+      caseEvidenceRecapStream = null;
+    }
+  };
+  caseEvidenceRecapMediaRecorder.start(200);
+  caseEvidenceRecapRecording = true;
+  caseEvidenceRecapStartedAt = Date.now();
+  startCaseEvidenceRecapWaveform(caseEvidenceRecapStream);
+  $('caseEvidenceRecapRecordBtn').textContent = '⏹️ 停止录音';
+  $('caseEvidenceRecapRecordStatus').textContent = '录音中…满 30 秒可停止并提交';
+  $('caseEvidenceRecapSubmitBtn').classList.add('hidden');
+  if (caseEvidenceRecapTimerInterval) clearInterval(caseEvidenceRecapTimerInterval);
+  caseEvidenceRecapTimerInterval = setInterval(() => {
+    updateCaseEvidenceRecapTimerDisplay();
+    if (getCaseEvidenceRecapElapsedSec() >= CASE_EVIDENCE_RECAP_MAX_SEC) {
+      stopCaseEvidenceRecapRecording(true);
+    }
+  }, 200);
+}
+
+function stopCaseEvidenceRecapRecording(silent) {
+  if (!caseEvidenceRecapRecording) return;
+  caseEvidenceRecapRecording = false;
+  if (caseEvidenceRecapTimerInterval) {
+    clearInterval(caseEvidenceRecapTimerInterval);
+    caseEvidenceRecapTimerInterval = null;
+  }
+  if (caseEvidenceRecapStartedAt) {
+    caseEvidenceRecapTotalMs += Date.now() - caseEvidenceRecapStartedAt;
+    caseEvidenceRecapStartedAt = null;
+  }
+  if (caseEvidenceRecapMediaRecorder && caseEvidenceRecapMediaRecorder.state !== 'inactive') {
+    try { caseEvidenceRecapMediaRecorder.stop(); } catch (_) {}
+  }
+  caseEvidenceRecapMediaRecorder = null;
+  stopCaseEvidenceRecapWaveform();
+  const elapsedSec = getCaseEvidenceRecapElapsedSec();
+  $('caseEvidenceRecapRecordBtn').textContent = '🎙️ 开始录音';
+  if (elapsedSec >= CASE_EVIDENCE_RECAP_MAX_SEC) {
+    $('caseEvidenceRecapRecordBtn').disabled = true;
+    $('caseEvidenceRecapRecordStatus').textContent = '已达 1 分钟上限，请提交';
+  } else if (elapsedSec >= CASE_EVIDENCE_RECAP_MIN_SEC) {
+    $('caseEvidenceRecapRecordStatus').textContent = '录音已满 30 秒，可提交';
+  } else {
+    $('caseEvidenceRecapRecordStatus').textContent = '已录 ' + Math.floor(elapsedSec) + ' 秒，需满 30 秒';
+    if (!silent && elapsedSec > 0) {
+      alert('录音未满 30 秒，请继续录音至满 30 秒后再提交。');
+    }
+  }
+  updateCaseEvidenceRecapTimerDisplay();
+}
+
+async function submitCaseEvidenceRecap() {
+  if (caseEvidenceRecapRecording) {
+    alert('请先停止录音再提交。');
+    return;
+  }
+  if (getCaseEvidenceRecapElapsedSec() < CASE_EVIDENCE_RECAP_MIN_SEC) {
+    alert('录音未满 30 秒，请继续录音后再提交。');
+    return;
+  }
+  $('caseEvidenceAiReviewModal').classList.add('show');
+  const waitMs = 5000 + Math.floor(Math.random() * 3001);
+  setTimeout(() => {
+    $('caseEvidenceAiReviewModal').classList.remove('show');
+    $('caseEvidenceAiPassModal').classList.add('show');
+  }, waitMs);
+}
+
+async function confirmCaseEvidenceAiPass() {
+  $('caseEvidenceAiPassModal').classList.remove('show');
+  try {
+    await api('/api/case-evidence-recap/complete', { phone: APP.phone });
+    if (APP.participant) APP.participant.case_evidence_recap_passed = 1;
+  } catch (err) {
+    showError(err.message || '保存进度失败');
+    return;
+  }
+  goToNextAfterCaseInfoDirect();
+}
+
+function proceedToCaseEvidenceRecapOrNext() {
+  const passed = APP.participant && Number(APP.participant.case_evidence_recap_passed) === 1;
+  if (passed) {
+    goToNextAfterCaseInfoDirect();
+    return;
+  }
+  showCaseEvidenceRecap();
 }
 
 function goBackToSuspectContext() {
@@ -5758,7 +6033,7 @@ function renderBookingSlotsForInterviewer() {
   let html = '<h3>请选择一个时间段预约</h3>';
   html += `<p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">您的角色：<strong>${roleLabel}</strong></p>`;
   html += `<p style="font-size:12px;color:var(--text-light);margin-bottom:12px;line-height:1.6;">
-    <strong>24 小时后至 5 天内</strong>可自由选择；<strong>未来 24 小时内</strong>仅可预约<strong>已有嫌疑人预约</strong>的时段。
+    <strong>24 小时后至 3 天内</strong>可自由选择；<strong>未来 24 小时内</strong>仅可预约<strong>已有嫌疑人预约</strong>的时段。
   </p>`;
   if (waitingSuspectSlots > 0) {
     html += `
@@ -6784,13 +7059,13 @@ function handleCaseInfoNextClick() {
     showCaseDownloadReminderModal();
     return;
   }
-  goToNextAfterCaseInfoDirect();
+  proceedToCaseEvidenceRecapOrNext();
 }
 
 function proceedAfterCaseDownloadReminder() {
   sessionStorage.setItem('case_download_reminded', '1');
   closeCaseDownloadReminderModal();
-  goToNextAfterCaseInfoDirect();
+  proceedToCaseEvidenceRecapOrNext();
 }
 
 async function downloadCaseInfoPdfs() {
@@ -6970,9 +7245,9 @@ function renderBookingUI() {
   const hintEl = $('bookingTimeRangeHint');
   if (hintEl) {
     if (role === 'I') {
-      hintEl.innerHTML = '审讯者：<strong>24 小时后至 5 天内</strong>可自由选择；<strong>未来 24 小时内</strong>仅可预约<strong>已有嫌疑人预约</strong>的时段。请优先选择橙色标注时段。';
+      hintEl.innerHTML = '审讯者：<strong>24 小时后至 3 天内</strong>可自由选择；<strong>未来 24 小时内</strong>仅可预约<strong>已有嫌疑人预约</strong>的时段。请优先选择橙色标注时段。';
     } else {
-      hintEl.innerHTML = '可预约时间范围：<strong>从现在起 24 小时之后</strong>至<strong>5 天内</strong>（<strong>嫌疑人</strong>）。';
+      hintEl.innerHTML = '可预约时间范围：<strong>从现在起 24 小时之后</strong>至<strong>3 天内</strong>（<strong>嫌疑人</strong>）。';
     }
   }
 
@@ -7085,7 +7360,7 @@ function renderBookingUI() {
         <div style="background:#fff8e1;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
           <div style="font-weight:700;font-size:13px;color:#e65100;">💡 审讯者预约提示</div>
           <div style="font-size:12px;color:#856404;margin-top:4px;line-height:1.6;">
-            请<strong>优先选择已有嫌疑人预约</strong>的时段（橙色标注），以免无法配对。24 小时后至 5 天内可自由选择；未来 24 小时内仅可预约嫌疑人已约时段。
+            请<strong>优先选择已有嫌疑人预约</strong>的时段（橙色标注），以免无法配对。24 小时后至 3 天内可自由选择；未来 24 小时内仅可预约嫌疑人已约时段。
           </div>
         </div>`;
     }
