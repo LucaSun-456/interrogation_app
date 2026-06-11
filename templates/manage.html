@@ -1871,7 +1871,7 @@ async function submitRoleConfig() {
   try {
     const resp = await fetch(`/api/admin/participants/${currentRoleConfigPid}/role-config`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ role, case_type: caseType, training_type: trainingType })
     });
     if (!resp.ok) {
