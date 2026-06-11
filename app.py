@@ -1227,14 +1227,14 @@ class ExcelStore:
                 role = None
                 participants = self._read_all(wb, SHEET_PARTICIPANTS)
                 for p in participants:
-                    if p["id"] == pid:
+                    if str(p.get("id", "")) == str(pid):
                         phone = p.get("phone", "")
                         group_name = p.get("group_name", "")
                         role = p.get("role", "")
                         break
-                participants = [p for p in participants if p["id"] != pid]
+                participants = [p for p in participants if str(p.get("id", "")) != str(pid)]
                 self._write_all(wb, SHEET_PARTICIPANTS, participants)
-                profiles = [p for p in self._read_all(wb, SHEET_PROFILES) if p["participant_id"] != pid]
+                profiles = [p for p in self._read_all(wb, SHEET_PROFILES) if str(p.get("participant_id", "")) != str(pid)]
                 self._write_all(wb, SHEET_PROFILES, profiles)
                 if phone:
                     avails = [a for a in self._read_all(wb, SHEET_AVAILABILITIES) if a.get("phone") != phone]
@@ -1516,7 +1516,7 @@ class ExcelStore:
             wb = self._load()
             try:
                 appointments = self._read_all(wb, SHEET_APPOINTMENTS)
-                appointments = [a for a in appointments if a["id"] != aid]
+                appointments = [a for a in appointments if str(a.get("id", "")) != str(aid)]
                 self._write_all(wb, SHEET_APPOINTMENTS, appointments)
                 self._save(wb)
             finally:
@@ -6885,7 +6885,7 @@ def admin_update_participant_role_config(pid):
             participants = store._read_all(wb, SHEET_PARTICIPANTS)
             target_p = None
             for p in participants:
-                if p["id"] == pid:
+                if str(p.get("id", "")) == str(pid):
                     target_p = p
                     break
                     
