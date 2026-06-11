@@ -954,7 +954,11 @@ def init_excel():
     ws.append(["next_appt_id", 1])
     ws.append(["next_questionnaire_id", 1])
     ws.append(["next_qoverride_id", 1])
-    wb.save(EXCEL_FILE)
+    import tempfile
+    fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(EXCEL_FILE), suffix=".xlsx")
+    os.close(fd)
+    wb.save(tmp_path)
+    os.replace(tmp_path, EXCEL_FILE)
     wb.close()
 
 
@@ -984,7 +988,11 @@ def ensure_sheets():
                     for col_name in new_cols:
                         ws.cell(row=1, column=len(existing_cols) + 1 + new_cols.index(col_name), value=col_name)
                     print(f"  [MIGRATION] Added columns to {name}: {', '.join(new_cols)}")
-        wb.save(EXCEL_FILE)
+        import tempfile
+        fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(EXCEL_FILE), suffix=".xlsx")
+        os.close(fd)
+        wb.save(tmp_path)
+        os.replace(tmp_path, EXCEL_FILE)
     finally:
         wb.close()
 
@@ -996,7 +1004,17 @@ class ExcelStore:
         return load_workbook(EXCEL_FILE)
 
     def _save(self, wb):
-        wb.save(EXCEL_FILE)
+        import tempfile
+        import os
+        fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(EXCEL_FILE), suffix=".xlsx")
+        os.close(fd)
+        try:
+            wb.save(tmp_path)
+            os.replace(tmp_path, EXCEL_FILE)
+        except Exception:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            raise
 
     def _close(self, wb):
         wb.close()
@@ -2759,47 +2777,142 @@ def _reconcile_group_allocations():
     Release group numbers when slots are empty; drop stale slot_map / groups rows;
     clear group_name on participants without a confirmed booking.
     """
-    used_nums = _groups_in_use()
-    used_names = {f"{n:03d}" for n in used_nums}
-
-    active_slots = _active_booking_slots()
-    slot_map = _get_slot_group_map()
-    new_map = {}
-    for slot in active_slots:
-        gn = slot_map.get(slot, "").strip()
-        if not gn:
-            for appt in store.get_appointments():
-                if appt.get("status") != "confirmed":
-                    continue
-                if (appt.get("time_slot") or "").strip() != slot:
-                    continue
-                p = store.get_participant((appt.get("phone") or "").strip())
-                gn = (p.get("group_name") or "").strip() if p else ""
-                if gn:
-                    break
-        if gn:
-            new_map[slot] = gn
-    if new_map != slot_map:
-        _set_slot_group_map(new_map)
-
-    for p in store.get_all_participants():
-        phone = (p.get("phone") or "").strip()
-        if not phone or store.has_booking(phone):
-            continue
-        if (p.get("group_name") or "").strip() or (p.get("full_id") or "").strip():
-            store.update_participant(phone, group_name="", full_id="")
-
     with _excel_lock:
         wb = store._load()
         try:
+            # 1. Read all needed data in ONE pass
+            participants = store._read_all(wb, SHEET_PARTICIPANTS)
+            appointments = store._read_all(wb, SHEET_APPOINTMENTS)
+            meta_rows = store._read_all(wb, SHEET_META)
             groups = store._read_all(wb, SHEET_GROUPS)
-            pruned = [
+
+            # Build indexes
+            p_by_phone = { (p.get("phone") or "").strip(): p for p in participants }
+            
+            # 2. Compute _groups_in_use and _active_booking_slots
+            used_nums = set()
+            active_slots = set()
+            
+            for appt in appointments:
+                if appt.get("status") != "confirmed":
+                    continue
+                slot = (appt.get("time_slot") or "").strip()
+                if slot:
+                    active_slots.add(slot)
+                
+                phone = (appt.get("phone") or "").strip()
+                p = p_by_phone.get(phone)
+                if p:
+                    gn = p.get("group_name")
+                    n = _parse_group_number(gn)
+                    if n > 0:
+                        used_nums.add(n)
+            
+            used_names = {f"{n:03d}" for n in used_nums}
+
+            # 3. Compute slot_map
+            slot_map = {}
+            meta_slot_groups = None
+            for row in meta_rows:
+                if row.get("key") == META_SLOT_GROUPS:
+                    meta_slot_groups = row.get("value")
+                    break
+            
+            if meta_slot_groups is not None:
+                try:
+                    data = json.loads(meta_slot_groups) if isinstance(meta_slot_groups, str) else meta_slot_groups
+                    if isinstance(data, dict):
+                        slot_map = {str(k): str(v) for k, v in data.items()}
+                except Exception:
+                    pass
+            
+            if not slot_map:
+                for appt in appointments:
+                    if appt.get("status") != "confirmed":
+                        continue
+                    slot = (appt.get("time_slot") or "").strip()
+                    if not slot:
+                        continue
+                    phone = (appt.get("phone") or "").strip()
+                    p = p_by_phone.get(phone)
+                    gn = (p.get("group_name") or "").strip() if p else ""
+                    if not gn:
+                        continue
+                    if slot in slot_map and slot_map[slot] != gn:
+                        continue
+                    slot_map[slot] = gn
+                
+            # 4. Update slot map based on active slots
+            new_map = {}
+            for slot in active_slots:
+                gn = slot_map.get(slot, "").strip()
+                if not gn:
+                    for appt in appointments:
+                        if appt.get("status") != "confirmed":
+                            continue
+                        if (appt.get("time_slot") or "").strip() != slot:
+                            continue
+                        phone = (appt.get("phone") or "").strip()
+                        p = p_by_phone.get(phone)
+                        gn = (p.get("group_name") or "").strip() if p else ""
+                        if gn:
+                            break
+                if gn:
+                    new_map[slot] = gn
+            
+            meta_changed = False
+            if new_map != slot_map:
+                # Update meta
+                val_str = json.dumps(new_map, ensure_ascii=False)
+                found = False
+                for row in meta_rows:
+                    if row.get("key") == META_SLOT_GROUPS:
+                        row["value"] = val_str
+                        found = True
+                        break
+                if not found:
+                    meta_rows.append({"key": META_SLOT_GROUPS, "value": val_str})
+                store._write_all(wb, SHEET_META, meta_rows)
+                meta_changed = True
+
+            # 5. Clear group_name on participants without a confirmed booking
+            participants_changed = False
+            
+            # Helper to check booking
+            def has_booking(phone):
+                for a in appointments:
+                    if (a.get("phone") or "").strip() == phone and a.get("status") == "confirmed":
+                        return True
+                return False
+
+            for p in participants:
+                phone = (p.get("phone") or "").strip()
+                if not phone or has_booking(phone):
+                    continue
+                gn = (p.get("group_name") or "").strip()
+                fid = (p.get("full_id") or "").strip()
+                if gn or fid:
+                    p["group_name"] = ""
+                    p["full_id"] = ""
+                    participants_changed = True
+            
+            if participants_changed:
+                store._write_all(wb, SHEET_PARTICIPANTS, participants)
+
+            # 6. Prune groups
+            pruned_groups = [
                 g for g in groups
                 if (g.get("name") or "").strip() in used_names
             ]
-            if len(pruned) != len(groups):
-                store._write_all(wb, SHEET_GROUPS, pruned)
+            groups_changed = False
+            if len(pruned_groups) != len(groups):
+                store._write_all(wb, SHEET_GROUPS, pruned_groups)
+                groups_changed = True
+
+            # 7. Save if anything changed
+            if meta_changed or participants_changed or groups_changed:
                 store._save(wb)
+                
         finally:
             store._close(wb)
 
@@ -2926,8 +3039,9 @@ def assign_participant_group_on_booking(phone, time_slot):
 
 def pick_register_role():
     """Alternate S/I by registration count so roles stay balanced."""
-    n_s = sum(1 for p in store.get_all_participants() if p.get("role") == "S")
-    n_i = sum(1 for p in store.get_all_participants() if p.get("role") == "I")
+    participants = store.get_all_participants()
+    n_s = sum(1 for p in participants if p.get("role") == "S")
+    n_i = sum(1 for p in participants if p.get("role") == "I")
     return "I" if n_i < n_s else "S"
 
 
@@ -2947,12 +3061,17 @@ def _suspect_combo_on_slot(time_slot):
     slot = (time_slot or "").strip()
     if not slot:
         return None
-    for appt in store.get_appointments():
+        
+    appointments = store.get_appointments()
+    participants = store.get_all_participants()
+    p_by_phone = { (p.get("phone") or "").strip(): p for p in participants }
+    
+    for appt in appointments:
         if appt.get("status") != "confirmed" or appt.get("role") != "S":
             continue
         if (appt.get("time_slot") or "").strip() != slot:
             continue
-        p = store.get_participant(appt.get("phone", ""))
+        p = p_by_phone.get(appt.get("phone", ""))
         if p and p.get("case_type"):
             return p.get("case_type"), p.get("guilt") or "Innocent"
     return None
@@ -3116,7 +3235,12 @@ def _sync_slot_participants_flow_step(time_slot, is_matched):
     """When S+I both book the same slot, move waiting participants to booking_matched."""
     if not is_matched or not time_slot:
         return
-    for appt in store.get_appointments():
+        
+    appointments = store.get_appointments()
+    participants = store.get_all_participants()
+    p_by_phone = { (p.get("phone") or "").strip(): p for p in participants }
+    
+    for appt in appointments:
         if appt.get("status") != "confirmed":
             continue
         if (appt.get("time_slot") or "").strip() != time_slot:
@@ -3124,7 +3248,7 @@ def _sync_slot_participants_flow_step(time_slot, is_matched):
         ph = (appt.get("phone") or "").strip()
         if not ph:
             continue
-        p = store.get_participant(ph)
+        p = p_by_phone.get(ph)
         if not p:
             continue
         step = (p.get("flow_step") or "").strip()
@@ -3140,7 +3264,12 @@ def _refresh_slot_match_state(time_slot):
     if is_matched:
         _sync_slot_participants_flow_step(time_slot, True)
         return
-    for appt in store.get_appointments():
+        
+    appointments = store.get_appointments()
+    participants = store.get_all_participants()
+    p_by_phone = { (p.get("phone") or "").strip(): p for p in participants }
+    
+    for appt in appointments:
         if appt.get("status") != "confirmed":
             continue
         if (appt.get("time_slot") or "").strip() != time_slot:
@@ -3148,7 +3277,7 @@ def _refresh_slot_match_state(time_slot):
         ph = (appt.get("phone") or "").strip()
         if not ph:
             continue
-        p = store.get_participant(ph)
+        p = p_by_phone.get(ph)
         if not p:
             continue
         step = (p.get("flow_step") or "").strip()
@@ -7120,11 +7249,21 @@ def _purge_stale_unbooked_participants():
     now = datetime.now()
     cutoff = timedelta(hours=UNBOOKED_PURGE_HOURS)
     purged = []
-    for p in store.get_all_participants():
+    
+    participants = store.get_all_participants()
+    appointments = store.get_appointments()
+    
+    def has_booking(phone):
+        for a in appointments:
+            if (a.get("phone") or "").strip() == phone and a.get("status") == "confirmed":
+                return True
+        return False
+        
+    for p in participants:
         phone = (p.get("phone") or "").strip()
         if not phone:
             continue
-        if store.has_booking(phone):
+        if has_booking(phone):
             continue
         created = _parse_participant_created_at(p.get("created_at"))
         if not created or now - created < cutoff:
