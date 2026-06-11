@@ -737,6 +737,44 @@
 </div>
 
 <!-- 修改预约时间悬浮窗 -->
+<!-- Role Config Modal -->
+<div class="admin-modal-overlay" id="roleConfigModal" onclick="if(event.target===this)closeRoleConfigModal()">
+  <div class="admin-modal slot-modal" onclick="event.stopPropagation()">
+    <div class="admin-modal-header">
+      <h3 id="roleConfigModalTitle">修改角色与配置</h3>
+      <button type="button" class="admin-modal-close" onclick="closeRoleConfigModal()">关闭</button>
+    </div>
+    <div class="admin-modal-body" id="roleConfigModalBody">
+      <div class="form-group">
+        <label>角色</label>
+        <select id="roleConfigRole" class="form-control" onchange="toggleRoleConfigFields()">
+          <option value="S">嫌疑人 (S)</option>
+          <option value="I">审讯者 (I)</option>
+        </select>
+      </div>
+      <div class="form-group" id="roleConfigCaseTypeGroup">
+        <label>案件类型 (仅嫌疑人)</label>
+        <select id="roleConfigCaseType" class="form-control">
+          <option value="arson">纵火案 (Arson)</option>
+          <option value="theft">盗窃案 (Theft)</option>
+        </select>
+      </div>
+      <div class="form-group" id="roleConfigTrainingTypeGroup" style="display:none;">
+        <label>培训类型 (仅审讯者)</label>
+        <select id="roleConfigTrainingType" class="form-control">
+          <option value="control">对照组 (Control)</option>
+          <option value="theory_sue">理论培训 (Theory SUE)</option>
+          <option value="avatar_general">通用 Avatar (Avatar General)</option>
+          <option value="avatar_specific">特定 Avatar (Avatar Specific)</option>
+        </select>
+      </div>
+      <div style="margin-top:20px; text-align:right;">
+        <button class="btn btn-primary" onclick="submitRoleConfig()">确认修改并重置进度</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="admin-modal-overlay" id="rescheduleModal" onclick="if(event.target===this)closeRescheduleModal()">
   <div class="admin-modal slot-modal" onclick="event.stopPropagation()">
     <div class="admin-modal-header">
@@ -1556,6 +1594,7 @@ function renderParticipantTable(participants) {
         <td>${qHtml}</td>
         <td class="profile-cell">${profileStr}</td>
         <td style="white-space:nowrap;">
+          <button class="btn btn-outline" style="font-size:11px;padding:3px 8px;margin-bottom:4px;" onclick="openRoleConfigModal(${p.id}, '${(p.phone || '').replace(/'/g, "\\'")}', '${p.role || ''}', '${p.case_type || ''}', '${p.training_type || ''}')">改角色/配置</button>
           <button class="btn btn-outline" style="font-size:11px;padding:3px 8px;margin-bottom:4px;" onclick="editParticipantGroup('${(p.phone || '').replace(/'/g, "\\'")}', '${p.group_name || ''}', '${(p.full_id || '').replace(/'/g, "\\'")}')">改组别</button>
           ${(() => {
             const ap = APP.appointmentByPhone.get(p.phone);
@@ -1791,6 +1830,60 @@ function slotAvailableForReschedule(slotInfo, role, currentSlot) {
   if (slotInfo.slot === currentSlot) return true;
   const roles = slotInfo.roles_booked || [];
   return !roles.includes(role);
+}
+
+let currentRoleConfigPid = null;
+
+function openRoleConfigModal(pid, phone, role, caseType, trainingType) {
+  currentRoleConfigPid = pid;
+  document.getElementById('roleConfigModalTitle').textContent = `修改角色配置 - ${phone}`;
+  document.getElementById('roleConfigRole').value = role || 'S';
+  document.getElementById('roleConfigCaseType').value = caseType || 'arson';
+  document.getElementById('roleConfigTrainingType').value = trainingType || 'control';
+  toggleRoleConfigFields();
+  document.getElementById('roleConfigModal').classList.add('show');
+}
+
+function closeRoleConfigModal() {
+  document.getElementById('roleConfigModal').classList.remove('show');
+  currentRoleConfigPid = null;
+}
+
+function toggleRoleConfigFields() {
+  const role = document.getElementById('roleConfigRole').value;
+  if (role === 'S') {
+    document.getElementById('roleConfigCaseTypeGroup').style.display = 'block';
+    document.getElementById('roleConfigTrainingTypeGroup').style.display = 'none';
+  } else {
+    document.getElementById('roleConfigCaseTypeGroup').style.display = 'none';
+    document.getElementById('roleConfigTrainingTypeGroup').style.display = 'block';
+  }
+}
+
+async function submitRoleConfig() {
+  if (!currentRoleConfigPid) return;
+  if (!confirm('警告：修改角色或配置将重置该参与者的所有培训和实验进度！确定要继续吗？')) return;
+  
+  const role = document.getElementById('roleConfigRole').value;
+  const caseType = document.getElementById('roleConfigCaseType').value;
+  const trainingType = document.getElementById('roleConfigTrainingType').value;
+  
+  try {
+    const resp = await fetch(`/api/admin/participants/${currentRoleConfigPid}/role-config`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role, case_type: caseType, training_type: trainingType })
+    });
+    if (!resp.ok) {
+      const e = await resp.json();
+      throw new Error(e.error || '修改失败');
+    }
+    alert('修改成功，进度已重置');
+    closeRoleConfigModal();
+    loadData({ reconcile: 1 });
+  } catch (err) {
+    alert('修改失败: ' + err.message);
+  }
 }
 
 function openRescheduleModal(aid, phone, role, currentSlot) {

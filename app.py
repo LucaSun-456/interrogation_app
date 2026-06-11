@@ -6867,6 +6867,91 @@ def admin_participant_progress():
     return jsonify({"progress": progress})
 
 
+@app.route("/api/admin/participants/<int:pid>/role-config", methods=["PATCH"])
+@admin_required
+def admin_update_participant_role_config(pid):
+    """Update participant role, case_type, training_type and reset their progress."""
+    data = request.get_json() or {}
+    role = (data.get("role") or "").strip().upper()
+    case_type = (data.get("case_type") or "").strip()
+    training_type = (data.get("training_type") or "").strip()
+    
+    if role not in ("S", "I"):
+        return jsonify({"error": "角色必须是 S 或 I"}), 400
+        
+    with _excel_lock:
+        wb = store._load()
+        try:
+            participants = store._read_all(wb, SHEET_PARTICIPANTS)
+            target_p = None
+            for p in participants:
+                if p["id"] == pid:
+                    target_p = p
+                    break
+                    
+            if not target_p:
+                return jsonify({"error": "未找到参与者"}), 404
+                
+            phone = target_p.get("phone", "")
+            old_role = target_p.get("role", "")
+            
+            # Update fields
+            target_p["role"] = role
+            if role == "S":
+                target_p["case_type"] = case_type
+                target_p["training_type"] = ""
+            else:
+                target_p["case_type"] = ""
+                target_p["training_type"] = training_type
+                
+            # Reset progress fields
+            target_p["flow_step"] = ""
+            target_p["attention_passed"] = 0
+            target_p["attention_failed"] = 0
+            target_p["consent_attention_passed"] = 0
+            target_p["sue_attention_passed"] = 0
+            target_p["sue_attention_attempts"] = 0
+            target_p["control_attention_passed"] = 0
+            target_p["game_completed"] = 0
+            target_p["profile_completed"] = 0
+            target_p["completed"] = 0
+            target_p["case_evidence_recap_passed"] = 0
+            
+            # Rebuild full_id if they have a group
+            group_name = target_p.get("group_name", "")
+            if group_name:
+                suffix = participant_id_suffix(target_p)
+                target_p["full_id"] = make_full_id(group_name, role, suffix)
+                
+            store._write_all(wb, SHEET_PARTICIPANTS, participants)
+            
+            # Delete associated records that represent progress
+            if phone:
+                # Questionnaires
+                qrows = [q for q in store._read_all(wb, SHEET_INTERVIEW_QUESTIONNAIRES) if q.get("phone") != phone]
+                store._write_all(wb, SHEET_INTERVIEW_QUESTIONNAIRES, qrows)
+                
+                # Training sessions
+                sessions = [s for s in store._read_all(wb, SHEET_TRAINING_SESSIONS) if s.get("phone") != phone]
+                store._write_all(wb, SHEET_TRAINING_SESSIONS, sessions)
+                
+                # Serious game
+                sg_rows = [r for r in store._read_all(wb, SHEET_SERIOUS_GAME) if r.get("phone") != phone]
+                store._write_all(wb, SHEET_SERIOUS_GAME, sg_rows)
+                
+                # Profiles (maybe keep? the user said "restart training from the beginning", usually means resetting profile too)
+                profiles = [p for p in store._read_all(wb, SHEET_PROFILES) if p["participant_id"] != pid]
+                store._write_all(wb, SHEET_PROFILES, profiles)
+                
+            store._save(wb)
+        finally:
+            store._close(wb)
+            
+    # Reconcile group allocations in case role change affected slot matching
+    _reconcile_group_allocations()
+    
+    return jsonify({"success": True, "message": "参与者配置已更新，进度已重置"})
+
 @app.route("/api/admin/participants/group", methods=["POST"])
 @admin_required
 def admin_set_participant_group():
