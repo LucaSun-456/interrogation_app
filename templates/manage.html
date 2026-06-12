@@ -1739,6 +1739,7 @@ function renderSlotConfig() {
     <button type="button" class="btn btn-outline" style="font-size:12px;padding:6px 12px;" onclick="backToSlotDayList()">← 返回日期列表</button>
     <strong style="font-size:14px;">${slotConfigSelectedDay}</strong>
     <span class="count">共 ${items.length} 个时段</span>
+    <button type="button" class="btn btn-outline" style="font-size:12px;padding:6px 12px;margin-left:auto;color:var(--accent);border-color:var(--accent);" onclick="disableDaySlots('${slotConfigSelectedDay}')">一键关闭本日所有时段</button>
   </div>`;
   html += '<div class="slot-modal-grid-5">';
   items.forEach(s => {
@@ -1783,6 +1784,25 @@ async function loadSlotConfig() {
   }
 }
 
+async function disableDaySlots(dateStr) {
+  if (!confirm(`确定要关闭 ${dateStr} 的所有预约时段吗？已预约的时段不受影响，但将不再接受新预约。`)) return;
+  try {
+    const headers = getAuthHeaders();
+    if (!headers.Authorization) { promptForPassword(); return; }
+    const resp = await fetch('/api/admin/appointment-slots/disable-day', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: dateStr }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '关闭失败');
+    alert(`已成功关闭 ${data.disabled_count} 个时段。`);
+    loadSlotConfig();
+  } catch (err) {
+    alert('一键关闭失败: ' + err.message);
+  }
+}
+
 async function toggleSlot(slot, enabled) {
   try {
     const headers = getAuthHeaders();
@@ -1802,7 +1822,7 @@ async function toggleSlot(slot, enabled) {
 }
 
 async function applyDefaultAppointmentSlots() {
-  if (!confirm('将启用未来 3 天内所有默认时段（下午 15:00–17:00、晚上 19:00–21:30，每 30 分钟一档）。确定执行？')) return;
+  if (!confirm('将启用未来 14 天内所有默认时段（下午 15:00–17:00、晚上 19:00–21:30，每 30 分钟一档）。确定执行？')) return;
   try {
     const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
     if (!headers.Authorization) { promptForPassword(); return; }

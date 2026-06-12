@@ -679,6 +679,7 @@ def inject_app_meta():
 
 BOOKING_MIN_HOURS = 24
 BOOKING_MAX_DAYS = 3
+ADMIN_BOOKING_MAX_DAYS = 14
 UNBOOKED_PURGE_HOURS = 24
 MAX_GROUPS = 112
 BOOKING_SLOT_WINDOWS = [
@@ -1127,6 +1128,16 @@ class ExcelStore:
         new_disabled = {s for s in disabled if s not in candidates}
         self.set_meta(META_DISABLED_SLOTS, json.dumps(sorted(new_disabled), ensure_ascii=False))
         return len(candidates)
+
+    def disable_slots_batch(self, slots_to_disable):
+        """Disable a list of slots in one batch."""
+        to_disable = set(slots_to_disable or [])
+        if not to_disable:
+            return 0
+        disabled = self.get_disabled_slots()
+        new_disabled = disabled.union(to_disable)
+        self.set_meta(META_DISABLED_SLOTS, json.dumps(sorted(new_disabled), ensure_ascii=False))
+        return len(to_disable)
 
     # ---- Participants ----
 
@@ -3938,13 +3949,19 @@ def _iter_slot_times(start_hm, end_hm, step_minutes=BOOKING_SLOT_STEP_MINUTES):
 
 
 def _booking_slot_bounds(role=None):
-    """Suspects: earliest slot 24h ahead; interviewers: from now to 7 days."""
+    """Suspects: earliest slot 24h ahead; interviewers: from now to 3 days. Admin: 14 days."""
     now = datetime.now()
     if role == "I":
         min_dt = now
+    elif role == "admin":
+        min_dt = now
     else:
         min_dt = now + timedelta(hours=BOOKING_MIN_HOURS)
-    max_dt = now + timedelta(days=BOOKING_MAX_DAYS)
+        
+    if role == "admin":
+        max_dt = now + timedelta(days=ADMIN_BOOKING_MAX_DAYS)
+    else:
+        max_dt = now + timedelta(days=BOOKING_MAX_DAYS)
     return min_dt, max_dt
 
 
@@ -7032,7 +7049,7 @@ def admin_reschedule_appointment_route(aid):
 def admin_get_appointment_slots():
     """Return all candidate slots with enabled/booking status for admin UI."""
     role_arg = (request.args.get("role") or "").strip().upper()
-    role = role_arg if role_arg in ("S", "I") else None
+    role = role_arg if role_arg in ("S", "I") else "admin"
     disabled = store.get_disabled_slots()
     slot_bookings = store.get_slot_bookings()
     fully_booked = store.get_confirmed_slot_set()
@@ -7049,7 +7066,7 @@ def admin_get_appointment_slots():
         "slots": slots,
         "role": role,
         "min_hours": BOOKING_MIN_HOURS,
-        "max_days": BOOKING_MAX_DAYS,
+        "max_days": ADMIN_BOOKING_MAX_DAYS if role == "admin" else BOOKING_MAX_DAYS,
         "time_windows": _booking_slot_windows_for_api(),
     })
 
@@ -7058,12 +7075,12 @@ def admin_get_appointment_slots():
 @admin_required
 def admin_apply_default_appointment_slots():
     """Enable all default booking slots within the configured date range (one-click)."""
-    candidates = _candidate_booking_slots()
+    candidates = _candidate_booking_slots("admin")
     count = store.enable_all_candidate_slots(candidates)
     return jsonify({
         "success": True,
         "enabled_count": count,
-        "max_days": BOOKING_MAX_DAYS,
+        "max_days": ADMIN_BOOKING_MAX_DAYS,
         "time_windows": _booking_slot_windows_for_api(),
     })
 
@@ -7076,12 +7093,27 @@ def admin_set_appointment_slot():
     enabled = data.get("enabled")
     if not slot_str:
         return jsonify({"error": "时间段不能为空"}), 400
-    if slot_str not in _candidate_booking_slots():
+    if slot_str not in _candidate_booking_slots("admin"):
         return jsonify({"error": "该时间段不在可配置范围内"}), 400
     if enabled is None:
         return jsonify({"error": "请指定 enabled 参数"}), 400
     store.set_slot_enabled(slot_str, bool(enabled))
     return jsonify({"success": True, "slot": slot_str, "enabled": bool(enabled)})
+
+@app.route("/api/admin/appointment-slots/disable-day", methods=["POST"])
+@admin_required
+def admin_disable_day_slots():
+    data = request.get_json() or {}
+    date_str = (data.get("date") or "").strip()
+    if not date_str:
+        return jsonify({"error": "日期不能为空"}), 400
+        
+    candidates = _candidate_booking_slots("admin")
+    slots_to_disable = [s for s in candidates if s.startswith(date_str)]
+    
+    store.disable_slots_batch(slots_to_disable)
+        
+    return jsonify({"success": True, "disabled_count": len(slots_to_disable), "date": date_str})
 
 
 @app.route("/api/admin/questionnaire/override", methods=["POST"])
