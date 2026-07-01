@@ -2846,14 +2846,9 @@ def _active_booking_slots():
 
 
 def _groups_in_use():
-    """Group numbers reserved by participants with a confirmed booking."""
+    """Group numbers already assigned to any participant (not only those with bookings)."""
     used = set()
-    for appt in store.get_appointments():
-        if appt.get("status") != "confirmed":
-            continue
-        p = store.get_participant((appt.get("phone") or "").strip())
-        if not p:
-            continue
+    for p in store.get_all_participants():
         n = _parse_group_number(p.get("group_name"))
         if n > 0:
             used.add(n)
@@ -2989,6 +2984,15 @@ def _reconcile_group_allocations():
 
             # 5. Clear group_name on participants without a confirmed booking
             participants_changed = False
+
+            phones_in_groups = set()
+            for g in groups:
+                sp = (g.get("suspect_phone") or "").strip()
+                ip = (g.get("interviewer_phone") or "").strip()
+                if sp:
+                    phones_in_groups.add(sp)
+                if ip:
+                    phones_in_groups.add(ip)
             
             # Helper to check booking
             def has_booking(phone):
@@ -3002,6 +3006,8 @@ def _reconcile_group_allocations():
                 if not phone or has_booking(phone):
                     continue
                 if int(p.get("completed") or 0) == 1:
+                    continue
+                if phone in phones_in_groups:
                     continue
                 gn = (p.get("group_name") or "").strip()
                 fid = (p.get("full_id") or "").strip()
@@ -3152,8 +3158,12 @@ def assign_participant_group_on_booking(phone, time_slot):
 
 
 def pick_register_role():
-    """Randomly assign suspect or interviewer role at registration."""
-    return random.choice(["S", "I"])
+    """Balance S/I at registration: equal counts -> suspect; excess suspects -> interviewer."""
+    suspects = sum(1 for p in store.get_all_participants() if p.get("role") == "S")
+    interviewers = sum(1 for p in store.get_all_participants() if p.get("role") == "I")
+    if suspects > interviewers:
+        return "I"
+    return "S"
 
 
 def _suspect_combo_key(case_type, guilt):
