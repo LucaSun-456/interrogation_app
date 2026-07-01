@@ -668,6 +668,9 @@ SHEET_COLUMNS = {
 # Columns that hold a phone number (the universal participant identifier).
 # Values in these columns are always normalized to strings on read.
 _PHONE_KEY_COLUMNS = ("phone", "suspect_phone", "interviewer_phone")
+# Columns that hold a 3-digit experiment group number ("001".."999").
+# "group_name" lives on most sheets; "name" is the group-number column on groups.
+_GROUP_NUMBER_COLUMNS = ("group_name", "name")
 
 PHASE_PRE = "pre"
 PHASE_POST = "post"
@@ -1043,6 +1046,17 @@ class ExcelStore:
                         d[col] = str(v)
                     elif isinstance(v, float):
                         d[col] = str(int(v)) if v.is_integer() else str(v)
+                # Group numbers are 3-digit strings ("001".."999"); Excel may
+                # drop the leading zeros and store them as integers. Restore the
+                # zero-padded text so lookups and .strip() calls stay valid.
+                for col in _GROUP_NUMBER_COLUMNS:
+                    v = d.get(col)
+                    if isinstance(v, bool):
+                        continue
+                    if isinstance(v, int):
+                        d[col] = f"{v:03d}"
+                    elif isinstance(v, float) and v.is_integer():
+                        d[col] = f"{int(v):03d}"
                 rows.append(d)
         return rows
 
