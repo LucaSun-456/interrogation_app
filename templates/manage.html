@@ -650,7 +650,6 @@
     <table>
       <thead>
         <tr>
-          <th>ID</th>
           <th>手机号</th>
           <th>组别</th>
           <th>编号</th>
@@ -1284,7 +1283,6 @@ function buildMemberDetailCard(p, roleTitle, roleCls) {
       <h4>${roleTitle}</h4>
       <div class="detail-row"><span class="lbl">编号</span><span>${p.full_id || '-'}</span></div>
       <div class="detail-row"><span class="lbl">手机号</span><span>${p.phone || '-'}</span></div>
-      <div class="detail-row"><span class="lbl">ID</span><span>${p.id}</span></div>
       ${extra}
       <div class="detail-row"><span class="lbl">完成</span><span>${Number(p.completed) === 1 ? '已完成' : '未完成'}</span></div>
       <div class="detail-row"><span class="lbl">当前阶段</span><span>${(p.admin_progress && p.admin_progress.stage_label) || p.flow_step || '-'}</span></div>
@@ -1582,7 +1580,6 @@ function renderParticipantTable(participants) {
     `;
     return `
       <tr>
-        <td>${p.id}</td>
         <td>${p.phone || '-'}</td>
         <td>${p.group_name || '-'}</td>
         <td>${p.full_id || '-'}</td>
@@ -1594,14 +1591,14 @@ function renderParticipantTable(participants) {
         <td>${qHtml}</td>
         <td class="profile-cell">${profileStr}</td>
         <td style="white-space:nowrap;">
-          <button class="btn btn-outline" style="font-size:11px;padding:3px 8px;margin-bottom:4px;" onclick="openRoleConfigModal(${p.id}, '${(p.phone || '').replace(/'/g, "\\'")}', '${p.role || ''}', '${p.case_type || ''}', '${p.training_type || ''}')">改角色/配置</button>
-          <button class="btn btn-outline" style="font-size:11px;padding:3px 8px;margin-bottom:4px;" onclick="editParticipantGroup('${(p.phone || '').replace(/'/g, "\\'")}', '${p.group_name || ''}', '${(p.full_id || '').replace(/'/g, "\\'")}')">改组别</button>
+          <button class="btn btn-outline" style="font-size:11px;padding:3px 8px;margin-bottom:4px;" onclick="openRoleConfigModal('${(p.phone || '').replace(/'/g, "\\'")}', '${(p.phone || '').replace(/'/g, "\\'")}', '${p.role || ''}', '${p.case_type || ''}', '${p.training_type || ''}')">改角色</button>
+          <button class="btn btn-outline" style="font-size:11px;padding:3px 8px;margin-bottom:4px;" title="仅修改三位数组别（如 001），不改变嫌疑人/审讯者身份" onclick="editParticipantGroup('${(p.phone || '').replace(/'/g, "\\'")}', '${p.group_name || ''}', '${(p.full_id || '').replace(/'/g, "\\'")}')">改组号</button>
           ${(() => {
             const ap = APP.appointmentByPhone.get(p.phone);
             if (!ap || ap.status !== 'confirmed') return '';
             return `<button class="btn btn-outline" style="font-size:11px;padding:3px 8px;margin-bottom:4px;" onclick="openRescheduleModal(${ap.id}, '${(p.phone || '').replace(/'/g, "\\'")}', '${p.role || ''}', '${(ap.time_slot || '').replace(/'/g, "\\'")}')">改预约</button>`;
           })()}
-          <button class="btn btn-danger" style="font-size:11px;padding:3px 8px;" onclick="deleteParticipant(${p.id})">删除</button>
+          <button class="btn btn-danger" style="font-size:11px;padding:3px 8px;" onclick="deleteParticipant('${(p.phone || '').replace(/'/g, "\\'")}')">删除</button>
         </td>
       </tr>
     `;
@@ -1898,7 +1895,10 @@ async function submitRoleConfig() {
       const e = await resp.json();
       throw new Error(e.error || '修改失败');
     }
-    alert('修改成功，进度已重置');
+    const data = await resp.json();
+    const p = data.participant || {};
+    const roleText = p.role === 'S' ? '嫌疑人' : p.role === 'I' ? '审讯者' : (p.role || '');
+    alert(`修改成功：${roleText}${p.full_id ? ' · ' + p.full_id : ''}\n进度已重置`);
     closeRoleConfigModal();
     loadData({ reconcile: 1 });
   } catch (err) {
@@ -2203,12 +2203,12 @@ function promptForPassword() {
   }
 }
 
-async function deleteParticipant(id) {
-  if (!confirm('确定删除参与者 #' + id + ' ？此操作不可撤销。')) return;
+async function deleteParticipant(phone) {
+  if (!confirm('确定删除参与者 ' + phone + ' ？此操作不可撤销。')) return;
   try {
     const headers = getAuthHeaders();
     if (!headers.Authorization) { promptForPassword(); return; }
-    const resp = await fetch('/api/admin/results/' + id, { method: 'DELETE', headers });
+    const resp = await fetch('/api/admin/results/' + encodeURIComponent(phone), { method: 'DELETE', headers });
     if (resp.status === 401) { sessionStorage.removeItem('admin_password'); promptForPassword(); return; }
     if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || '删除失败'); }
     loadData();

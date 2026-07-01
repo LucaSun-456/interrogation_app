@@ -643,7 +643,7 @@ SHEET_META = "meta"
 
 SHEET_COLUMNS = {
     SHEET_PARTICIPANTS: [
-        "id", "phone", "role", "group_name", "full_id", "guilt", "case_type", "training_type",
+        "phone", "role", "group_name", "full_id", "guilt", "case_type", "training_type",
         "consent_attention_passed", "attention_passed", "attention_failed",
         "sue_attention_passed", "sue_attention_attempts", "control_attention_passed",
         "game_completed", "profile_completed", "completed", "flow_step",
@@ -651,15 +651,15 @@ SHEET_COLUMNS = {
         "created_at", "avatar_practice_transcript",
         "training_avatar_order", "training_ui_order",
     ],
-    SHEET_GROUPS: ["name", "suspect_id", "interviewer_id", "created_at"],
-    SHEET_PROFILES: ["participant_id", "data", "submitted_at"],
+    SHEET_GROUPS: ["name", "suspect_phone", "interviewer_phone", "created_at"],
+    SHEET_PROFILES: ["phone", "data", "submitted_at"],
     SHEET_AVAILABILITIES: ["id", "phone", "group_name", "role", "slots", "updated_at"],
     SHEET_APPOINTMENTS: ["id", "phone", "time_slot", "role", "status", "booked_at"],
-    SHEET_TRAINING_SESSIONS: ["id", "interviewer_id", "phone", "session_num", "avatar_setting", "avatar_guilt", "judgment", "transcript", "feedback", "started_at", "completed_at"],
+    SHEET_TRAINING_SESSIONS: ["id", "phone", "session_num", "avatar_setting", "avatar_guilt", "judgment", "transcript", "feedback", "started_at", "completed_at"],
     SHEET_INTERVIEW_QUESTIONNAIRES: ["id", "phone", "role", "phase", "appointment_slot", "answers_json", "submitted_at"],
     SHEET_QUESTIONNAIRE_OVERRIDES: ["id", "phone", "phase", "is_open", "updated_at"],
     SHEET_SERIOUS_GAME: [
-        "timestamp", "phone", "participant_id", "case", "condition",
+        "timestamp", "phone", "full_id", "case", "condition",
         "step_index", "video", "choice",
     ],
     SHEET_META: ["key", "value"],
@@ -699,6 +699,8 @@ TRAINING_GROUP_LABELS = {
     "avatar_specific": "D",
 }
 TRAINING_TARGET_PER_TYPE = 28
+# D 组（avatar_specific）已收满；新审讯者不再分配 D 组
+AVATAR_SPECIFIC_FULL = True
 
 # Round-robin assignment order (registration sequence, not random)
 SUSPECT_ATTR_CYCLE = [
@@ -950,7 +952,6 @@ def init_excel():
         ws.append(columns)
     # Init meta values
     ws = wb[SHEET_META]
-    ws.append(["next_participant_id", 1])
     ws.append(["next_avail_id", 1])
     ws.append(["next_appt_id", 1])
     ws.append(["next_questionnaire_id", 1])
@@ -1152,18 +1153,6 @@ class ExcelStore:
             finally:
                 self._close(wb)
 
-    def get_participant_by_id(self, pid):
-        with _excel_lock:
-            wb = self._load()
-            try:
-                pid_s = str(pid)
-                for p in self._read_all(wb, SHEET_PARTICIPANTS):
-                    if str(p.get("id")) == pid_s:
-                        return p
-                return None
-            finally:
-                self._close(wb)
-
     def get_all_participants(self):
         with _excel_lock:
             wb = self._load()
@@ -1193,8 +1182,6 @@ class ExcelStore:
             wb = self._load()
             try:
                 participants = self._read_all(wb, SHEET_PARTICIPANTS)
-                pid = self._next_id(wb, "next_participant_id")
-                kwargs["id"] = pid
                 kwargs.setdefault("consent_attention_passed", 0)
                 kwargs.setdefault("attention_passed", 0)
                 kwargs.setdefault("sue_attention_passed", 0)
@@ -1210,7 +1197,7 @@ class ExcelStore:
                 participants.append(kwargs)
                 self._write_all(wb, SHEET_PARTICIPANTS, participants)
                 self._save(wb)
-                return pid
+                return kwargs.get("phone")
             finally:
                 self._close(wb)
 
@@ -1229,23 +1216,22 @@ class ExcelStore:
             finally:
                 self._close(wb)
 
-    def delete_participant(self, pid):
+    def delete_participant(self, phone):
+        phone = (phone or "").strip() if isinstance(phone, str) else str(phone)
         with _excel_lock:
             wb = self._load()
             try:
-                phone = None
                 group_name = None
                 role = None
                 participants = self._read_all(wb, SHEET_PARTICIPANTS)
                 for p in participants:
-                    if str(p.get("id", "")) == str(pid):
-                        phone = p.get("phone", "")
+                    if (p.get("phone") or "") == phone:
                         group_name = p.get("group_name", "")
                         role = p.get("role", "")
                         break
-                participants = [p for p in participants if str(p.get("id", "")) != str(pid)]
+                participants = [p for p in participants if (p.get("phone") or "") != phone]
                 self._write_all(wb, SHEET_PARTICIPANTS, participants)
-                profiles = [p for p in self._read_all(wb, SHEET_PROFILES) if str(p.get("participant_id", "")) != str(pid)]
+                profiles = [p for p in self._read_all(wb, SHEET_PROFILES) if (p.get("phone") or "") != phone]
                 self._write_all(wb, SHEET_PROFILES, profiles)
                 if phone:
                     avails = [a for a in self._read_all(wb, SHEET_AVAILABILITIES) if a.get("phone") != phone]
@@ -1261,31 +1247,31 @@ class ExcelStore:
                     sg_rows = [r for r in self._read_all(wb, SHEET_SERIOUS_GAME) if r.get("phone") != phone]
                     self._write_all(wb, SHEET_SERIOUS_GAME, sg_rows)
                 if group_name and role:
-                    self._cleanup_group_after_participant_delete(wb, pid, group_name, role)
+                    self._cleanup_group_after_participant_delete(wb, phone, group_name, role)
                 self._save(wb)
             finally:
                 self._close(wb)
         _reconcile_group_allocations()
 
-    def _cleanup_group_after_participant_delete(self, wb, pid, group_name, role):
+    def _cleanup_group_after_participant_delete(self, wb, phone, group_name, role):
         groups = self._read_all(wb, SHEET_GROUPS)
         updated = []
         for g in groups:
             if g.get("name") != group_name:
                 updated.append(g)
                 continue
-            suspect_id = g.get("suspect_id")
-            interviewer_id = g.get("interviewer_id")
-            if role == "S" and str(suspect_id) == str(pid):
+            suspect_phone = g.get("suspect_phone")
+            interviewer_phone = g.get("interviewer_phone")
+            if role == "S" and str(suspect_phone) == str(phone):
                 g = dict(g)
-                g["suspect_id"] = ""
-                if g.get("interviewer_id"):
+                g["suspect_phone"] = ""
+                if g.get("interviewer_phone"):
                     updated.append(g)
                 continue
-            if role == "I" and str(interviewer_id) == str(pid):
+            if role == "I" and str(interviewer_phone) == str(phone):
                 g = dict(g)
-                g["interviewer_id"] = ""
-                if g.get("suspect_id"):
+                g["interviewer_phone"] = ""
+                if g.get("suspect_phone"):
                     updated.append(g)
                 continue
             updated.append(g)
@@ -1300,7 +1286,7 @@ class ExcelStore:
             try:
                 groups = self._read_all(wb, SHEET_GROUPS)
                 for g in sorted(groups, key=lambda x: x.get("created_at", "")):
-                    if g.get("suspect_id") and not g.get("interviewer_id"):
+                    if g.get("suspect_phone") and not g.get("interviewer_phone"):
                         return g
                 return None
             finally:
@@ -1317,27 +1303,27 @@ class ExcelStore:
             finally:
                 self._close(wb)
 
-    def get_group_by_interviewer(self, interviewer_id):
+    def get_group_by_interviewer(self, interviewer_phone):
         with _excel_lock:
             wb = self._load()
             try:
-                iid = str(interviewer_id)
+                iid = str(interviewer_phone)
                 for g in self._read_all(wb, SHEET_GROUPS):
-                    if str(g.get("interviewer_id") or "") == iid:
+                    if str(g.get("interviewer_phone") or "") == iid:
                         return g
                 return None
             finally:
                 self._close(wb)
 
-    def add_group(self, name, suspect_id, interviewer_id=None):
+    def add_group(self, name, suspect_phone, interviewer_phone=None):
         with _excel_lock:
             wb = self._load()
             try:
                 groups = self._read_all(wb, SHEET_GROUPS)
                 groups.append({
                     "name": name,
-                    "suspect_id": suspect_id,
-                    "interviewer_id": interviewer_id,
+                    "suspect_phone": suspect_phone,
+                    "interviewer_phone": interviewer_phone,
                     "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 })
                 self._write_all(wb, SHEET_GROUPS, groups)
@@ -1370,32 +1356,32 @@ class ExcelStore:
 
     # ---- Profiles ----
 
-    def get_profile(self, participant_id):
+    def get_profile(self, phone):
         with _excel_lock:
             wb = self._load()
             try:
-                pid = str(participant_id)
+                pid = str(phone)
                 for p in self._read_all(wb, SHEET_PROFILES):
-                    if str(p.get("participant_id")) == pid:
+                    if str(p.get("phone")) == pid:
                         return p
                 return None
             finally:
                 self._close(wb)
 
-    def upsert_profile(self, participant_id, data_json):
+    def upsert_profile(self, phone, data_json):
         with _excel_lock:
             wb = self._load()
             try:
                 profiles = self._read_all(wb, SHEET_PROFILES)
                 for p in profiles:
-                    if p["participant_id"] == participant_id:
+                    if p["phone"] == phone:
                         p["data"] = data_json
                         p["submitted_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         self._write_all(wb, SHEET_PROFILES, profiles)
                         self._save(wb)
                         return
                 profiles.append({
-                    "participant_id": participant_id,
+                    "phone": phone,
                     "data": data_json,
                     "submitted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 })
@@ -1682,7 +1668,7 @@ class ExcelStore:
             finally:
                 self._close(wb)
 
-    def start_training_session(self, phone, interviewer_id, session_num, avatar_setting, avatar_guilt):
+    def start_training_session(self, phone, session_num, avatar_setting, avatar_guilt):
         """Start a new training session."""
         with _excel_lock:
             wb = self._load()
@@ -1695,7 +1681,6 @@ class ExcelStore:
                 sid = self._next_id(wb, "next_training_session_id")
                 sessions.append({
                     "id": sid,
-                    "interviewer_id": interviewer_id,
                     "phone": phone,
                     "session_num": session_num,
                     "avatar_setting": avatar_setting,
@@ -1775,7 +1760,7 @@ class ExcelStore:
     # ---- Serious game choices (formerly results_serious_game.xlsx) ----
 
     def log_serious_game_choice(
-        self, phone, participant_id, case, condition, step_index, video, choice,
+        self, phone, full_id, case, condition, step_index, video, choice,
     ):
         with _excel_lock:
             wb = self._load()
@@ -1784,7 +1769,7 @@ class ExcelStore:
                 rows.append({
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "phone": phone,
-                    "participant_id": participant_id,
+                    "full_id": full_id,
                     "case": case,
                     "condition": condition,
                     "step_index": step_index,
@@ -1796,10 +1781,9 @@ class ExcelStore:
             finally:
                 self._close(wb)
 
-    def get_serious_game_choices(self, phone=None, participant_id=None):
+    def get_serious_game_choices(self, phone=None):
         """Return choice rows for a suspect, sorted by step_index."""
         phone = (phone or "").strip()
-        pid = str(participant_id) if participant_id is not None else ""
         with _excel_lock:
             wb = self._load()
             try:
@@ -1807,8 +1791,6 @@ class ExcelStore:
                 out = []
                 for r in rows:
                     if phone and (r.get("phone") or "").strip() == phone:
-                        out.append(r)
-                    elif pid and str(r.get("participant_id") or "") == pid:
                         out.append(r)
                 out.sort(key=lambda x: int(x.get("step_index") or 0))
                 return out
@@ -1855,17 +1837,31 @@ def migrate_old_data():
                 if not p:
                     store.add_participant(**d)
 
+            # Legacy SQLite keyed participants by numeric id; map id -> phone.
+            id_to_phone = {}
+            try:
+                for row in conn.execute("SELECT id, phone FROM participants").fetchall():
+                    d = dict(row)
+                    id_to_phone[str(d.get("id"))] = d.get("phone")
+            except Exception:
+                pass
+
             rows = conn.execute("SELECT * FROM groups_table").fetchall()
             for row in rows:
                 d = dict(row)
                 if not store.get_group_by_name(d["name"]):
-                    store.add_group(d["name"], d.get("suspect_id"), d.get("interviewer_id"))
+                    store.add_group(
+                        d["name"],
+                        id_to_phone.get(str(d.get("suspect_id")), ""),
+                        id_to_phone.get(str(d.get("interviewer_id")), ""),
+                    )
 
             rows = conn.execute("SELECT * FROM profiles").fetchall()
             for row in rows:
                 d = dict(row)
-                if not store.get_profile(d["participant_id"]):
-                    store.upsert_profile(d["participant_id"], d["data"])
+                phone = id_to_phone.get(str(d.get("participant_id")), "")
+                if phone and not store.get_profile(phone):
+                    store.upsert_profile(phone, d["data"])
 
             conn.close()
             print("  [OK] 已从 experiment.db 迁移数据")
@@ -1941,7 +1937,7 @@ def migrate_legacy_exports():
                         rows.append({
                             "timestamp": rec.get("Timestamp") or rec.get("timestamp") or "",
                             "phone": phone,
-                            "participant_id": rec.get("ParticipantID") or rec.get("participant_id") or "",
+                            "full_id": rec.get("FullID") or rec.get("full_id") or rec.get("ParticipantID") or rec.get("participant_id") or "",
                             "case": rec.get("Case") or rec.get("case") or "",
                             "condition": rec.get("Condition") or rec.get("condition") or "",
                             "step_index": step_index,
@@ -1992,10 +1988,8 @@ def migrate_legacy_exports():
             if os.path.isfile(feedback_path):
                 with open(feedback_path, "r", encoding="utf-8") as f:
                     feedback = f.read()
-            p = store.get_participant(phone)
-            interviewer_id = p["id"] if p else ""
             store.start_training_session(
-                phone, interviewer_id, session_num,
+                phone, session_num,
                 meta.get("avatar_setting", ""), meta.get("avatar_guilt", ""),
             )
             store.submit_training_session(
@@ -2203,14 +2197,14 @@ def _paired_suspect_and_profile_for_interviewer(phone):
     def _load_profile(suspect):
         if not suspect:
             return None, None
-        row = store.get_profile(suspect["id"])
+        row = store.get_profile(suspect["phone"])
         if not row:
             return suspect, None
         return suspect, _normalize_suspect_profile_data(row.get("data"))
 
-    group = store.get_group_by_interviewer(p["id"])
-    if group and group.get("suspect_id"):
-        suspect = store.get_participant_by_id(group["suspect_id"])
+    group = store.get_group_by_interviewer(p["phone"])
+    if group and group.get("suspect_phone"):
+        suspect = store.get_participant(group["suspect_phone"])
         found = _load_profile(suspect)
         if found[0] and found[1]:
             return found
@@ -2741,6 +2735,74 @@ def _normalize_group_name(raw):
     return f"{n:03d}"
 
 
+def _role_change_slot_conflict(phone, new_role):
+    """Return error message if new_role would duplicate S/I on the same booked slot."""
+    booking = store.get_my_booking(phone)
+    if not booking or booking.get("status") != "confirmed":
+        return None
+    time_slot = (booking.get("time_slot") or "").strip()
+    if not time_slot:
+        return None
+    for appt in store.get_appointments():
+        if appt.get("status") != "confirmed":
+            continue
+        if (appt.get("time_slot") or "").strip() != time_slot:
+            continue
+        appt_phone = (appt.get("phone") or "").strip()
+        if appt_phone == phone:
+            continue
+        if appt.get("role") == new_role:
+            label = "嫌疑人" if new_role == "S" else "审讯者"
+            return f"该时段已有{label}（{appt_phone}），无法改为此角色"
+    return None
+
+
+def _reassign_group_member_role(group_name, phone, old_role, new_role):
+    """Move participant between suspect/interviewer slots on the groups sheet."""
+    if not group_name or old_role == new_role:
+        return
+    pid = str(phone)
+    g = store.get_group_by_name(group_name)
+    if g:
+        updates = {}
+        if old_role == "S" and str(g.get("suspect_phone") or "") == pid:
+            updates["suspect_phone"] = ""
+        if old_role == "I" and str(g.get("interviewer_phone") or "") == pid:
+            updates["interviewer_phone"] = ""
+        if updates:
+            store.update_group(group_name, **updates)
+    _sync_group_record(group_name, phone, new_role)
+
+
+def _sync_role_side_records(phone, old_role, new_role, group_name):
+    """Keep appointments / groups / availability aligned with participant role."""
+    if old_role == new_role:
+        return
+    if phone:
+        store.update_appointment(phone, role=new_role)
+    if group_name:
+        _reassign_group_member_role(group_name, phone, old_role, new_role)
+    for avail in store.get_availabilities():
+        if (avail.get("phone") or "").strip() != phone:
+            continue
+        slots = avail.get("slots") or []
+        if isinstance(slots, str):
+            try:
+                slots = json.loads(slots)
+            except Exception:
+                slots = []
+        store.upsert_availability(
+            phone,
+            avail.get("group_name") or group_name or "",
+            new_role,
+            slots,
+        )
+        break
+    booking = store.get_my_booking(phone)
+    if booking and booking.get("status") == "confirmed":
+        _refresh_slot_match_state((booking.get("time_slot") or "").strip())
+
+
 def _active_booking_slots():
     """Time slots that still have at least one confirmed appointment."""
     slots = set()
@@ -2818,6 +2880,15 @@ def _reconcile_group_allocations():
                     n = _parse_group_number(gn)
                     if n > 0:
                         used_nums.add(n)
+
+            # Keep groups tied to completed or historically assigned participants
+            for p in participants:
+                gn = (p.get("group_name") or "").strip()
+                if not gn:
+                    continue
+                n = _parse_group_number(gn)
+                if n > 0:
+                    used_nums.add(n)
             
             used_names = {f"{n:03d}" for n in used_nums}
 
@@ -2900,6 +2971,8 @@ def _reconcile_group_allocations():
                 phone = (p.get("phone") or "").strip()
                 if not phone or has_booking(phone):
                     continue
+                if int(p.get("completed") or 0) == 1:
+                    continue
                 gn = (p.get("group_name") or "").strip()
                 fid = (p.get("full_id") or "").strip()
                 if gn or fid:
@@ -2976,7 +3049,7 @@ def admin_apply_participant_group(phone, new_group_raw, sync_slot=True):
         suffix = participant_id_suffix(p2)
         full_id = make_full_id(new_group, p2["role"], suffix)
         store.update_participant(ph, group_name=new_group, full_id=full_id)
-        _sync_group_record(new_group, p2["id"], p2["role"])
+        _sync_group_record(new_group, p2["phone"], p2["role"])
         updated.append({
             "phone": ph,
             "role": p2["role"],
@@ -3019,20 +3092,20 @@ def assign_group_for_time_slot(time_slot):
     return group_name
 
 
-def _sync_group_record(group_name, participant_id, role):
-    """Link suspect/interviewer IDs to the shared experiment group."""
-    pid = str(participant_id)
+def _sync_group_record(group_name, phone, role):
+    """Link suspect/interviewer phones to the shared experiment group."""
+    pid = str(phone)
     g = store.get_group_by_name(group_name)
     if role == "S":
         if g:
-            store.update_group(group_name, suspect_id=pid)
+            store.update_group(group_name, suspect_phone=pid)
         else:
-            store.add_group(group_name, suspect_id=pid)
+            store.add_group(group_name, suspect_phone=pid)
     else:
         if g:
-            store.update_group(group_name, interviewer_id=pid)
+            store.update_group(group_name, interviewer_phone=pid)
         else:
-            store.add_group(group_name, suspect_id="", interviewer_id=pid)
+            store.add_group(group_name, suspect_phone="", interviewer_phone=pid)
 
 
 def assign_participant_group_on_booking(phone, time_slot):
@@ -3044,16 +3117,13 @@ def assign_participant_group_on_booking(phone, time_slot):
     suffix = participant_id_suffix(p)
     full_id = make_full_id(group_name, p["role"], suffix)
     store.update_participant(phone, group_name=group_name, full_id=full_id)
-    _sync_group_record(group_name, p["id"], p["role"])
+    _sync_group_record(group_name, p["phone"], p["role"])
     return group_name, full_id
 
 
 def pick_register_role():
-    """Alternate S/I by registration count so roles stay balanced."""
-    participants = store.get_all_participants()
-    n_s = sum(1 for p in participants if p.get("role") == "S")
-    n_i = sum(1 for p in participants if p.get("role") == "I")
-    return "I" if n_i < n_s else "S"
+    """Randomly assign suspect or interviewer role at registration."""
+    return random.choice(["S", "I"])
 
 
 def _suspect_combo_key(case_type, guilt):
@@ -3139,10 +3209,12 @@ def pick_training_type_on_booking(time_slot):
     - No suspect on slot, or D full → rotate among control / theory_sue / avatar_general (max 28 each).
     """
     counts = _count_interviewer_training_types()
-    if _suspect_combo_on_slot(time_slot):
-        if counts.get("avatar_specific", 0) < TRAINING_TARGET_PER_TYPE:
-            return "avatar_specific"
-        return _pick_non_specific_training_rotating(counts)
+    if (
+        not AVATAR_SPECIFIC_FULL
+        and _suspect_combo_on_slot(time_slot)
+        and counts.get("avatar_specific", 0) < TRAINING_TARGET_PER_TYPE
+    ):
+        return "avatar_specific"
     return _pick_non_specific_training_rotating(counts)
 
 
@@ -4057,7 +4129,6 @@ def build_serious_game_action_memory(suspect):
     choice_map = {}
     for row in store.get_serious_game_choices(
         phone=(suspect.get("phone") or "").strip(),
-        participant_id=suspect.get("id"),
     ):
         try:
             idx = int(row.get("step_index"))
@@ -4489,7 +4560,7 @@ def submit_profile():
         return jsonify({"error": "请先完成模拟行动游戏再提交个人信息"}), 400
 
     profile_json = json.dumps(profile, ensure_ascii=False)
-    store.upsert_profile(p["id"], profile_json)
+    store.upsert_profile(p["phone"], profile_json)
 
     store.update_participant(phone, profile_completed=1, completed=1)
     p = store.get_participant(phone)
@@ -4902,15 +4973,15 @@ def chat():
     if not p:
         return jsonify({"error": "未找到参与者"}), 404
 
-    group = store.get_group_by_interviewer(p["id"])
-    if not group or not group.get("suspect_id"):
+    group = store.get_group_by_interviewer(p["phone"])
+    if not group or not group.get("suspect_phone"):
         return jsonify({"error": "未找到配对的嫌疑人"}), 404
 
-    suspect = store.get_participant_by_id(group["suspect_id"])
+    suspect = store.get_participant(group["suspect_phone"])
     if not suspect:
         return jsonify({"error": "未找到配对的嫌疑人"}), 404
 
-    profile_row = store.get_profile(suspect["id"])
+    profile_row = store.get_profile(suspect["phone"])
     if profile_row:
         profile_data = json.loads(profile_row["data"])
     else:
@@ -5021,7 +5092,7 @@ def generate_results_docx():
             ctx = THEFT_GUILTY_CONTEXT if p["guilt"] == "Guilty" else THEFT_INNOCENT_CONTEXT
         doc.add_paragraph(ctx)
 
-        profile_row = store.get_profile(p["id"])
+        profile_row = store.get_profile(p["phone"])
         if profile_row:
             doc.add_heading("个人问卷", level=2)
             pd = json.loads(profile_row["data"]) if isinstance(profile_row["data"], str) else profile_row["data"]
@@ -6384,7 +6455,7 @@ def api_avatar_training_start():
     )
 
     # Start the session in DB
-    store.start_training_session(phone, p["id"], next_num, avatar_setting, avatar_guilt)
+    store.start_training_session(phone, next_num, avatar_setting, avatar_guilt)
 
     appearance_key = _avatar_appearance_key(suspect_profile) if effective_type == "avatar_specific" else "generic"
     generic_id = (load_avatar_configs().get("generic") or {}).get("avatar_id", "")
@@ -6686,7 +6757,7 @@ def api_abandon():
     if p.get("completed", 0) == 1:
         return jsonify({"status": "skipped", "reason": "already completed"})
 
-    store.delete_participant(p["id"])
+    store.delete_participant(p["phone"])
     return jsonify({"status": "deleted"})
 
 
@@ -6730,16 +6801,9 @@ def _training_session_counts(sessions_rows):
 
 
 def _groups_in_use_from_snapshot(participants, appointments):
-    booked = {
-        (a.get("phone") or "").strip()
-        for a in appointments
-        if a.get("status") == "confirmed" and (a.get("phone") or "").strip()
-    }
+    _ = appointments
     used = set()
     for p in participants:
-        phone = (p.get("phone") or "").strip()
-        if phone not in booked:
-            continue
         n = _parse_group_number(p.get("group_name"))
         if n > 0:
             used.add(n)
@@ -6884,7 +6948,7 @@ def admin_participant_progress():
     return jsonify({"progress": progress})
 
 
-@app.route("/api/admin/participants/<int:pid>/role-config", methods=["PATCH"])
+@app.route("/api/admin/participants/<pid>/role-config", methods=["PATCH"])
 @admin_required
 def admin_update_participant_role_config(pid):
     """Update participant role, case_type, training_type and reset their progress."""
@@ -6892,34 +6956,44 @@ def admin_update_participant_role_config(pid):
     role = (data.get("role") or "").strip().upper()
     case_type = (data.get("case_type") or "").strip()
     training_type = (data.get("training_type") or "").strip()
-    
+
+    pid = (pid or "").strip()
     if role not in ("S", "I"):
         return jsonify({"error": "角色必须是 S 或 I"}), 400
-        
+
     with _excel_lock:
         wb = store._load()
         try:
             participants = store._read_all(wb, SHEET_PARTICIPANTS)
             target_p = None
             for p in participants:
-                if str(p.get("id", "")) == str(pid):
+                if (p.get("phone") or "").strip() == pid:
                     target_p = p
                     break
                     
             if not target_p:
                 return jsonify({"error": "未找到参与者"}), 404
                 
-            phone = target_p.get("phone", "")
-            old_role = target_p.get("role", "")
+            phone = (target_p.get("phone") or "").strip()
+            old_role = (target_p.get("role") or "").strip().upper()
+            if old_role not in ("S", "I"):
+                old_role = role
+
+            slot_err = _role_change_slot_conflict(phone, role)
+            if slot_err:
+                return jsonify({"error": slot_err}), 409
             
             # Update fields
             target_p["role"] = role
             if role == "S":
-                target_p["case_type"] = case_type
+                target_p["case_type"] = case_type or "arson"
                 target_p["training_type"] = ""
+                if not target_p.get("guilt"):
+                    target_p["guilt"] = "Innocent"
             else:
                 target_p["case_type"] = ""
-                target_p["training_type"] = training_type
+                target_p["guilt"] = ""
+                target_p["training_type"] = training_type or "control"
                 
             # Reset progress fields
             target_p["flow_step"] = ""
@@ -6957,17 +7031,32 @@ def admin_update_participant_role_config(pid):
                 store._write_all(wb, SHEET_SERIOUS_GAME, sg_rows)
                 
                 # Profiles (maybe keep? the user said "restart training from the beginning", usually means resetting profile too)
-                profiles = [p for p in store._read_all(wb, SHEET_PROFILES) if p["participant_id"] != pid]
+                profiles = [p for p in store._read_all(wb, SHEET_PROFILES) if p.get("phone") != phone]
                 store._write_all(wb, SHEET_PROFILES, profiles)
                 
             store._save(wb)
         finally:
             store._close(wb)
-            
+
+    group_name = (target_p.get("group_name") or "").strip()
+    _sync_role_side_records(phone, old_role, role, group_name)
+
     # Reconcile group allocations in case role change affected slot matching
     _reconcile_group_allocations()
-    
-    return jsonify({"success": True, "message": "参与者配置已更新，进度已重置"})
+
+    updated = store.get_participant(phone) or target_p
+    return jsonify({
+        "success": True,
+        "message": "参与者配置已更新，进度已重置",
+        "participant": {
+            "phone": phone,
+            "role": updated.get("role"),
+            "group_name": updated.get("group_name", ""),
+            "full_id": updated.get("full_id", ""),
+            "case_type": updated.get("case_type", ""),
+            "training_type": updated.get("training_type", ""),
+        },
+    })
 
 @app.route("/api/admin/participants/group", methods=["POST"])
 @admin_required
@@ -7018,10 +7107,10 @@ def admin_purge_unbooked():
     return jsonify({"success": True, "count": len(purged), "purged": purged})
 
 
-@app.route("/api/admin/results/<int:pid>", methods=["DELETE"])
+@app.route("/api/admin/results/<pid>", methods=["DELETE"])
 @admin_required
 def admin_delete_result(pid):
-    store.delete_participant(pid)
+    store.delete_participant((pid or "").strip())
     return jsonify({"success": True})
 
 
@@ -7339,7 +7428,9 @@ def _parse_participant_created_at(created_at_str):
 
 def _is_unbooked_past_deadline(participant):
     phone = (participant.get("phone") or "").strip()
-    if not phone or store.has_booking(phone):
+    if not phone or int(participant.get("completed") or 0) == 1:
+        return False
+    if store.has_booking(phone):
         return False
     created = _parse_participant_created_at(participant.get("created_at"))
     if not created:
@@ -7353,7 +7444,7 @@ def _block_if_unbooked_timeout(participant):
         return None
     phone = participant.get("phone")
     store.blacklist_phone(phone, reason="unbooked_timeout")
-    store.delete_participant(participant["id"])
+    store.delete_participant(phone)
     return jsonify({
         "error": "您注册已超过 24 小时仍未预约访谈时间，账号已注销且无法继续登录。",
         "blacklisted": True,
@@ -7380,15 +7471,16 @@ def _purge_stale_unbooked_participants():
         phone = (p.get("phone") or "").strip()
         if not phone:
             continue
+        if int(p.get("completed") or 0) == 1:
+            continue
         if has_booking(phone):
             continue
         created = _parse_participant_created_at(p.get("created_at"))
         if not created or now - created < cutoff:
             continue
         store.blacklist_phone(phone, reason="unbooked_timeout")
-        store.delete_participant(p["id"])
+        store.delete_participant(phone)
         purged.append({
-            "id": p["id"],
             "phone": phone,
             "role": p.get("role", ""),
             "group_name": p.get("group_name", ""),
