@@ -665,6 +665,10 @@ SHEET_COLUMNS = {
     SHEET_META: ["key", "value"],
 }
 
+# Columns that hold a phone number (the universal participant identifier).
+# Values in these columns are always normalized to strings on read.
+_PHONE_KEY_COLUMNS = ("phone", "suspect_phone", "interviewer_phone")
+
 PHASE_PRE = "pre"
 PHASE_POST = "post"
 
@@ -1027,7 +1031,19 @@ class ExcelStore:
         rows = []
         for row in ws.iter_rows(min_row=2, values_only=True):
             if any(v is not None for v in row):
-                rows.append(dict(zip(headers, row)))
+                d = dict(zip(headers, row))
+                # Phone is the universal identifier; Excel may store phone-like
+                # values as numbers. Coerce to string so cross-sheet lookups and
+                # .strip() calls stay consistent regardless of cell type.
+                for col in _PHONE_KEY_COLUMNS:
+                    v = d.get(col)
+                    if isinstance(v, bool):
+                        continue
+                    if isinstance(v, int):
+                        d[col] = str(v)
+                    elif isinstance(v, float):
+                        d[col] = str(int(v)) if v.is_integer() else str(v)
+                rows.append(d)
         return rows
 
     def _write_all(self, wb, sheet_name, rows):
