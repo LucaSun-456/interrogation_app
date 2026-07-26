@@ -1277,6 +1277,21 @@
     </div>
   </div>
 
+  <!-- Network check failure modal -->
+  <div class="number-reminder-overlay" id="netCheckFailModal">
+    <div class="number-reminder-modal">
+      <div class="warning-icon">📶</div>
+      <h3 style="color:var(--accent);border:none;margin-bottom:8px;">网络延迟过高</h3>
+      <p style="font-size:14px;line-height:1.9;text-align:left;" id="netCheckFailModalDetail">
+        当前网络延迟过高，无法保证虚拟审讯培训的流畅进行。
+      </p>
+      <p style="font-size:13px;line-height:1.9;text-align:left;color:var(--text-light);">
+        请更换更稳定的网络环境（如将 Wi-Fi 更换为手机热点、关闭 VPN/代理、靠近路由器）之后再试。网络检测通过前无法进入培训。
+      </p>
+      <button class="btn btn-primary" onclick="closeNetCheckFailModalAndRetry()" style="width:100%;margin-top:12px;">我已更换网络，重新检测</button>
+    </div>
+  </div>
+
   <!-- ===== CONSENT ATTENTION CHECK (after consent, before dashboard) ===== -->
   <div class="card hidden" id="screen-consent-attention">
     <h2>实验说明检测</h2>
@@ -1434,11 +1449,12 @@
 
   </div>
 
-  <!-- ===== INTERVIEWER: Evidence oral recap (after case info) ===== -->
+  <!-- ===== INTERVIEWER: Case + evidence oral recap (before experiment ID) ===== -->
   <div class="card hidden" id="screen-case-evidence-recap">
-    <h2>证据信息复述</h2>
+    <h2>案件信息与证据复述</h2>
+    <div id="caseEvidenceRecapCaseInfo" style="margin-bottom:16px;"></div>
     <p style="font-size:13px;color:var(--text-light);margin-bottom:12px;line-height:1.75;">
-      请根据刚才阅读的案件<strong>背景与证据材料</strong>，用自己的话口头复述关键证据信息。
+      请根据上方显示的案件<strong>基本信息与证据材料</strong>，用自己的话口头复述本案的基本情况与关键证据信息。
     </p>
     <p class="sg-recap-hint">点击下方按钮开始录音，录音满 30 秒后可提交；最长 1 分钟将自动停止。提交后系统将自动审核。</p>
     <div class="sg-recap-timer" id="caseEvidenceRecapTimer">00:00</div>
@@ -1451,7 +1467,6 @@
       <div id="caseEvidenceRecapWaveformIdle" class="sg-recap-waveform-idle">开始录音后将显示实时波形</div>
     </div>
     <button class="btn btn-primary hidden" id="caseEvidenceRecapSubmitBtn" onclick="submitCaseEvidenceRecap()" style="width:100%;margin-top:12px;margin-bottom:8px;">提交复述</button>
-    <button class="btn btn-outline" onclick="showCaseInfo()" style="width:100%;">← 返回案件信息</button>
   </div>
 
   <!-- ===== INTERVIEWER SCREEN: Assignment ===== -->
@@ -1616,10 +1631,10 @@
     <div class="warning-icon">🎬</div>
     <h3 style="color:var(--primary);border:none;margin-bottom:8px;">关于模拟行动视频</h3>
     <p style="font-size:13px;color:var(--text);margin-bottom:12px;line-height:1.8;text-align:left;">
-      本环节中的视频由 <strong>AI 生成</strong>。画面中可能出现一些细节上的不一致（例如场景、物品或时间线的细微偏差）。
+      本环节中的视频由 <strong>AI 生成</strong>。视频中呈现的细节是<strong>不全面但重要的</strong>。
     </p>
     <p style="font-size:13px;color:var(--text);margin-bottom:20px;line-height:1.8;text-align:left;">
-      请您<strong>忽略这些小的不一致</strong>，只需关注并记住视频的<strong>核心情节</strong>即可。请根据您的角色认真观看并如实选择。
+      凡是<strong>视频中出现过的细节</strong>，您<strong>必须完全记住</strong>；如果审讯者问到<strong>视频中没有出现过的细节</strong>，您可以在必要时结合自身角色<strong>进行合理的简单补充</strong>。请根据您的角色认真观看并如实选择。
     </p>
     <button class="btn-primary" onclick="confirmSgAiDisclaimer()" style="padding:12px 40px;font-size:15px;width:auto;">
       我已了解，开始游戏
@@ -2146,8 +2161,12 @@ function showMicCheckScreen() {
 
 let _networkCheckResult = null;
 
+// 网络延迟阈值（严格）：平均超过 250ms 或单次超过 800ms 即判定不合格
+const NET_CHECK_AVG_MAX_MS = 250;
+const NET_CHECK_SINGLE_MAX_MS = 800;
+
 async function measureNetworkQuality() {
-  const rounds = 4;
+  const rounds = 6;
   const times = [];
   let errors = 0;
   for (let i = 0; i < rounds; i++) {
@@ -2168,8 +2187,8 @@ async function measureNetworkQuality() {
   }
   const avg = times.reduce((a, b) => a + b, 0) / times.length;
   const max = Math.max(...times);
-  if (avg > 650 || max > 1500) {
-    return { ok: false, reason: '网络延迟偏高', avg, max };
+  if (avg > NET_CHECK_AVG_MAX_MS || max > NET_CHECK_SINGLE_MAX_MS) {
+    return { ok: false, reason: '网络延迟过高', avg, max };
   }
   return { ok: true, avg, max };
 }
@@ -2196,7 +2215,19 @@ async function runNetworkCheck() {
     }
     $('netCheckFailTips').classList.remove('hidden');
     $('netMeterFill').style.background = 'linear-gradient(90deg, #e74c3c, #c0392b)';
+    const detailEl = $('netCheckFailModalDetail');
+    if (detailEl) {
+      detailEl.innerHTML = result.avg != null
+        ? `检测到您的平均网络延迟约 <strong>${Math.round(result.avg)} ms</strong>（最高 ${Math.round(result.max)} ms），超过了实验要求（平均不超过 ${NET_CHECK_AVG_MAX_MS} ms）。`
+        : '检测到您的网络连接不稳定或请求失败，无法保证虚拟审讯培训的流畅进行。';
+    }
+    $('netCheckFailModal').classList.add('show');
   }
+}
+
+function closeNetCheckFailModalAndRetry() {
+  $('netCheckFailModal').classList.remove('show');
+  runNetworkCheck();
 }
 
 function showNetworkCheckScreen(onPass) {
@@ -2676,6 +2707,42 @@ async function api(url, body, options) {
 }
 
 // ====== REGISTRATION ======
+async function computeBrowserFingerprint() {
+  try {
+    let canvasData = '';
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 240; canvas.height = 60;
+      const ctx = canvas.getContext('2d');
+      ctx.textBaseline = 'top';
+      ctx.font = '14px "Arial"';
+      ctx.fillStyle = '#f60';
+      ctx.fillRect(10, 10, 100, 30);
+      ctx.fillStyle = '#069';
+      ctx.fillText('fp-check-实验平台@2026', 4, 20);
+      ctx.strokeStyle = 'rgba(102, 204, 0, 0.7)';
+      ctx.beginPath(); ctx.arc(60, 30, 20, 0, Math.PI * 2); ctx.stroke();
+      canvasData = canvas.toDataURL();
+    } catch (e) { canvasData = 'canvas-unavailable'; }
+    const parts = [
+      navigator.userAgent || '',
+      navigator.language || '',
+      (navigator.languages || []).join(','),
+      String(navigator.hardwareConcurrency || ''),
+      String(navigator.deviceMemory || ''),
+      screen.width + 'x' + screen.height + 'x' + screen.colorDepth,
+      String(new Date().getTimezoneOffset()),
+      Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+      navigator.platform || '',
+      canvasData,
+    ].join('||');
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(parts));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (e) {
+    return '';
+  }
+}
+
 async function register() {
   const phone = $('phoneInput').value.trim();
   if (!phone || phone.length < 8) { alert('请输入有效的手机号（至少8位）'); return; }
@@ -2685,7 +2752,8 @@ async function register() {
   showLoading('正在分配实验条件...');
 
   try {
-    const result = await api('/api/register', { phone }, { allowStatuses: [409] });
+    const fingerprint = await computeBrowserFingerprint();
+    const result = await api('/api/register', { phone, fingerprint }, { allowStatuses: [409] });
     if (result._httpStatus === 409) {
       $('loadingText').textContent = '该手机号已注册，正在恢复您的进度...';
       await resumeParticipant(phone);
@@ -3696,8 +3764,48 @@ function resetCaseEvidenceRecapUi() {
   updateCaseEvidenceRecapTimerDisplay();
 }
 
+function renderCaseEvidenceRecapCaseInfo(info) {
+  const box = $('caseEvidenceRecapCaseInfo');
+  if (!box) return;
+  if (!info || info.status !== 'ready') {
+    box.innerHTML = '';
+    return;
+  }
+  let html = '';
+  if (info.case_switch_notice) {
+    html += '<div style="border:2px solid #dc2626;background:#fef2f2;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px;color:#991b1b;line-height:1.8;">'
+      + '<strong>⚠️ 重要提醒：</strong>以下才是您即将审讯的<strong>真人嫌疑人</strong>所涉案件，'
+      + '与您培训阶段使用的案件<strong>不同</strong>。请仔细阅读并记住本案的案件信息与全部证据。'
+      + '</div>';
+  } else {
+    html += '<div style="border:2px solid var(--primary);background:#eff6ff;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px;line-height:1.8;">'
+      + '<strong>提醒：</strong>以下是您即将审讯的<strong>真人嫌疑人</strong>所涉案件的基本信息与证据材料，请仔细回顾。'
+      + '</div>';
+  }
+  html += '<h3 style="margin-bottom:8px;">' + escapeHtml(info.case_title || '') + '</h3>';
+  html += '<h4 style="margin-bottom:6px;">案件概述</h4>';
+  html += '<div class="context-box">' + escapeHtml(info.overview || '').replace(/\n/g, '<br>') + '</div>';
+  html += '<h4 style="margin-top:12px;margin-bottom:6px;">证据材料</h4>';
+  (info.evidence || []).forEach(e => {
+    html += '<div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;">';
+    html += '<div style="font-weight:600;color:var(--primary);">' + e.id + ': ' + escapeHtml(e.title) + '</div>';
+    html += '<div style="font-size:12px;color:var(--text);margin-top:6px;">' + escapeHtml(e.detail) + '</div>';
+    html += '</div>';
+  });
+  box.innerHTML = html;
+}
+
 async function showCaseEvidenceRecap() {
   resetCaseEvidenceRecapUi();
+  showLoading('正在加载案件信息...');
+  APP.finalCaseInfo = null;
+  try {
+    APP.finalCaseInfo = await api('/api/final-case-info', { phone: APP.phone });
+  } catch (_) {
+    APP.finalCaseInfo = null;
+  }
+  hideLoading();
+  renderCaseEvidenceRecapCaseInfo(APP.finalCaseInfo);
   await saveFlowStep('case_evidence_recap');
   showScreen('screen-case-evidence-recap');
 }
@@ -3802,16 +3910,23 @@ async function confirmCaseEvidenceAiPass() {
     showError(err.message || '保存进度失败');
     return;
   }
+  // 自动下载真实案件的证据材料 PDF
+  const files = (APP.finalCaseInfo && APP.finalCaseInfo.files) || [];
+  if (files.length) {
+    try { await triggerPdfDownloads(files, ''); } catch (_) {}
+  }
+  const tt = getInterviewerTrainingType();
+  const sessionsDone = APP.finalCaseInfo ? Number(APP.finalCaseInfo.sessions_completed || 0) : 0;
+  if (needsSixAvatarSessions(tt) && sessionsDone >= 6) {
+    await goToCompletionAfterTraining();
+    return;
+  }
   goToNextAfterCaseInfoDirect();
 }
 
 function proceedToCaseEvidenceRecapOrNext() {
-  const passed = APP.participant && Number(APP.participant.case_evidence_recap_passed) === 1;
-  if (passed) {
-    goToNextAfterCaseInfoDirect();
-    return;
-  }
-  showCaseEvidenceRecap();
+  // 复述环节已移动到获取实验编号之前（训练完成后），阅读完案件信息直接进入下一步
+  goToNextAfterCaseInfoDirect();
 }
 
 function goBackToSuspectContext() {
@@ -5831,6 +5946,12 @@ async function showCaseInfo() {
       : '待分配';
 
     let html = '';
+    if (result.is_training_case) {
+      html += '<div style="border:2px solid var(--accent);background:#fff7ed;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px;">'
+        + '<strong>提示：</strong>以下为您<strong>培训阶段</strong>使用的案件材料。您在正式访谈中将面对的真人嫌疑人所涉案件与此<strong>不同</strong>，'
+        + '正式访谈前系统会再次向您出示真实案件的背景与证据材料。'
+        + '</div>';
+    }
     html += '<h3>案件概述</h3>';
     html += '<div class="context-box">' + escapeHtml(result.overview || '').replace(/\n/g, '<br>') + '</div>';
 
@@ -6264,7 +6385,7 @@ async function showAvatarTrainingSessions() {
       } else if (status.training_type === 'avatar_general') {
         hintEl.innerHTML = `
           <div><strong>${trainingGroupLabel('avatar_general')} 组说明：</strong></div>
-          <div>共 <strong>6</strong> 次虚拟审讯训练；案件背景为独立情境（与 ${trainingGroupLabel('avatar_specific')} 组不同）。</div>
+          <div>共 <strong>6</strong> 次虚拟审讯训练；培训案件与您正式访谈将面对的真人嫌疑人案件<strong>不同</strong>，正式访谈前会再次向您出示真实案件材料。</div>
           <div style="margin-top:4px;color:var(--accent);font-weight:600;">
             ⚠️ 请<strong>按顺序</strong>完成；每次须用语音讯问并在结束时提交有罪/无罪判断。全部完成后才算报名成功并获得实验编号。
           </div>
@@ -6326,6 +6447,13 @@ async function showAvatarTrainingSessions() {
 }
 
 async function goToCompletionAfterTraining() {
+  // 获取实验编号前，需先完成正式案件信息与证据的口头复述
+  const recapPassed = APP.participant && Number(APP.participant.case_evidence_recap_passed) === 1;
+  if (!recapPassed) {
+    await cleanupLiveAvatar();
+    await showCaseEvidenceRecap();
+    return;
+  }
   showLoading('正在完成...');
   try {
     const result = await api('/api/complete-interviewer', { phone: APP.phone });
@@ -6333,6 +6461,11 @@ async function goToCompletionAfterTraining() {
     showCompletion(result);
   } catch (err) {
     hideLoading();
+    if (err && err.data && err.data.recap_required) {
+      if (APP.participant) APP.participant.case_evidence_recap_passed = 0;
+      await showCaseEvidenceRecap();
+      return;
+    }
     showError(err.message);
   }
 }

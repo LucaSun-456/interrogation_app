@@ -482,6 +482,11 @@ CASE_INFO = {
     },
 }
 
+def _opposite_case(case_type):
+    """C 组培训使用与配对嫌疑人真实案件相反的案件（arson <-> theft）。"""
+    return "arson" if case_type == "theft" else "theft"
+
+
 GENERAL_TERRORISM_CASE_INFO = {
     "title": "案件 — 液体炸弹恐袭情报案（通用 Avatar 培训）",
     "overview": """警方掌握情报：有人计划将液体炸弹携带上从伦敦希思罗机场飞往美国的多架商业航班，并在飞行途中同步引爆。警方尚不清楚具体涉案人员。
@@ -650,6 +655,7 @@ SHEET_COLUMNS = {
         "case_evidence_recap_passed",
         "created_at", "avatar_practice_transcript",
         "training_avatar_order", "training_ui_order",
+        "register_ip", "fingerprint",
     ],
     SHEET_GROUPS: ["name", "suspect_phone", "interviewer_phone", "created_at"],
     SHEET_PROFILES: ["phone", "data", "submitted_at"],
@@ -706,8 +712,8 @@ TRAINING_GROUP_LABELS = {
     "avatar_specific": "D",
 }
 TRAINING_TARGET_PER_TYPE = 28
-# D 组（avatar_specific）已收满；新审讯者不再分配 D 组
-AVATAR_SPECIFIC_FULL = True
+# 实验配额仅收集 C 组（avatar_general）与 D 组（avatar_specific），各 28 人
+AVATAR_SPECIFIC_FULL = False
 
 # Round-robin assignment order (registration sequence, not random)
 SUSPECT_ATTR_CYCLE = [
@@ -717,7 +723,8 @@ SUSPECT_ATTR_CYCLE = [
     ("theft", "Guilty"),
 ]
 TRAINING_TYPE_CYCLE = ["control", "theory_sue", "avatar_general", "avatar_specific"]
-NON_SPECIFIC_TRAINING_TYPES = ["control", "theory_sue", "avatar_general"]
+# A/B 组已停止收集数据，非专属轮转仅剩 C 组
+NON_SPECIFIC_TRAINING_TYPES = ["avatar_general"]
 META_SLOT_GROUPS = "appointment_slot_groups"
 META_INTERVIEWER_NON_SPECIFIC_SEQ = "interviewer_non_specific_seq"
 
@@ -3245,15 +3252,23 @@ def _pick_non_specific_training_rotating(counts):
 def pick_training_type_on_booking(time_slot):
     """
     Assign interviewer training at booking time only.
-    - Slot already has a suspect → avatar_specific (D), unless D is full (28).
-    - No suspect on slot, or D full → rotate among control / theory_sue / avatar_general (max 28 each).
+    Quota: only C (avatar_general) and D (avatar_specific), 28 each.
+    - Slot already has a suspect and D not full → balance C/D (prefer D on tie).
+    - Otherwise → C while it has quota; fall back to the smaller group.
     """
     counts = _count_interviewer_training_types()
-    if (
+    c_count = counts.get("avatar_general", 0)
+    d_count = counts.get("avatar_specific", 0)
+    d_available = (
         not AVATAR_SPECIFIC_FULL
         and _suspect_combo_on_slot(time_slot)
-        and counts.get("avatar_specific", 0) < TRAINING_TARGET_PER_TYPE
-    ):
+        and d_count < TRAINING_TARGET_PER_TYPE
+    )
+    if d_available and d_count <= c_count:
+        return "avatar_specific"
+    if c_count < TRAINING_TARGET_PER_TYPE:
+        return "avatar_general"
+    if d_available:
         return "avatar_specific"
     return _pick_non_specific_training_rotating(counts)
 
@@ -3885,6 +3900,8 @@ def compute_participant_resume(p, booking=None):
     if training_type in ("avatar_specific", "avatar_general"):
         done_sessions = store.count_completed_training_sessions(phone)
         if done_sessions >= 6:
+            if not recap_passed:
+                return "case_evidence_recap", "口头复述正式案件信息与证据"
             return "all_done", "完成实验并获取编号"
         if flow_step == "case_info_done" or done_sessions > 0:
             return "avatar_training", f"继续虚拟审讯训练（已完成 {done_sessions}/6）"
@@ -4421,10 +4438,37 @@ def questionnaire_post_page():
     return render_template("questionnaire.html", phase=PHASE_POST)
 
 
+def _client_ip():
+    """Best-effort real client IP behind nginx (X-Forwarded-For / X-Real-IP)."""
+    xff = (request.headers.get("X-Forwarded-For") or "").strip()
+    if xff:
+        first = xff.split(",")[0].strip()
+        if first:
+            return first
+    xri = (request.headers.get("X-Real-IP") or "").strip()
+    if xri:
+        return xri
+    return request.remote_addr or ""
+
+
+def _find_duplicate_identity(ip, fingerprint):
+    """Return True if any existing participant registered from the same IP or
+    with the same browser fingerprint."""
+    for p in store.get_all_participants():
+        stored_ip = str(p.get("register_ip") or "").strip()
+        stored_fp = str(p.get("fingerprint") or "").strip()
+        if ip and stored_ip and stored_ip == ip:
+            return True
+        if fingerprint and stored_fp and stored_fp == fingerprint:
+            return True
+    return False
+
+
 @app.route("/api/register", methods=["POST"])
 def register():
     data = request.get_json()
     phone = (data.get("phone") or "").strip()
+    fingerprint = (data.get("fingerprint") or "").strip()
     if not phone or len(phone) < 8:
         return jsonify({"error": "请输入有效的手机号"}), 400
 
@@ -4446,6 +4490,13 @@ def register():
             }), 403
         return jsonify({"error": "该手机号已注册", "participant": dict(existing)}), 409
 
+    client_ip = _client_ip()
+    if _find_duplicate_identity(client_ip, fingerprint):
+        return jsonify({
+            "error": "IP 地址敏感，无法进行实验",
+            "ip_blocked": True,
+        }), 403
+
     role = pick_register_role()
 
     if role == "S":
@@ -4453,6 +4504,7 @@ def register():
         pid = store.add_participant(
             phone=phone, role="S", group_name="",
             guilt=guilt, case_type=case_type,
+            register_ip=client_ip, fingerprint=fingerprint,
         )
 
         if case_type == "arson":
@@ -4478,6 +4530,7 @@ def register():
     store.add_participant(
         phone=phone, role="I", group_name="",
         training_type="",
+        register_ip=client_ip, fingerprint=fingerprint,
     )
 
     return jsonify({
@@ -4694,12 +4747,16 @@ def interviewer_case_downloads():
             "message": access.get("message", "暂无法下载案件 PDF。"),
         })
 
-    files = _interviewer_case_download_files(case_type)
-    case_label = "纵火案" if case_type == "arson" else "盗窃案"
+    # C 组培训阶段下载的是培训（相反）案件的材料，与阅读页保持一致
+    download_case = case_type
+    if p.get("training_type") == "avatar_general":
+        download_case = _opposite_case(case_type or "arson")
+    files = _interviewer_case_download_files(download_case)
+    case_label = "纵火案" if download_case == "arson" else "盗窃案"
     return jsonify({
         "paired": True,
         "slot_matched": True,
-        "case_type": case_type,
+        "case_type": download_case,
         "case_label": case_label,
         "suspect_guilt": guilt,
         "files": files,
@@ -5064,6 +5121,11 @@ def complete_interviewer():
                 "error": "请先完成全部 6 次虚拟审讯训练",
                 "completed_count": completed_count,
                 "total_required": 6,
+            }), 400
+        if int(p.get("case_evidence_recap_passed") or 0) != 1:
+            return jsonify({
+                "error": "请先完成正式案件信息与证据的口头复述",
+                "recap_required": True,
             }), 400
 
     # Assign full_id now (at completion, not registration)
@@ -5572,17 +5634,25 @@ def build_avatar_training_system_prompt(training_type, avatar_setting, avatar_gu
 # 指令
 在审讯室中接受调查员的讯问。记住：每条回答不超过50字，保持角色，用第一人称"我"来回应。"""
     else:
-        if avatar_guilt == "guilty":
-            guilt_block = """你是“有罪但强烈否认”的嫌疑人。你真实做过以下行为：
-- 购买过用于装载爆炸物材料的行李箱；
-- 将行李箱埋藏在 King's Wood 附近。
-但你绝不直接承认任何犯罪意图或袭击计划。"""
+        # C 组（avatar_general）：培训使用与配对嫌疑人真实案件相反的案件
+        suspect_case = (suspect or {}).get("case_type") or "arson"
+        training_case = _opposite_case(suspect_case)
+        if training_case == "arson":
+            crime_context = ARSON_GUILTY_CONTEXT if avatar_guilt == "guilty" else ARSON_INNOCENT_CONTEXT
+            case_label = "社区体育俱乐部纵火案"
         else:
-            guilt_block = """你是“无罪”的嫌疑人。你没有参与任何恐袭计划，也没有犯罪意图。
+            crime_context = THEFT_GUILTY_CONTEXT if avatar_guilt == "guilty" else THEFT_INNOCENT_CONTEXT
+            case_label = "帆船俱乐部开放日盗窃案"
+
+        if avatar_guilt == "guilty":
+            guilt_block = """你是"有罪但强烈否认"的嫌疑人。案件背景中描述的犯罪行为确实是你做的，
+但你绝不直接承认任何犯罪行为或犯罪意图。"""
+        else:
+            guilt_block = """你是"无罪"的嫌疑人。你没有实施案件背景中的犯罪行为，也没有犯罪意图。
 你可以承认与日常生活相关、可被强证据证明的普通活动，但必须坚决否认犯罪参与。"""
 
         prompt = f"""# 角色定义
-你不是助手，禁止用“我能帮你什么”等客服式开场。你是正在接受警方问询的嫌疑人 Charlie，必须始终保持角色，不得提及你是AI。
+你不是助手，禁止用"我能帮你什么"等客服式开场。你是{case_label}中正在接受警方问询的嫌疑人，必须始终保持角色，不得提及你是AI。
 
 # 回答长度与风格（严格）
 1) 每次只输出一句简短口语化回答，不超过50字。
@@ -5592,11 +5662,8 @@ def build_avatar_training_system_prompt(training_type, avatar_setting, avatar_gu
 # 当前人格变量
 {setting_prompt}
 
-# 案件背景（通用 Avatar 组）
-{GENERAL_AVATAR_CASE_CONTEXT_ZH}
-
-# 个人信息
-{GENERAL_AVATAR_IDENTITY_ZH}
+# 案件背景（培训 Avatar 组）
+{crime_context}
 
 # 罪责状态
 {guilt_block}
@@ -5605,11 +5672,10 @@ def build_avatar_training_system_prompt(training_type, avatar_setting, avatar_gu
 若调查员问及与本案调查窗口无关的其他日期，不要编造；简短将话题引回调查关注的时间段。
 
 # 回应策略（严格执行）
-1) 对“自由回忆/最近去了哪”等问题：在强证据（尤其 CCTV）被明确展示前，不承认与关键证据相关行踪，优先给出模糊或无害回答。
-2) 对“是否参与犯罪/是否策划袭击”问题：始终否认。
-3) 对“具体行为”问题：没有强证据就否认或说不确定；一旦对方拿出强证据，再按证据强度逐步承认“行踪/动作”，但不承认犯罪意图。
-4) 对“行李箱用途”问题：给出无害解释（如旅行、收纳等），避免透露违法用途。
-5) 只能承认“已被强证据覆盖”的事实，不得主动补充新关键细节。
+1) 对"自由回忆/最近去了哪"等问题：在强证据被明确展示前，不承认与关键证据相关行踪，优先给出模糊或无害回答。
+2) 对"是否参与犯罪"问题：始终否认。
+3) 对"具体行为"问题：没有强证据就否认或说不确定；一旦对方拿出强证据，再按证据强度逐步承认"行踪/动作"，但不承认犯罪意图。
+4) 只能承认"已被强证据覆盖"的事实，不得主动补充新关键细节。
 
 # 最终输出要求
 只生成一条简短对话回复（第一人称）。"""
@@ -6205,16 +6271,20 @@ def _interviewer_case_material_access(phone):
 
     training_type = p.get("training_type", "")
     if training_type == "avatar_general":
-        info = GENERAL_TERRORISM_CASE_INFO
+        # C 组培训阅读与虚拟训练使用相反案件；正式访谈前再出示真实案件（见 final-case-info）
+        training_case = _opposite_case(case_type or "arson")
+        info = CASE_INFO.get(training_case, CASE_INFO["theft"])
         return {
             "status": "ready",
-            "case_type": "terrorism",
+            "case_type": training_case,
             "case_title": info["title"],
             "overview": info["overview"],
             "evidence": info["evidence"],
             "efm_analysis": info.get("efm_analysis", ""),
             "suspect_guilt": guilt or "",
             "time_slot": time_slot,
+            "is_training_case": True,
+            "real_case_type": case_type,
         }
 
     info = CASE_INFO.get(case_type, CASE_INFO["arson"])
@@ -6227,6 +6297,8 @@ def _interviewer_case_material_access(phone):
         "efm_analysis": info.get("efm_analysis", ""),
         "suspect_guilt": guilt or "",
         "time_slot": time_slot,
+        "is_training_case": False,
+        "real_case_type": case_type,
     }
 
 
@@ -6268,6 +6340,45 @@ def api_case_info():
         "efm_analysis": access.get("efm_analysis", ""),
         "suspect_guilt": access.get("suspect_guilt", ""),
         "time_slot": access.get("time_slot"),
+        "is_training_case": access.get("is_training_case", False),
+        "real_case_type": access.get("real_case_type"),
+    })
+
+
+@app.route("/api/final-case-info", methods=["POST"])
+def api_final_case_info():
+    """Real (paired suspect's) case info for the final recap screen before the
+    interviewer gets the experiment ID. For C (avatar_general) this differs from
+    the training case, so a prominent notice flag is included."""
+    data = request.get_json() or {}
+    phone = (data.get("phone") or "").strip()
+
+    p = store.get_participant(phone)
+    if not p:
+        return jsonify({"error": "未找到参与者"}), 404
+    if p.get("role") != "I":
+        return jsonify({"error": "仅审讯者可查看案件信息"}), 403
+
+    case_type, guilt, slot_matched = _interviewer_appointment_paired_suspect(phone)
+    if not slot_matched:
+        return jsonify({"error": "尚未与嫌疑人配对成功，无法查看正式案件材料"}), 400
+
+    real_case = case_type or "arson"
+    info = CASE_INFO.get(real_case, CASE_INFO["arson"])
+    files = _interviewer_case_download_files(real_case)
+    sessions_completed = store.count_completed_training_sessions(phone)
+
+    return jsonify({
+        "status": "ready",
+        "case_type": real_case,
+        "case_label": "纵火案" if real_case == "arson" else "盗窃案",
+        "case_title": info["title"],
+        "overview": info["overview"],
+        "evidence": info["evidence"],
+        "suspect_guilt": guilt or "",
+        "case_switch_notice": p.get("training_type") == "avatar_general",
+        "files": files,
+        "sessions_completed": sessions_completed,
     })
 
 
