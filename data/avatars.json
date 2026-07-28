@@ -1,0 +1,68 @@
+{
+  "generic": {
+    "avatar_id": "dd73ea75-1218-4ef3-92ce-606d5f7fbc0a",
+    "face_id": "default_generic",
+    "elevenlabs_voice_id": "pNInz6obpgDQGcFmaJgB",
+    "language": "zh",
+    "prompt": "你是一名正在接受警方审讯的嫌疑人。你必须完全沉浸在这个角色中。你的回答需要简洁（50字以内），使用第一人称。根据审讯者的问题自然回应，可以表现出紧张、防御或配合的态度。永远不要打破角色。",
+    "opening_text": "你有什么要问的？"
+  },
+  "specific": {
+    "male_glasses_long": {
+      "avatar_id": "fd6350f2-f879-4214-82a5-36152ac15bed",
+      "face_id": "male_glasses_long",
+      "elevenlabs_voice_id": "VU16byTywsWv5JpI8rbc",
+      "language": "zh",
+      "opening_text": "你有什么要问的？"
+    },
+    "male_glasses_short": {
+      "avatar_id": "4c755467-4d42-4e79-8ca8-d742cfc80471",
+      "face_id": "male_glasses_short",
+      "elevenlabs_voice_id": "VU16byTywsWv5JpI8rbc",
+      "language": "zh",
+      "opening_text": "你有什么要问的？"
+    },
+    "male_noglasses_long": {
+      "avatar_id": "fd6350f2-f879-4214-82a5-36152ac15bed",
+      "face_id": "male_noglasses_long",
+      "elevenlabs_voice_id": "VU16byTywsWv5JpI8rbc",
+      "language": "zh",
+      "opening_text": "你有什么要问的？"
+    },
+    "male_noglasses_short": {
+      "avatar_id": "0b82e58e-1961-4375-ae06-0c5ae45a2e45",
+      "face_id": "male_noglasses_short",
+      "elevenlabs_voice_id": "VU16byTywsWv5JpI8rbc",
+      "language": "zh",
+      "opening_text": "你有什么要问的？"
+    },
+    "female_glasses_long": {
+      "avatar_id": "9107ad60-2b7f-45b8-85f6-176804c00366",
+      "face_id": "female_glasses_long",
+      "elevenlabs_voice_id": "hA4zGnmTwX2NQiTRMt7o",
+      "language": "zh",
+      "opening_text": "你有什么要问的？"
+    },
+    "female_glasses_short": {
+      "avatar_id": "c770be44-e6a8-437f-8a5f-e0285a62f59e",
+      "face_id": "female_glasses_short",
+      "elevenlabs_voice_id": "hA4zGnmTwX2NQiTRMt7o",
+      "language": "zh",
+      "opening_text": "你有什么要问的？"
+    },
+    "female_noglasses_long": {
+      "avatar_id": "922fe0fa-84fa-42a8-8670-093476662515",
+      "face_id": "female_noglasses_long",
+      "elevenlabs_voice_id": "hA4zGnmTwX2NQiTRMt7o",
+      "language": "zh",
+      "opening_text": "你有什么要问的？"
+    },
+    "female_noglasses_short": {
+      "avatar_id": "81cd7842-427b-4319-b6c4-f7beb66218da",
+      "face_id": "female_noglasses_short",
+      "elevenlabs_voice_id": "hA4zGnmTwX2NQiTRMt7o",
+      "language": "zh",
+      "opening_text": "你有什么要问的？"
+    }
+  }
+}

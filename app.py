@@ -694,7 +694,10 @@ BOOKING_MIN_HOURS = 24
 BOOKING_MAX_DAYS = 3
 ADMIN_BOOKING_MAX_DAYS = 14
 UNBOOKED_PURGE_HOURS = 24
-MAX_GROUPS = 112
+# 提高组上限：在已有 112 组数据基础上继续收集 C/D 各 28 组（112 + 56 = 168）
+MAX_GROUPS = 168
+# 第一阶段已收集的组（001–112）不计入新的 C/D 配额
+LEGACY_GROUP_BASELINE = 112
 BOOKING_SLOT_WINDOWS = [
     ("15:00", "17:00"),
     ("19:00", "21:30"),
@@ -732,6 +735,7 @@ META_INTERVIEWER_NON_SPECIFIC_SEQ = "interviewer_non_specific_seq"
 def training_group_label(training_type):
     return TRAINING_GROUP_LABELS.get(training_type or "", "")
 META_BLACKLIST_PHONES = "blacklisted_phones"
+META_WHITELIST_IPS = "whitelisted_ips"
 META_DISABLED_SLOTS = "appointment_slot_disabled"
 
 # Based on IRB Questionnaire_formal interview-Interviewer.pdf / Suspect.pdf
@@ -1142,6 +1146,38 @@ class ExcelStore:
         p = self.get_participant(phone)
         if p:
             self.update_participant(phone, attention_failed=1)
+
+    def get_whitelist_ips(self):
+        raw = self.get_meta(META_WHITELIST_IPS, "[]")
+        try:
+            ips = json.loads(raw) if isinstance(raw, str) else (raw or [])
+        except Exception:
+            ips = []
+        if not isinstance(ips, list):
+            return []
+        return [str(ip).strip() for ip in ips if str(ip).strip()]
+
+    def is_ip_whitelisted(self, ip):
+        ip = (ip or "").strip()
+        if not ip:
+            return False
+        return ip in self.get_whitelist_ips()
+
+    def add_whitelist_ip(self, ip):
+        ip = (ip or "").strip()
+        if not ip:
+            raise ValueError("IP 不能为空")
+        ips = self.get_whitelist_ips()
+        if ip not in ips:
+            ips.append(ip)
+            self.set_meta(META_WHITELIST_IPS, json.dumps(ips, ensure_ascii=False))
+        return ips
+
+    def remove_whitelist_ip(self, ip):
+        ip = (ip or "").strip()
+        ips = [x for x in self.get_whitelist_ips() if x != ip]
+        self.set_meta(META_WHITELIST_IPS, json.dumps(ips, ensure_ascii=False))
+        return ips
 
     def get_disabled_slots(self):
         raw = self.get_meta(META_DISABLED_SLOTS, "[]")
@@ -2716,7 +2752,7 @@ def build_session_body(avatar_id, voice_id, context_id, language, opening_text=N
 # ====== Route Helpers ======
 
 def _get_slot_group_map():
-    """time_slot -> group_name (001–112). Bootstraps from existing bookings if meta empty."""
+    """time_slot -> group_name (001–MAX_GROUPS). Bootstraps from existing bookings if meta empty."""
     raw = store.get_meta(META_SLOT_GROUPS, None)
     if raw is not None:
         try:
@@ -3217,9 +3253,17 @@ def _count_suspect_combos():
 
 
 def _count_interviewer_training_types():
+    """只统计新阶段（组号 > LEGACY_GROUP_BASELINE 或尚未分组）的审讯者，
+    确保 C/D 各 28 的配额不被第一阶段旧数据占用。"""
     counts = {t: 0 for t in TRAINING_TYPE_CYCLE}
     for p in store.get_all_participants():
         if p.get("role") != "I":
+            continue
+        try:
+            gnum = int(str(p.get("group_name") or "").strip() or "0")
+        except (ValueError, TypeError):
+            gnum = 0
+        if 0 < gnum <= LEGACY_GROUP_BASELINE:
             continue
         tt = p.get("training_type")
         if tt in counts:
@@ -4453,7 +4497,9 @@ def _client_ip():
 
 def _find_duplicate_identity(ip, fingerprint):
     """Return True if any existing participant registered from the same IP or
-    with the same browser fingerprint."""
+    with the same browser fingerprint. Whitelisted IPs skip this check."""
+    if store.is_ip_whitelisted(ip):
+        return False
     for p in store.get_all_participants():
         stored_ip = str(p.get("register_ip") or "").strip()
         stored_fp = str(p.get("fingerprint") or "").strip()
@@ -6659,6 +6705,24 @@ def api_avatar_training_submit():
         f"Interviewer final judgment: {judgment_label}"
     )
     system_prompt = AVATAR_FEEDBACK_SYSTEM_PROMPT
+    if "{case_evidence}" in system_prompt:
+        # 注入本次培训对应案件（C 组为相反案件）的证据清单，供导师反馈时引用
+        case_evidence_text = ""
+        try:
+            access = _interviewer_case_material_access(phone)
+            if access.get("status") == "ready":
+                lines = [f"案件：{access.get('case_title', '')}"]
+                overview = (access.get("overview") or "").strip()
+                if overview:
+                    lines.append(f"案情概述：{overview}")
+                for ev in access.get("evidence") or []:
+                    lines.append(f"{ev.get('id', '')} {ev.get('title', '')}：{ev.get('detail', '')}")
+                case_evidence_text = "\n".join(lines)
+        except Exception as e:
+            logger.warning("Failed to build case evidence for feedback prompt: %s", e)
+        if not case_evidence_text:
+            case_evidence_text = "（本次培训案件的证据以培训前下载的案件材料为准。）"
+        system_prompt = system_prompt.replace("{case_evidence}", case_evidence_text)
     if "{transcript}" in system_prompt:
         system_prompt = system_prompt.format(
             transcript=transcript,
@@ -7309,6 +7373,41 @@ def admin_get_appointment_slots():
         "max_days": ADMIN_BOOKING_MAX_DAYS if role == "admin" else BOOKING_MAX_DAYS,
         "time_windows": _booking_slot_windows_for_api(),
     })
+
+
+@app.route("/api/admin/ip-whitelist", methods=["GET"])
+@admin_required
+def admin_get_ip_whitelist():
+    """List whitelisted IPs that skip register IP/fingerprint duplicate checks."""
+    return jsonify({
+        "ips": store.get_whitelist_ips(),
+        "client_ip": _client_ip(),
+    })
+
+
+@app.route("/api/admin/ip-whitelist", methods=["POST"])
+@admin_required
+def admin_add_ip_whitelist():
+    data = request.get_json(silent=True) or {}
+    ip = (data.get("ip") or "").strip()
+    if data.get("use_client_ip"):
+        ip = _client_ip()
+    try:
+        ips = store.add_whitelist_ip(ip)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"success": True, "ips": ips, "added": ip, "client_ip": _client_ip()})
+
+
+@app.route("/api/admin/ip-whitelist", methods=["DELETE"])
+@admin_required
+def admin_remove_ip_whitelist():
+    data = request.get_json(silent=True) or {}
+    ip = (data.get("ip") or "").strip()
+    if not ip:
+        return jsonify({"error": "请指定要移除的 IP"}), 400
+    ips = store.remove_whitelist_ip(ip)
+    return jsonify({"success": True, "ips": ips, "removed": ip, "client_ip": _client_ip()})
 
 
 @app.route("/api/admin/appointment-slots/apply-defaults", methods=["POST"])

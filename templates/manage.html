@@ -547,6 +547,22 @@
 </div>
 
 <div class="card">
+  <h2>IP 白名单（测试用）</h2>
+  <p class="count" style="margin-bottom:10px;">
+    白名单内的 IP 注册时<strong>跳过</strong>「IP/浏览器指纹重复」拦截，方便你反复用不同手机号测试。
+    手机号黑名单、注意力失败等限制仍生效。
+  </p>
+  <p class="count" id="ipWhitelistClientHint" style="margin-bottom:10px;">当前访问 IP：加载中…</p>
+  <div class="toolbar" style="margin-bottom:10px;">
+    <input id="ipWhitelistInput" placeholder="例如 1.2.3.4" style="height:34px;border:1px solid var(--border);border-radius:6px;padding:0 10px;font-size:13px;width:220px;">
+    <button type="button" class="btn btn-primary" onclick="addIpWhitelist()">添加 IP</button>
+    <button type="button" class="btn btn-outline" onclick="addCurrentIpWhitelist()">添加当前访问 IP</button>
+    <button type="button" class="btn btn-reset" onclick="loadIpWhitelist()">刷新</button>
+  </div>
+  <div id="ipWhitelistList" class="empty">加载中…</div>
+</div>
+
+<div class="card">
   <h2>预约记录（日历视图）</h2>
   <div class="count" id="appointmentCount">加载中...</div>
   <div class="toolbar calendar-nav">
@@ -1838,6 +1854,117 @@ async function applyDefaultAppointmentSlots() {
   }
 }
 
+function escapeAdminHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+async function loadIpWhitelist() {
+  const listEl = document.getElementById('ipWhitelistList');
+  const hintEl = document.getElementById('ipWhitelistClientHint');
+  try {
+    const headers = getAuthHeaders();
+    if (!headers.Authorization) {
+      if (listEl) listEl.innerHTML = '<div class="empty">请先登录管理后台</div>';
+      return;
+    }
+    const resp = await fetch('/api/admin/ip-whitelist', { headers });
+    if (resp.status === 401) {
+      sessionStorage.removeItem('admin_password');
+      promptForPassword();
+      return;
+    }
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '加载失败');
+    if (hintEl) {
+      hintEl.textContent = '当前访问 IP：' + (data.client_ip || '未知')
+        + '（点「添加当前访问 IP」即可把本机加入白名单）';
+    }
+    const ips = data.ips || [];
+    if (!listEl) return;
+    if (!ips.length) {
+      listEl.innerHTML = '<div class="empty">白名单为空。添加后即可用该 IP 反复注册测试账号。</div>';
+      return;
+    }
+    listEl.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+      + '<thead><tr><th style="text-align:left;padding:8px;border-bottom:1px solid var(--border);">IP</th>'
+      + '<th style="width:90px;padding:8px;border-bottom:1px solid var(--border);">操作</th></tr></thead><tbody>'
+      + ips.map(ip => {
+        const safe = escapeAdminHtml(ip);
+        const jsSafe = String(ip).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        return `<tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);font-family:ui-monospace,monospace;">${safe}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">
+            <button type="button" class="btn btn-danger" style="font-size:11px;padding:3px 8px;" onclick="removeIpWhitelist('${jsSafe}')">移除</button>
+          </td>
+        </tr>`;
+      }).join('')
+      + '</tbody></table>';
+  } catch (err) {
+    if (listEl) listEl.innerHTML = `<div class="empty" style="color:var(--accent);">加载失败：${escapeAdminHtml(err.message)}</div>`;
+  }
+}
+
+async function addIpWhitelist() {
+  const input = document.getElementById('ipWhitelistInput');
+  const ip = (input && input.value || '').trim();
+  if (!ip) { alert('请输入要添加的 IP'); return; }
+  try {
+    const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
+    if (!headers.Authorization) { promptForPassword(); return; }
+    const resp = await fetch('/api/admin/ip-whitelist', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ip }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '添加失败');
+    if (input) input.value = '';
+    loadIpWhitelist();
+  } catch (err) {
+    alert('添加失败：' + err.message);
+  }
+}
+
+async function addCurrentIpWhitelist() {
+  try {
+    const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
+    if (!headers.Authorization) { promptForPassword(); return; }
+    const resp = await fetch('/api/admin/ip-whitelist', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ use_client_ip: true }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '添加失败');
+    alert('已将当前访问 IP 加入白名单：' + (data.added || ''));
+    loadIpWhitelist();
+  } catch (err) {
+    alert('添加失败：' + err.message);
+  }
+}
+
+async function removeIpWhitelist(ip) {
+  if (!confirm('确定从白名单移除 ' + ip + ' ？')) return;
+  try {
+    const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
+    if (!headers.Authorization) { promptForPassword(); return; }
+    const resp = await fetch('/api/admin/ip-whitelist', {
+      method: 'DELETE',
+      headers,
+      body: JSON.stringify({ ip }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '移除失败');
+    loadIpWhitelist();
+  } catch (err) {
+    alert('移除失败：' + err.message);
+  }
+}
+
 let rescheduleContext = null;
 let rescheduleSelectedDay = null;
 let rescheduleSlotsCache = null;
@@ -2084,6 +2211,7 @@ async function loadData(options) {
         : '组别编号已达上限';
     }
     applyFiltersAndRender();
+    loadIpWhitelist();
   } catch (err) {
     console.error('loadData error:', err);
     document.getElementById('groupGrid').innerHTML = `<div class="empty" style="grid-column:1/-1;color:var(--accent);">加载失败：${err.message}</div>`;

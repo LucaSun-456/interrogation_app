@@ -20,7 +20,7 @@ ENV/
 *.log
 app.log
 logs/
-data/
+data/*
 !data/avatars.json.example
 !data/avatars.json
 *.xlsx

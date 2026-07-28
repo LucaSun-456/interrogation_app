@@ -6935,7 +6935,7 @@ async function submitTrainingJudgment() {
     });
     hideLoading();
 
-    showTrainingFeedback(result.feedback, APP.trainingSession.sessionNum, result.avatar_guilt_label);
+    showTrainingFeedback(result.feedback, APP.trainingSession.sessionNum, result.avatar_guilt_label, 30);
 
     $('trainingJudgmentForm').classList.add('hidden');
     $('submitTrainingJudgmentBtn').classList.add('hidden');
@@ -6945,7 +6945,12 @@ async function submitTrainingJudgment() {
   }
 }
 
-function showTrainingFeedback(feedback, sessionNum, avatarGuiltLabel) {
+let trainingFeedbackLockTimer = null;
+function showTrainingFeedback(feedback, sessionNum, avatarGuiltLabel, lockSeconds) {
+  if (trainingFeedbackLockTimer) {
+    clearInterval(trainingFeedbackLockTimer);
+    trainingFeedbackLockTimer = null;
+  }
   let html = '<h3 style="border:none;margin-bottom:8px;">反馈 — 训练 #' + sessionNum + '</h3>';
   if (avatarGuiltLabel) {
     html += '<div style="margin-bottom:10px;padding:10px 12px;background:#fff8e1;border:1px solid #ffc107;border-radius:6px;font-size:13px;">';
@@ -6953,10 +6958,35 @@ function showTrainingFeedback(feedback, sessionNum, avatarGuiltLabel) {
     html += '</div>';
   }
   html += '<div class="feedback-markdown" style="font-size:13px;line-height:1.8;">' + renderSimpleMarkdown(feedback) + '</div>';
-  html += '<button class="btn btn-primary" onclick="showAvatarTrainingSessions()" style="margin-top:12px;">返回训练列表</button>';
+  html += '<button class="btn btn-primary" id="trainingFeedbackBackBtn" onclick="showAvatarTrainingSessions()" style="margin-top:12px;">返回训练列表</button>';
+  html += '<div id="trainingFeedbackLockHint" style="margin-top:8px;font-size:12px;color:var(--accent);font-weight:600;"></div>';
 
   $('trainingFeedbackArea').innerHTML = html;
   $('trainingFeedbackArea').classList.remove('hidden');
+
+  // 提交判断后强制阅读反馈：倒计时结束前不允许返回训练列表
+  if (lockSeconds && lockSeconds > 0) {
+    let remaining = lockSeconds;
+    const btn = document.getElementById('trainingFeedbackBackBtn');
+    const hint = document.getElementById('trainingFeedbackLockHint');
+    btn.disabled = true;
+    btn.style.opacity = '0.5';
+    btn.style.cursor = 'not-allowed';
+    hint.textContent = '请认真阅读以上反馈内容，' + remaining + ' 秒后可返回训练列表。';
+    trainingFeedbackLockTimer = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(trainingFeedbackLockTimer);
+        trainingFeedbackLockTimer = null;
+        btn.disabled = false;
+        btn.style.opacity = '';
+        btn.style.cursor = '';
+        hint.textContent = '';
+      } else {
+        hint.textContent = '请认真阅读以上反馈内容，' + remaining + ' 秒后可返回训练列表。';
+      }
+    }, 1000);
+  }
 }
 
 async function cleanupTrainingAvatar() {
