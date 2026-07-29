@@ -1436,7 +1436,16 @@
       <div style="font-size:48px;">✓</div>
       <h3 style="color:var(--success);border:none;">模拟行动游戏完成</h3>
       <p style="margin-top:8px;font-size:13px;color:var(--text-light);">您已完成所有视频观看和选择。</p>
-      <button class="btn btn-primary" onclick="sgProceedToRecap()" style="margin-top:16px;">进入情节复述 →</button>
+      <button class="btn btn-primary" onclick="showStoryRecap()" style="margin-top:16px;">查看经历回顾 →</button>
+    </div>
+    <!-- 经历回顾（强制阅读 20 秒） -->
+    <div id="sg-story-recap" class="hidden" style="padding:16px 0;">
+      <h3 style="border:none;margin-bottom:10px;">您的模拟行动经历回顾</h3>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:8px;">请仔细回顾您在视频中的经历，确保全部记住。</p>
+      <div id="sgStoryRecapContent" style="font-size:14px;line-height:1.9;margin-bottom:12px;padding:14px;background:#f9fafb;border-radius:8px;border:1px solid var(--border);"></div>
+      <div id="sgStoryRecapEmphasis" style="margin-bottom:14px;"></div>
+      <div id="sgStoryRecapCountdown" style="font-size:12px;color:var(--accent);font-weight:600;margin-bottom:8px;"></div>
+      <button class="btn btn-primary" id="sgStoryRecapBtn" onclick="finishStoryRecap()" disabled style="width:100%;">请先阅读以上内容（20 秒后可继续）</button>
     </div>
   </div>
 
@@ -1612,7 +1621,7 @@
     <p style="font-size:13px;color:var(--text-light);margin-bottom:4px;">
       每个时间段有<strong>两个名额</strong>：<span class="avail-tag suspect">嫌疑人</span> 和 <span class="avail-tag interviewer">审讯者</span>。
       当同一个时间段<strong>嫌疑人和审讯者都预约后</strong>，该时间段即配对成功。<br>
-      <span id="bookingTimeRangeHint">可预约时间范围：<strong>从现在起 24 小时之后</strong>至<strong>3 天内</strong>（嫌疑人）。</span>
+      <span id="bookingTimeRangeHint">可预约时间范围：<strong>从现在起 12 小时之后</strong>至<strong>3 天内</strong>（嫌疑人）。</span>
     </p>
     <p style="font-size:12px;color:var(--text-light);margin-bottom:4px;">
       💡 <strong style="color:#e65100;">建议优先选择已有对方角色预约的时间段（橙色高亮）</strong>，这样可以快速完成配对，尽早开展正式访谈。
@@ -1704,8 +1713,8 @@
       正式访谈需与<strong>嫌疑人预约同一时段</strong>才能配对。若您选择无人预约的时段，可能长期无法配对，从而<strong>无法完成实验</strong>。
     </p>
     <p style="font-size:13px;color:var(--text);margin-bottom:12px;line-height:1.8;">
-      <strong>24 小时后至 3 天内</strong>的时段：可自由选择空闲时间。<br>
-      <strong>未来 24 小时内</strong>的时段：仅可选择<strong>已有嫌疑人预约</strong>的时间（界面中以橙色标注）。
+      <strong>12 小时后至 3 天内</strong>的时段：可自由选择空闲时间。<br>
+      <strong>未来 12 小时内</strong>的时段：仅可选择<strong>已有嫌疑人预约</strong>的时间（界面中以橙色标注）。
     </p>
     <p style="font-size:13px;color:#856404;margin-bottom:20px;line-height:1.8;background:#fff8e1;padding:10px;border-radius:8px;">
       🔒 预约成功后无法取消或更改时间，请慎重选择。
@@ -2310,8 +2319,12 @@ let _preflightAfterPwdTest = null;
 let pwdTestCountdownId = null;
 const PWD_TEST_MAX_SEC = 60;
 
+function pwdTestPassedKey() {
+  return 'avatar_pwd_ok_' + (APP.phone || '');
+}
+
 function runPasswordTestGate(onPass) {
-  if (sessionStorage.getItem('avatar_pwd_ok')) {
+  if (sessionStorage.getItem(pwdTestPassedKey())) {
     onPass();
     return;
   }
@@ -2516,7 +2529,7 @@ async function pwdTestVerify() {
   try {
     const resp = await api('/api/network-test/verify', { phone: APP.phone, password: val });
     if (resp.ok) {
-      sessionStorage.setItem('avatar_pwd_ok', '1');
+      sessionStorage.setItem(pwdTestPassedKey(), '1');
       if (pwdTestCountdownId) { clearInterval(pwdTestCountdownId); pwdTestCountdownId = null; }
       await pwdTestCleanup();
       $('pwdTestError').textContent = '';
@@ -4646,6 +4659,57 @@ function sgAutoNext() {
   });
 }
 
+let sgStoryRecapTimerId = null;
+
+async function showStoryRecap() {
+  $('sg-completed').classList.add('hidden');
+  $('sg-story-recap').classList.remove('hidden');
+  const btn = $('sgStoryRecapBtn');
+  btn.disabled = true;
+  btn.textContent = '请先阅读以上内容（20 秒后可继续）';
+  $('sgStoryRecapContent').textContent = '正在加载…';
+  $('sgStoryRecapEmphasis').innerHTML = '';
+  try {
+    const data = await api('/api/serious-game/story-recap', { phone: APP.phone });
+    let html = '<p>' + escapeHtml(data.opening || '') + '</p>';
+    if (data.choice_details && data.choice_details.length) {
+      html += '<p style="margin-top:8px;"><strong>您在视频中的选择：</strong></p><ul style="margin:4px 0 0 18px;font-size:13px;line-height:1.85;">';
+      data.choice_details.forEach(d => { html += '<li>' + escapeHtml(d) + '</li>'; });
+      html += '</ul>';
+    }
+    $('sgStoryRecapContent').innerHTML = html;
+    if (data.emphasis && data.emphasis.length) {
+      let ehtml = '<div style="padding:12px;background:#fff8e1;border:1px solid #ffc107;border-radius:8px;font-size:13px;line-height:1.8;">';
+      ehtml += '<strong>⚠️ 请特别注意以下细节：</strong><ul style="margin:6px 0 0 18px;">';
+      data.emphasis.forEach(e => { ehtml += '<li>' + escapeHtml(e) + '</li>'; });
+      ehtml += '</ul></div>';
+      $('sgStoryRecapEmphasis').innerHTML = ehtml;
+    }
+  } catch (err) {
+    $('sgStoryRecapContent').textContent = '加载失败：' + err.message;
+  }
+  let left = 20;
+  $('sgStoryRecapCountdown').textContent = left + ' 秒后可继续';
+  sgStoryRecapTimerId = setInterval(() => {
+    left -= 1;
+    if (left <= 0) {
+      clearInterval(sgStoryRecapTimerId);
+      sgStoryRecapTimerId = null;
+      btn.disabled = false;
+      btn.textContent = '我已记住，进入情节复述 →';
+      $('sgStoryRecapCountdown').textContent = '';
+    } else {
+      $('sgStoryRecapCountdown').textContent = left + ' 秒后可继续';
+    }
+  }, 1000);
+}
+
+function finishStoryRecap() {
+  if (sgStoryRecapTimerId) { clearInterval(sgStoryRecapTimerId); sgStoryRecapTimerId = null; }
+  $('sg-story-recap').classList.add('hidden');
+  sgProceedToRecap();
+}
+
 function completeSeriousGame() {
   APP.sg_completed = true;
   $('sg-play').classList.add('hidden');
@@ -6544,7 +6608,7 @@ function renderBookingSlotsForInterviewer() {
   let html = '<h3>请选择一个时间段预约</h3>';
   html += `<p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">您的角色：<strong>${roleLabel}</strong></p>`;
   html += `<p style="font-size:12px;color:var(--text-light);margin-bottom:12px;line-height:1.6;">
-    <strong>24 小时后至 3 天内</strong>可自由选择；<strong>未来 24 小时内</strong>仅可预约<strong>已有嫌疑人预约</strong>的时段。
+    <strong>12 小时后至 3 天内</strong>可自由选择；<strong>未来 12 小时内</strong>仅可预约<strong>已有嫌疑人预约</strong>的时段。
   </p>`;
   if (waitingSuspectSlots > 0) {
     html += `
@@ -6632,7 +6696,7 @@ async function bookSlotForInterviewer(slot) {
 
   const info = (bookingState.slotInfo || {})[slot] || {};
   if (!isInterviewerSlotBookable(slot, info)) {
-    alert('未来 24 小时内仅可预约已有嫌疑人预约的时间段。请优先选择标注「嫌疑人已约」的时段，或选择 24 小时之后的空闲时段。');
+    alert('未来 12 小时内仅可预约已有嫌疑人预约的时间段。请优先选择标注「嫌疑人已约」的时段，或选择 12 小时之后的空闲时段。');
     return;
   }
 
@@ -7798,9 +7862,9 @@ function renderBookingUI() {
   const hintEl = $('bookingTimeRangeHint');
   if (hintEl) {
     if (role === 'I') {
-      hintEl.innerHTML = '审讯者：<strong>24 小时后至 3 天内</strong>可自由选择；<strong>未来 24 小时内</strong>仅可预约<strong>已有嫌疑人预约</strong>的时段。请优先选择橙色标注时段。';
+      hintEl.innerHTML = '审讯者：<strong>12 小时后至 3 天内</strong>可自由选择；<strong>未来 12 小时内</strong>仅可预约<strong>已有嫌疑人预约</strong>的时段。请优先选择橙色标注时段。';
     } else {
-      hintEl.innerHTML = '可预约时间范围：<strong>从现在起 24 小时之后</strong>至<strong>3 天内</strong>（<strong>嫌疑人</strong>）。';
+      hintEl.innerHTML = '可预约时间范围：<strong>从现在起 12 小时之后</strong>至<strong>3 天内</strong>（<strong>嫌疑人</strong>）。';
     }
   }
 
@@ -7898,7 +7962,7 @@ function renderBookingUI() {
     // Show pairing hint if there are slots waiting for complementary role
     if (waitingSlots > 0 && !myBooking) {
       const extraI = role === 'I'
-        ? '<div style="font-size:12px;color:#856404;margin-top:4px;">未来 24 小时内仅可预约这些时段；24 小时之后也可选择其他空闲时段。</div>'
+        ? '<div style="font-size:12px;color:#856404;margin-top:4px;">未来 12 小时内仅可预约这些时段；12 小时之后也可选择其他空闲时段。</div>'
         : '';
       slotsHtml += `
         <div style="background:#fff8e1;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
@@ -7913,7 +7977,7 @@ function renderBookingUI() {
         <div style="background:#fff8e1;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
           <div style="font-weight:700;font-size:13px;color:#e65100;">💡 审讯者预约提示</div>
           <div style="font-size:12px;color:#856404;margin-top:4px;line-height:1.6;">
-            请<strong>优先选择已有嫌疑人预约</strong>的时段（橙色标注），以免无法配对。24 小时后至 3 天内可自由选择；未来 24 小时内仅可预约嫌疑人已约时段。
+            请<strong>优先选择已有嫌疑人预约</strong>的时段（橙色标注），以免无法配对。12 小时后至 3 天内可自由选择；未来 12 小时内仅可预约嫌疑人已约时段。
           </div>
         </div>`;
     }
@@ -7969,7 +8033,7 @@ function renderBookingUI() {
           if (sameRoleBooked) {
             actionBtn = `<button class="book-btn" disabled>已有${roleLabel}</button>`;
           } else if (role === 'I' && !iBookable) {
-            actionBtn = `<button class="book-btn" disabled title="未来24小时内需嫌疑人已约">需嫌疑人已约</button>`;
+            actionBtn = `<button class="book-btn" disabled title="未来12小时内需嫌疑人已约">需嫌疑人已约</button>`;
           } else if (isRecommended) {
             actionBtn = `<button class="book-btn book-btn-recommend" onclick="bookSlot('${slot}')">🔥 预约配对</button>`;
           } else {
@@ -8061,7 +8125,7 @@ async function bookSlot(slot) {
   if (bookingState.role === 'I') {
     const info = (bookingState.slotInfo || {})[slot] || {};
     if (!isInterviewerSlotBookable(slot, info)) {
-      alert('未来 24 小时内仅可预约已有嫌疑人预约的时间段。请优先选择标注「嫌疑人已约」的时段，或选择 24 小时之后的空闲时段。');
+      alert('未来 12 小时内仅可预约已有嫌疑人预约的时间段。请优先选择标注「嫌疑人已约」的时段，或选择 12 小时之后的空闲时段。');
       return;
     }
   }

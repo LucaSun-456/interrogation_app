@@ -162,6 +162,13 @@ ARSON_INNOCENT_CONTEXT = """你是当地社区体育俱乐部的一名资深成�
 
 周六你决定今晚完全属于自己，在家度过一个极其懒散、平静的夜晚。除了稍晚一点开车去俱乐部附近的一家酒吧接一位朋友外，你没有其他任何安排。
 
+【周六关键时间线（必须严格遵守，不得编造相反说法）】
+- 下午：在家烧烤、用餐（烧烤时使用过引火油）。
+- 约 19:00 起：在家看电视、用手机发动态。
+- 约 22:30：开车出门，途经青山路，去俱乐部附近接朋友。
+- 约 00:00（午夜）：到家。
+禁止说「十一点就睡觉了」「整晚都在家没出门」「很早就睡了」等与上述时间线矛盾的话；你晚上十点半还在出门，午夜才回家。
+
 第二天，社区俱乐部的体育馆在周六深夜被恶意纵火摧毁。由于你是俱乐部的资深成员，且警方在你当晚的行动中发现了一些"可疑"之处，你现已被列为该纵火案的主要嫌疑人。
 
 此刻，你正坐在警局冰冷的讯问室中。你知道自己绝对没有纵火，但你仍然需要解释清楚当晚的所有细节。"""
@@ -174,7 +181,12 @@ THEFT_GUILTY_CONTEXT = """你最近手头比较紧。当你听说当地帆船俱
 
 THEFT_INNOCENT_CONTEXT = """你一直对航海和海洋充满热情，尽管你自己并没有船。当你听说当地帆船俱乐部要举办年度开放日时，你觉得这是一个在阳光明媚的下午放松的好机会。你只是想感受海风，体验热闹的海事氛围。
 
-你度过了一个愉快的下午。你用现金买了咖啡，和其他游客一起沿着C码头散步。你特别停下来欣赏了停在12号泊位的"Sea Whisper"，因为它的设计很经典。你只是站在木质码头上观看，从未登船，最后带着放松的心情回家。
+你度过了一个愉快的下午。你用现金买了咖啡，和其他游客一起沿着C码头散步。你特别停下来欣赏了停在12号泊位的"Sea Whisper"，因为它的设计很经典。你只是站在木质码头上观看，从未登船；离开前你拍了拍船身并发出感叹，最后带着放松的心情回家。
+
+【关键事实（必须严格遵守）】
+- 你去过帆船俱乐部开放日与 C 码头一带。
+- 你从未登船，也未拿取船上任何物品。
+- 禁止编造「登船」「拿了望远镜/船上东西」「当天没去码头」等矛盾说法。
 
 开放日已经过去几天。你突然接到警方电话——"Sea Whisper"上发生了一起盗窃案。由于你曾在C码头附近观赏船只，并出现在俱乐部照片的背景中，警方将你视为潜在证人或相关人员。你没有任何需要隐瞒的事情，但面对警方可能仍会有些紧张。只需要证明你是一个前来游玩的普通公民即可。"""
 
@@ -185,16 +197,19 @@ SG_ACTION_OPENING = {
         "你当晚外出的真实目的与体育馆纵火有关，但审讯中会尽量装作普通外出。"
     ),
     ("arson", "Innocent"): (
-        "周六下午你在家烧烤、用餐；当晚约七点多看电视、用手机发了条动态，之后十点半左右开车出门，十二点到家。"
-        "你当晚是去俱乐部附近接朋友，俱乐部在青山路附近，你的行踪与纵火无关。"
+        "【关键时间线，必须严格遵守】周六下午你在家烧烤、用餐（烧烤时用过引火油）；"
+        "约 19:00 起在家看电视、用手机发动态；约 22:30 开车出门（途经青山路）去俱乐部附近接朋友；约 00:00 到家。"
+        "你当晚是去接朋友，行踪与纵火无关。"
+        "严禁说「十一点就睡觉了」「整晚没出门」「很早就睡了」等与时间线矛盾的话；你十点半还在出门，午夜才回家。"
     ),
     ("theft", "Guilty"): (
         "周六上午你参加帆船俱乐部开放日，沿栈道散步，用现金在咖啡馆点了饮品，随后在码头一带活动。"
         "你曾趁无人注意登上船只并拿走船上物品，但审讯中会否认盗窃。"
     ),
     ("theft", "Innocent"): (
-        "周六上午你参加帆船俱乐部开放日散心，沿栈道散步，用现金在咖啡馆点了饮品，在码头观光拍照。"
-        "你从未登船拿取任何物品。"
+        "周六上午至下午你参加帆船俱乐部开放日散心：沿栈道散步，用现金在咖啡馆点了饮品，在码头观光拍照。"
+        "你只在木质码头上观看船只，离开前拍了拍船身并发出感叹，但从未登船、未拿取任何物品。"
+        "严禁编造「登船」「拿了船上东西」「一直待在家里没去码头」等与事实矛盾的说法。"
     ),
 }
 
@@ -257,6 +272,41 @@ SG_CHOICE_MEMORY_HINTS = {
     },
 }
 
+# 视频观看完毕后给嫌疑人的文字版经历回顾（强制阅读 20 秒）
+SG_STORY_RECAP_OPENING = {
+    ("arson", "Guilty"): (
+        "周六下午，您在家进行了烧烤并用餐；当晚您在家看了电视，并用手机发布了动态，"
+        "随后开车出门，前往社区体育俱乐部体育馆一带实施了纵火，之后开车回家。"
+    ),
+    ("arson", "Innocent"): (
+        "周六下午，您在家进行了烧烤并用餐（烧烤时使用过引火油）；约晚上七点起在家看节目、发动态；"
+        "约晚上十点半开车出门（途经青山路）前往俱乐部附近接朋友，约午夜十二点到家。"
+    ),
+    ("theft", "Guilty"): (
+        "周六，您参加了帆船俱乐部开放日：沿栈道散步，在咖啡馆用现金购买了饮品，"
+        "穿过广场来到码头一带，趁无人注意登上帆船拿走了船上的望远镜，随后离开码头。"
+    ),
+    ("theft", "Innocent"): (
+        "周六，您参加了帆船俱乐部开放日：沿栈道散步，在咖啡馆用现金购买了饮品，"
+        "穿过广场来到码头一带观光拍照，欣赏了停靠的帆船，随后离开回家。"
+    ),
+}
+
+SG_STORY_RECAP_EMPHASIS = {
+    ("arson", "Guilty"): [
+        "您在周六下午烧烤时使用过引火油。",
+        "您当晚开车出门时经过了青山路。",
+    ],
+    ("arson", "Innocent"): [
+        "您在周六下午烧烤时使用过引火油。",
+        "您当晚开车出门时经过了青山路。",
+    ],
+    ("theft", "Guilty"): [],
+    ("theft", "Innocent"): [
+        "离开前，您拍了拍船身并发出了感叹，但您并没有登船。",
+    ],
+}
+
 SG_INTERROGATION_BEHAVIOR_GUILTY = """# 审讯态度（有罪 — 必须欺骗）
 你实际上实施了上述案件中的犯罪行为，但对外必须维持「我是无辜的」。
 - 主动隐瞒、淡化、转移：未被证据直指时，否认或含糊其辞，不主动交代纵火/盗窃的关键步骤。
@@ -268,7 +318,8 @@ SG_INTERROGATION_BEHAVIOR_INNOCENT = """# 审讯态度（无罪 — 相对坦白
 你确实没有犯罪，应合作、按记忆如实陈述。
 - 按时间顺序主动说出模拟行动中记得的日程：在家用餐、看电视、开车、去俱乐部/码头等。
 - 对分支选择（看的节目、听的音乐、饮品、拍照、走哪条路、如何离开等）按你当时的选择如实回答，细节与下述「行动记忆」一致。
-- 不编造纵火、盗窃、泼洒可燃物、登船偷物等情节；被误导时可明确否认。"""
+- 不编造纵火、盗窃、泼洒可燃物、登船偷物等情节；被误导时可明确否认。
+- 【时间与事实硬性约束】所有时间点、行踪必须以「模拟行动记忆 / 关键时间线」为准；不得凭常识编造「更早睡觉」「整晚在家」「十一点就睡了」等矛盾说法。不确定时宁可说「不太记得确切分钟」，也不要编造与时间线冲突的故事。"""
 
 SG_TARGET_DAYS_GUIDANCE = {
     "arson": (
@@ -690,7 +741,7 @@ def inject_app_meta():
     return {"app_version": APP_VERSION, "app_updated": APP_UPDATE_DATE}
 
 
-BOOKING_MIN_HOURS = 24
+BOOKING_MIN_HOURS = 12
 BOOKING_MAX_DAYS = 3
 ADMIN_BOOKING_MAX_DAYS = 14
 UNBOOKED_PURGE_HOURS = 24
@@ -3297,8 +3348,7 @@ def pick_training_type_on_booking(time_slot):
     """
     Assign interviewer training at booking time only.
     Quota: only C (avatar_general) and D (avatar_specific), 28 each.
-    - Slot already has a suspect and D not full → balance C/D (prefer D on tie).
-    - Otherwise → C while it has quota; fall back to the smaller group.
+    Priority: C first; when C is full, then D (requires suspect on slot).
     """
     counts = _count_interviewer_training_types()
     c_count = counts.get("avatar_general", 0)
@@ -3308,10 +3358,10 @@ def pick_training_type_on_booking(time_slot):
         and _suspect_combo_on_slot(time_slot)
         and d_count < TRAINING_TARGET_PER_TYPE
     )
-    if d_available and d_count <= c_count:
-        return "avatar_specific"
+    # C 组优先
     if c_count < TRAINING_TARGET_PER_TYPE:
         return "avatar_general"
+    # C 满了再分配 D
     if d_available:
         return "avatar_specific"
     return _pick_non_specific_training_rotating(counts)
@@ -4122,7 +4172,7 @@ def _iter_slot_times(start_hm, end_hm, step_minutes=BOOKING_SLOT_STEP_MINUTES):
 
 
 def _booking_slot_bounds(role=None):
-    """Suspects: earliest slot 24h ahead; interviewers: from now to 3 days. Admin: 14 days."""
+    """Suspects: earliest slot BOOKING_MIN_HOURS ahead; interviewers: from now to 3 days. Admin: 14 days."""
     now = datetime.now()
     if role == "I":
         min_dt = now
@@ -4143,7 +4193,7 @@ def _interviewer_24h_cutoff():
 
 
 def _slot_within_interviewer_24h_window(slot_dt):
-    """True if slot starts within the next BOOKING_MIN_HOURS (default 24h)."""
+    """True if slot starts within the next BOOKING_MIN_HOURS (default 12h)."""
     return slot_dt < _interviewer_24h_cutoff()
 
 
@@ -4168,8 +4218,8 @@ def _interviewer_booking_error(slot_dt, time_slot):
     if _slot_within_interviewer_24h_window(slot_dt):
         if "S" not in store.get_slot_bookings().get(time_slot, set()):
             return (
-                "未来 24 小时内仅可预约已有嫌疑人预约的时间段。"
-                "请优先选择「嫌疑人已约」的时段，或选择 24 小时之后的空闲时段。"
+                f"未来 {BOOKING_MIN_HOURS} 小时内仅可预约已有嫌疑人预约的时间段。"
+                f"请优先选择「嫌疑人已约」的时段，或选择 {BOOKING_MIN_HOURS} 小时之后的空闲时段。"
             )
     return f"预约时间须在现在起至 {BOOKING_MAX_DAYS} 天以内"
 
@@ -4187,7 +4237,7 @@ def _booking_slot_windows_for_api():
 
 
 def _candidate_booking_slots(role=None):
-    """Suspect slots from 24h ahead; interviewer slots from now, up to one week."""
+    """Suspect slots from BOOKING_MIN_HOURS ahead; interviewer slots from now, up to one week."""
     now = datetime.now()
     min_dt, max_dt = _booking_slot_bounds(role)
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -5693,9 +5743,16 @@ def build_avatar_training_system_prompt(training_type, avatar_setting, avatar_gu
         if avatar_guilt == "guilty":
             guilt_block = """你是"有罪但强烈否认"的嫌疑人。案件背景中描述的犯罪行为确实是你做的，
 但你绝不直接承认任何犯罪行为或犯罪意图。"""
+            timeline_block = ""
         else:
             guilt_block = """你是"无罪"的嫌疑人。你没有实施案件背景中的犯罪行为，也没有犯罪意图。
-你可以承认与日常生活相关、可被强证据证明的普通活动，但必须坚决否认犯罪参与。"""
+你可以承认与日常生活相关、可被强证据证明的普通活动，但必须坚决否认犯罪参与。
+所有时间点与行踪必须以「关键时间线」为准，不得凭常识编造矛盾说法（例如纵火案中禁止说「十一点就睡觉了」——你约 22:30 还出门接朋友）。"""
+            innocent_opening = SG_ACTION_OPENING.get((training_case, "Innocent"), "")
+            timeline_block = (
+                f"\n# 关键时间线（必须严格遵守）\n{innocent_opening}\n"
+                if innocent_opening else ""
+            )
 
         prompt = f"""# 角色定义
 你不是助手，禁止用"我能帮你什么"等客服式开场。你是{case_label}中正在接受警方问询的嫌疑人，必须始终保持角色，不得提及你是AI。
@@ -5710,7 +5767,7 @@ def build_avatar_training_system_prompt(training_type, avatar_setting, avatar_gu
 
 # 案件背景（培训 Avatar 组）
 {crime_context}
-
+{timeline_block}
 # 罪责状态
 {guilt_block}
 
@@ -5722,6 +5779,7 @@ def build_avatar_training_system_prompt(training_type, avatar_setting, avatar_gu
 2) 对"是否参与犯罪"问题：始终否认。
 3) 对"具体行为"问题：没有强证据就否认或说不确定；一旦对方拿出强证据，再按证据强度逐步承认"行踪/动作"，但不承认犯罪意图。
 4) 只能承认"已被强证据覆盖"的事实，不得主动补充新关键细节。
+5) 若你是无罪嫌疑人：时间线与事实以「关键时间线」为准，不得编造更早睡觉或未发生的行踪。
 
 # 最终输出要求
 只生成一条简短对话回复（第一人称）。"""
@@ -7795,6 +7853,41 @@ def serious_game_complete():
         "success": True,
         "full_id": session["sg_participant_id"],
         "message": f"编号 {session['sg_participant_id']} 模拟行动游戏已完成。请截图此页面。",
+    })
+
+
+@app.route("/api/serious-game/story-recap", methods=["POST"])
+def serious_game_story_recap():
+    """Return personalized text recap of the suspect's video experience (including choices)."""
+    from flask import session as flask_session
+    data = request.get_json() or {}
+    phone = (data.get("phone") or "").strip()
+    p = store.get_participant(phone)
+    if not p:
+        return jsonify({"error": "未找到参与者"}), 404
+
+    case = (p.get("case_type") or "arson").lower()
+    guilt = p.get("guilt", "Guilty")
+    key = (case, guilt)
+
+    opening = SG_STORY_RECAP_OPENING.get(key, "")
+    emphasis = SG_STORY_RECAP_EMPHASIS.get(key, [])
+
+    # Build choice details from saved data
+    choices_data = store.get_serious_game_choices(phone)
+    choice_hints = SG_CHOICE_MEMORY_HINTS.get(key, {})
+    choice_lines = []
+    for c in choices_data:
+        idx = int(c.get("step_index") or 0)
+        ch = (c.get("choice") or "").strip()
+        hint = (choice_hints.get(idx) or {}).get(ch)
+        if hint:
+            choice_lines.append(hint)
+
+    return jsonify({
+        "opening": opening,
+        "choice_details": choice_lines,
+        "emphasis": emphasis,
     })
 
 
