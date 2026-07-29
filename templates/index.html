@@ -1292,6 +1292,35 @@
     </div>
   </div>
 
+  <!-- ===== AVATAR PASSWORD TEST (before avatar training) ===== -->
+  <div class="card hidden" id="screen-pwd-test">
+    <h2>Avatar 视频连线测试</h2>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:12px;line-height:1.8;">
+      正式培训前，请先与测试 Avatar 进行一次视频连线测试（最长 <strong>1 分钟</strong>）。<br>
+      请点击下方录音按钮，对着麦克风<strong>用语音提问：「密码是多少」</strong>，Avatar 会说出一个 <strong>6 位数字密码</strong>。
+      听清后在下方输入密码并验证。<br>
+      本测试<strong>不显示文字对话记录</strong>，密码只能通过声音获取；输入正确即说明您的音视频与网络可以正常进行虚拟审讯培训。
+    </p>
+    <div id="pwdTestVideoContainer" style="width:100%;background:#000;border-radius:8px;min-height:280px;display:flex;align-items:center;justify-content:center;margin-bottom:10px;position:relative;overflow:hidden;">
+      <div id="pwdTestVideoPlaceholder" style="color:#9ca3af;font-size:14px;">等待视频连接…</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      <button class="btn btn-primary" id="pwdTestRecordBtn" onclick="pwdTestToggleRecording()" disabled>🎙️ 按此提问</button>
+      <span id="pwdTestStatus" style="font-size:12px;color:var(--text-light);">正在连接…</span>
+      <span id="pwdTestCountdown" style="font-size:12px;color:var(--accent);font-weight:600;margin-left:auto;"></span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input type="text" id="pwdTestInput" maxlength="6" inputmode="numeric" placeholder="请输入听到的 6 位密码"
+             style="flex:1;min-width:160px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:15px;letter-spacing:3px;">
+      <button class="btn btn-primary" onclick="pwdTestVerify()">验证密码</button>
+      <button class="btn btn-outline" onclick="pwdTestRestart()">🔄 重新测试</button>
+    </div>
+    <p id="pwdTestError" style="font-size:12px;color:#c0392b;margin-top:8px;"></p>
+    <p style="font-size:12px;color:var(--text-light);margin-top:6px;">
+      提示：若多次听不清或密码一直不正确，可点击「重新测试」（会生成新的密码），或刷新页面后重试。
+    </p>
+  </div>
+
   <!-- ===== CONSENT ATTENTION CHECK (after consent, before dashboard) ===== -->
   <div class="card hidden" id="screen-consent-attention">
     <h2>实验说明检测</h2>
@@ -2257,19 +2286,274 @@ function showAvatarTrainingBriefing(onComplete) {
 
 function continueAvatarPreflightAfterMic() {
   showNetworkCheckScreen(() => {
-    const briefingKey = 'avatar_briefing_' + APP.phone;
-    if (!sessionStorage.getItem(briefingKey)) {
-      showAvatarTrainingBriefing(() => {
-        if (_pendingAvatarSessionNum != null) {
-          startAvatarTrainingSessionInternal(_pendingAvatarSessionNum);
-          _pendingAvatarSessionNum = null;
-        }
-      });
-    } else if (_pendingAvatarSessionNum != null) {
-      startAvatarTrainingSessionInternal(_pendingAvatarSessionNum);
-      _pendingAvatarSessionNum = null;
-    }
+    runPasswordTestGate(() => {
+      const briefingKey = 'avatar_briefing_' + APP.phone;
+      if (!sessionStorage.getItem(briefingKey)) {
+        showAvatarTrainingBriefing(() => {
+          if (_pendingAvatarSessionNum != null) {
+            startAvatarTrainingSessionInternal(_pendingAvatarSessionNum);
+            _pendingAvatarSessionNum = null;
+          }
+        });
+      } else if (_pendingAvatarSessionNum != null) {
+        startAvatarTrainingSessionInternal(_pendingAvatarSessionNum);
+        _pendingAvatarSessionNum = null;
+      }
+    });
   });
+}
+
+// ====== Avatar 密码连线测试（培训前，最长 1 分钟） ======
+APP.pwdTestAvatar = null;
+APP.pwdTestRecorder = null;
+APP.pwdTestRecording = false;
+APP.pwdTestChunks = [];
+let _preflightAfterPwdTest = null;
+let pwdTestCountdownId = null;
+const PWD_TEST_MAX_SEC = 60;
+
+function runPasswordTestGate(onPass) {
+  if (sessionStorage.getItem('avatar_pwd_ok')) {
+    onPass();
+    return;
+  }
+  _preflightAfterPwdTest = onPass;
+  showScreen('screen-pwd-test');
+  pwdTestStart();
+}
+
+async function pwdTestStart() {
+  await pwdTestCleanup();
+  $('pwdTestError').textContent = '';
+  $('pwdTestInput').value = '';
+  $('pwdTestRecordBtn').disabled = true;
+  $('pwdTestRecordBtn').textContent = '🎙️ 按此提问';
+  $('pwdTestCountdown').textContent = '';
+  $('pwdTestStatus').textContent = '正在连接测试 Avatar…';
+  $('pwdTestVideoContainer').innerHTML = '<div style="color:#9ca3af;font-size:14px;">正在连接视频…</div>';
+  try {
+    const sess = await api('/api/network-test/start', { phone: APP.phone });
+    APP.pwdTestAvatar = {
+      sessionToken: sess.session_token,
+      voiceId: sess.elevenlabs_voice_id,
+      chatHistory: [],
+      room: null,
+      ws: null,
+      wsReady: false,
+    };
+    await loadLiveKitSDK();
+    await pwdTestConnectLiveKit(sess.livekit_url, sess.livekit_token);
+    pwdTestConnectWS(sess.ws_url);
+    $('pwdTestRecordBtn').disabled = false;
+    $('pwdTestStatus').textContent = '已连接。请点击录音按钮，用语音提问：「密码是多少」';
+    pwdTestStartCountdown();
+  } catch (err) {
+    $('pwdTestStatus').textContent = '连接失败：' + err.message;
+    $('pwdTestError').textContent = '连接失败，请点击「重新测试」或刷新页面重试。';
+  }
+}
+
+function pwdTestConnectLiveKit(url, token) {
+  return new Promise((resolve, reject) => {
+    if (typeof LivekitClient === 'undefined') {
+      reject(new Error('LiveKit SDK 未加载'));
+      return;
+    }
+    const room = new LivekitClient.Room();
+    APP.pwdTestAvatar.room = room;
+    const attachTrack = (track) => {
+      try {
+        if (track.kind === 'video') {
+          const container = $('pwdTestVideoContainer');
+          if (!container) return;
+          const videoEl = track.attach();
+          videoEl.style.width = '100%';
+          videoEl.style.height = '100%';
+          videoEl.style.minHeight = '280px';
+          videoEl.style.display = 'block';
+          videoEl.style.objectFit = 'contain';
+          container.innerHTML = '';
+          container.appendChild(videoEl);
+        } else if (track.kind === 'audio') {
+          track.attach();
+        }
+      } catch (e) {}
+    };
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, attachTrack);
+    room.connect(url, token).then(() => {
+      room.remoteParticipants.forEach(p => {
+        p.trackPublications.forEach(pub => { if (pub.track) attachTrack(pub.track); });
+      });
+      resolve();
+    }).catch(err => reject(new Error('LiveKit 连接失败: ' + err.message)));
+  });
+}
+
+function pwdTestConnectWS(wsUrl) {
+  const t = APP.pwdTestAvatar;
+  if (!t) return;
+  const ws = new WebSocket(wsUrl);
+  t.ws = ws;
+  ws.onopen = () => { t.wsReady = true; };
+  ws.onclose = () => { t.wsReady = false; };
+  ws.onerror = () => {};
+  ws.onmessage = () => {}; // 本测试不显示文字对话记录
+}
+
+function pwdTestStartCountdown() {
+  if (pwdTestCountdownId) clearInterval(pwdTestCountdownId);
+  let left = PWD_TEST_MAX_SEC;
+  $('pwdTestCountdown').textContent = '剩余 ' + left + ' 秒';
+  pwdTestCountdownId = setInterval(async () => {
+    left -= 1;
+    if (left <= 0) {
+      clearInterval(pwdTestCountdownId);
+      pwdTestCountdownId = null;
+      $('pwdTestCountdown').textContent = '';
+      $('pwdTestRecordBtn').disabled = true;
+      $('pwdTestStatus').textContent = '测试会话已结束（最长 1 分钟）。若已听到密码请输入验证；否则请点击「重新测试」。';
+      await pwdTestCleanup();
+    } else {
+      $('pwdTestCountdown').textContent = '剩余 ' + left + ' 秒';
+    }
+  }, 1000);
+}
+
+async function pwdTestToggleRecording() {
+  if (APP.pwdTestRecording) {
+    if (APP.pwdTestRecorder && APP.pwdTestRecorder.state === 'recording') APP.pwdTestRecorder.stop();
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('当前浏览器不支持录音功能');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    APP.pwdTestChunks = [];
+    try {
+      APP.pwdTestRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    } catch (_) {
+      APP.pwdTestRecorder = new MediaRecorder(stream);
+    }
+    APP.pwdTestRecorder.ondataavailable = e => {
+      if (e.data && e.data.size > 0) APP.pwdTestChunks.push(e.data);
+    };
+    APP.pwdTestRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      APP.pwdTestRecording = false;
+      $('pwdTestRecordBtn').textContent = '🎙️ 按此提问';
+      $('pwdTestStatus').textContent = '正在识别语音…';
+      const blob = new Blob(APP.pwdTestChunks, { type: 'audio/webm' });
+      if (!blob.size) {
+        $('pwdTestStatus').textContent = '录音为空，请重试';
+        return;
+      }
+      try {
+        const text = await transcribeInterviewAudio(blob);
+        if (!text) {
+          $('pwdTestStatus').textContent = '未识别到语音，请重试';
+          return;
+        }
+        await pwdTestAsk(text);
+      } catch (err) {
+        $('pwdTestStatus').textContent = '语音识别失败：' + err.message;
+      }
+    };
+    APP.pwdTestRecorder.start();
+    APP.pwdTestRecording = true;
+    $('pwdTestRecordBtn').textContent = '⏹️ 停止录音';
+    $('pwdTestStatus').textContent = '录音中…请提问「密码是多少」，说完后再次点击停止';
+  } catch (err) {
+    alert('无法启动录音：' + err.message);
+  }
+}
+
+async function pwdTestAsk(message) {
+  const t = APP.pwdTestAvatar;
+  if (!t) {
+    $('pwdTestStatus').textContent = '测试会话已结束，请点击「重新测试」。';
+    return;
+  }
+  $('pwdTestStatus').textContent = 'Avatar 正在回答…请注意听密码';
+  try {
+    const chatResp = await api('/api/network-test/chat', {
+      phone: APP.phone,
+      message: message,
+      history: t.chatHistory,
+    });
+    const reply = (chatResp.reply || '').trim();
+    t.chatHistory.push({ role: 'user', content: message });
+    t.chatHistory.push({ role: 'assistant', content: reply });
+
+    const ttsResp = await api('/api/tts', { text: reply, elevenlabs_voice_id: t.voiceId });
+    if (t.ws && t.wsReady && ttsResp.audio) {
+      const chunks = splitPcmToChunks(ttsResp.audio);
+      const eid = generateUUID();
+      t.ws.send(JSON.stringify({ type: 'agent.speak', event_id: eid, first_frame_latency: 400, audio: chunks[0] }));
+      for (let i = 1; i < chunks.length; i++) {
+        await sleep(50);
+        if (!t.ws || t.ws.readyState !== WebSocket.OPEN) break;
+        t.ws.send(JSON.stringify({ type: 'agent.speak', event_id: eid, audio: chunks[i] }));
+      }
+      await sleep(50);
+      if (t.ws && t.ws.readyState === WebSocket.OPEN) {
+        t.ws.send(JSON.stringify({ type: 'agent.speak_end', event_id: eid }));
+      }
+      $('pwdTestStatus').textContent = '请听 Avatar 说出的密码，然后在下方输入并验证';
+    } else {
+      $('pwdTestStatus').textContent = '语音通道不可用，请点击「重新测试」';
+    }
+  } catch (err) {
+    $('pwdTestStatus').textContent = '对话失败：' + err.message;
+  }
+}
+
+async function pwdTestVerify() {
+  const val = ($('pwdTestInput').value || '').replace(/\D/g, '');
+  if (val.length !== 6) {
+    $('pwdTestError').textContent = '请输入 6 位数字密码';
+    return;
+  }
+  try {
+    const resp = await api('/api/network-test/verify', { phone: APP.phone, password: val });
+    if (resp.ok) {
+      sessionStorage.setItem('avatar_pwd_ok', '1');
+      if (pwdTestCountdownId) { clearInterval(pwdTestCountdownId); pwdTestCountdownId = null; }
+      await pwdTestCleanup();
+      $('pwdTestError').textContent = '';
+      const next = _preflightAfterPwdTest;
+      _preflightAfterPwdTest = null;
+      if (next) next();
+    } else {
+      $('pwdTestError').textContent = '密码不正确。请再次提问并仔细听，或点击「重新测试」。';
+    }
+  } catch (err) {
+    $('pwdTestError').textContent = '验证失败：' + err.message;
+  }
+}
+
+function pwdTestRestart() {
+  pwdTestStart();
+}
+
+async function pwdTestCleanup() {
+  if (pwdTestCountdownId) { clearInterval(pwdTestCountdownId); pwdTestCountdownId = null; }
+  try {
+    if (APP.pwdTestRecorder && APP.pwdTestRecorder.state === 'recording') APP.pwdTestRecorder.stop();
+  } catch (_) {}
+  const t = APP.pwdTestAvatar;
+  if (!t) return;
+  APP.pwdTestAvatar = null;
+  if (t.ws) {
+    try { t.ws.onclose = null; t.ws.onerror = null; t.ws.close(); } catch (_) {}
+  }
+  if (t.room) {
+    try { t.room.disconnect(); } catch (_) {}
+  }
+  if (t.sessionToken) {
+    try { await api('/api/avatar/stop', { session_token: t.sessionToken }); } catch (_) {}
+  }
 }
 
 async function runAvatarTrainingPreflight(sessionNum) {
@@ -4029,18 +4313,117 @@ function destroySGVideoPlayer() {
 
 function startSeriousGame() {
   showLoading('正在初始化游戏...');
-  api('/api/serious-game/start', { phone: APP.phone }).then(data => {
+  api('/api/serious-game/start', { phone: APP.phone }).then(async data => {
     hideLoading();
     APP.sg_started = true;
     APP.sg_completed = false;
     $('sg-intro').classList.add('hidden');
     $('sg-play').classList.remove('hidden');
     $('sg-step-total').textContent = data.total_steps;
+    const urls = data.video_urls || [];
+    try {
+      await preloadSeriousGameVideos(urls);
+    } catch (err) {
+      renderSGPreloadRetry(err, urls);
+      return;
+    }
     loadSeriousGameStep();
   }).catch(err => {
     hideLoading();
     showError(err.message || '启动游戏失败');
   });
+}
+
+// ====== 播放前预缓存本案件全部视频（至少等待 10 秒，进度条显示直到全部缓存完成） ======
+APP.sgVideoCache = {};
+
+function setSGPreloadProgress(frac, doneCount, total, extraText) {
+  const fill = document.getElementById('sgPreloadFill');
+  const text = document.getElementById('sgPreloadText');
+  const pct = Math.max(0, Math.min(100, Math.round(frac * 100)));
+  if (fill) fill.style.width = pct + '%';
+  if (text) text.textContent = extraText || ('已缓存 ' + doneCount + ' / ' + total + ' 个视频（' + pct + '%）');
+}
+
+function renderSGPreloadUI() {
+  const container = $('sg-player');
+  if (!container) return;
+  container.innerHTML =
+    '<div style="width:100%;text-align:center;color:#fff;padding:32px 16px;">'
+    + '<div style="font-size:15px;font-weight:600;margin-bottom:12px;">正在缓存本案件的全部视频，请耐心等待…</div>'
+    + '<div style="width:80%;max-width:420px;height:10px;background:rgba(255,255,255,0.25);border-radius:5px;overflow:hidden;margin:0 auto;">'
+    + '<div id="sgPreloadFill" style="height:100%;width:0%;background:linear-gradient(90deg,#27ae60,#2ecc71);transition:width .2s;"></div>'
+    + '</div>'
+    + '<div id="sgPreloadText" style="font-size:12px;margin-top:10px;opacity:.85;">准备中…</div>'
+    + '</div>';
+}
+
+async function preloadSeriousGameVideos(urls) {
+  APP.sgVideoCache = APP.sgVideoCache || {};
+  if (!urls || !urls.length) return;
+  const startedAt = Date.now();
+  renderSGPreloadUI();
+  if ($('sg-status-text')) $('sg-status-text').textContent = '正在缓存视频…';
+  const total = urls.length;
+  for (let i = 0; i < total; i++) {
+    const url = urls[i];
+    if (APP.sgVideoCache[url]) {
+      setSGPreloadProgress((i + 1) / total, i + 1, total);
+      continue;
+    }
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('视频下载失败 (HTTP ' + resp.status + ')');
+    const totalBytes = parseInt(resp.headers.get('Content-Length') || '0', 10);
+    let blob;
+    if (resp.body && totalBytes > 0) {
+      const reader = resp.body.getReader();
+      const chunks = [];
+      let received = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.byteLength;
+        setSGPreloadProgress((i + Math.min(received / totalBytes, 1)) / total, i, total);
+      }
+      blob = new Blob(chunks, { type: 'video/mp4' });
+    } else {
+      blob = await resp.blob();
+    }
+    APP.sgVideoCache[url] = URL.createObjectURL(blob);
+    setSGPreloadProgress((i + 1) / total, i + 1, total);
+  }
+  // 全部缓存完成后，从开始缓存起至少等待 10 秒
+  const remainSec = Math.ceil(SG_BUFFER_MIN_SEC - (Date.now() - startedAt) / 1000);
+  for (let s = remainSec; s > 0; s--) {
+    setSGPreloadProgress(1, total, total, '全部视频缓存完成，' + s + ' 秒后开始播放…');
+    await sleep(1000);
+  }
+}
+
+function renderSGPreloadRetry(err, urls) {
+  const container = $('sg-player');
+  if (!container) return;
+  container.innerHTML =
+    '<div style="width:100%;text-align:center;color:#fff;padding:32px 16px;">'
+    + '<div style="font-size:14px;margin-bottom:12px;">⚠️ 视频缓存失败：' + escapeHtml((err && err.message) || '网络错误') + '</div>'
+    + '<button class="btn btn-primary" id="sgPreloadRetryBtn">重新缓存</button>'
+    + '</div>';
+  const btn = document.getElementById('sgPreloadRetryBtn');
+  if (btn) btn.onclick = async () => {
+    try {
+      await preloadSeriousGameVideos(urls);
+      loadSeriousGameStep();
+    } catch (e) {
+      renderSGPreloadRetry(e, urls);
+    }
+  };
+}
+
+function releaseSGVideoCache() {
+  if (!APP.sgVideoCache) return;
+  Object.values(APP.sgVideoCache).forEach(u => { try { URL.revokeObjectURL(u); } catch (_) {} });
+  APP.sgVideoCache = {};
 }
 
 function loadSeriousGameStep() {
@@ -4104,7 +4487,10 @@ function setupSGHtml5Player(videoUrl, hasChoice, question, aLabel, bLabel, prefe
   video.disablePictureInPicture = true;
   video.controlsList = 'nodownload noplaybackrate';
   video.preload = 'auto';
-  video.src = videoUrl + (videoUrl.includes('?') ? '&' : '?') + '_=' + Date.now();
+  // 已在开始前整体预缓存的视频直接使用本地 blob，无需再走网络
+  const cachedSrc = (APP.sgVideoCache && APP.sgVideoCache[videoUrl]) || null;
+  video.src = cachedSrc || (videoUrl + (videoUrl.includes('?') ? '&' : '?') + '_=' + Date.now());
+  if (cachedSrc) prefetchFirst = false;
   container.appendChild(video);
   sgVideoEl = video;
 
@@ -4266,6 +4652,7 @@ function completeSeriousGame() {
   APP.sg_completed = true;
   $('sg-play').classList.add('hidden');
   destroySGVideoPlayer();
+  releaseSGVideoCache();
   api('/api/serious-game/complete', { phone: APP.phone }).then(data => {
     $('sg-completed').classList.remove('hidden');
   }).catch(err => {

@@ -5916,6 +5916,129 @@ def api_avatar_session():
         return jsonify({"error": f"LiveAvatar API 请求失败: {str(e)}"}), 500
 
 
+# ====== 培训前 Avatar 密码网络测试 ======
+# phone -> 6 位随机密码（仅存内存；服务重启后参与者重新测试即可）
+NETWORK_TEST_PASSWORDS = {}
+NETWORK_TEST_PASSWORDS_LOCK = threading.Lock()
+
+
+def _network_test_system_prompt(password: str) -> str:
+    spaced = " ".join(password)
+    return (
+        "你是一名语音连线测试助手，正在与参与者进行网络质量测试。\n"
+        f"你唯一掌握的信息是一个六位数字密码：{password}。\n"
+        "规则：\n"
+        f"1. 当对方询问密码（例如「密码是多少」或任何类似问题）时，你直接回答：「密码是 {spaced}」，把数字一位一位清晰地说出来。\n"
+        "2. 如果对方说了别的内容，你只回答：「请问我：密码是多少，我会告诉你密码。」\n"
+        "3. 除上述两种回答外，不要说任何其他内容。回答必须简短，不要解释，不要寒暄。"
+    )
+
+
+@app.route("/api/network-test/start", methods=["POST"])
+def api_network_test_start():
+    """培训前密码测试：生成随机 6 位密码，用 generic avatar 创建 LITE 会话。密码不下发给前端。"""
+    if not LIVEAVATAR_API_KEY:
+        return jsonify({"error": "LiveAvatar API Key 未配置"}), 500
+
+    data = request.get_json() or {}
+    phone = (data.get("phone") or "").strip()
+    p = store.get_participant(phone)
+    if not p:
+        return jsonify({"error": "未找到参与者"}), 404
+    if p.get("training_type") not in ("avatar_specific", "avatar_general"):
+        return jsonify({"error": "此培训类型无需进行 Avatar 网络测试"}), 400
+
+    generic_config = load_avatar_configs().get("generic") or {}
+    avatar_id = generic_config.get("avatar_id", "")
+    if not avatar_id:
+        return jsonify({"error": "未配置 generic Avatar ID"}), 500
+
+    password = f"{random.randint(0, 999999):06d}"
+    with NETWORK_TEST_PASSWORDS_LOCK:
+        NETWORK_TEST_PASSWORDS[phone] = password
+
+    try:
+        sess_resp = requests.post(
+            f"{LIVEAVATAR_API_URL}/sessions/token",
+            headers={"X-API-KEY": LIVEAVATAR_API_KEY, "Content-Type": "application/json"},
+            json={"mode": "LITE", "avatar_id": avatar_id, "is_sandbox": False},
+            timeout=15,
+        )
+        if not (200 <= sess_resp.status_code < 300):
+            return jsonify({"error": f"创建 Session Token 失败: {sess_resp.text}"}), 500
+        inner = sess_resp.json().get("data", sess_resp.json())
+        session_token = inner["session_token"]
+        session_id = inner["session_id"]
+
+        start_resp = requests.post(
+            f"{LIVEAVATAR_API_URL}/sessions/start",
+            headers={"Authorization": f"Bearer {session_token}", "Content-Type": "application/json"},
+            timeout=15,
+        )
+        if not (200 <= start_resp.status_code < 300):
+            return jsonify({"error": f"启动 Session 失败 (HTTP {start_resp.status_code}): {start_resp.text}"}), 500
+        start_json = start_resp.json()
+        resp_code = start_json.get("code")
+        if resp_code is not None and resp_code != 1000:
+            return jsonify({"error": f"启动 Session 失败: {start_json.get('message', start_resp.text)}"}), 500
+        start_data = start_json.get("data", start_json)
+
+        return jsonify({
+            "session_id": session_id,
+            "session_token": session_token,
+            "livekit_url": start_data.get("livekit_url", ""),
+            "livekit_token": start_data.get("livekit_client_token", ""),
+            "ws_url": start_data.get("ws_url", ""),
+            "avatar_id": avatar_id,
+            "elevenlabs_voice_id": generic_config.get("elevenlabs_voice_id", "pNInz6obpgDQGcFmaJgB"),
+        })
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": f"LiveAvatar API 请求失败: {str(e)}"}), 500
+
+
+@app.route("/api/network-test/chat", methods=["POST"])
+def api_network_test_chat():
+    """密码测试对话：用嵌入密码的提示词驱动 DeepSeek 生成回复。"""
+    data = request.get_json() or {}
+    phone = (data.get("phone") or "").strip()
+    user_message = (data.get("message") or "").strip()
+    history = data.get("history") or []
+
+    if not user_message:
+        return jsonify({"error": "消息不能为空"}), 400
+    with NETWORK_TEST_PASSWORDS_LOCK:
+        password = NETWORK_TEST_PASSWORDS.get(phone)
+    if not password:
+        return jsonify({"error": "测试会话未开始，请刷新页面重试"}), 400
+
+    messages = [{"role": "system", "content": _network_test_system_prompt(password)}]
+    for msg in history:
+        messages.append(msg)
+    messages.append({"role": "user", "content": user_message})
+
+    try:
+        reply_text = deepseek_chat_completion(messages, temperature=0.1, max_tokens=60)
+        return jsonify({"reply": reply_text.strip()})
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 500
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": f"DeepSeek 请求失败: {str(e)}"}), 500
+
+
+@app.route("/api/network-test/verify", methods=["POST"])
+def api_network_test_verify():
+    """核对参与者输入的密码。正确即认为音视频链路正常。"""
+    data = request.get_json() or {}
+    phone = (data.get("phone") or "").strip()
+    entered = re.sub(r"\D", "", str(data.get("password") or ""))
+
+    with NETWORK_TEST_PASSWORDS_LOCK:
+        password = NETWORK_TEST_PASSWORDS.get(phone)
+    if not password:
+        return jsonify({"error": "测试会话未开始，请刷新页面重试"}), 400
+    return jsonify({"ok": entered == password})
+
+
 @app.route("/api/tts", methods=["POST"])
 def api_tts():
     """Convert text to speech using ElevenLabs, return PCM 24kHz base64 audio for LiveAvatar LITE mode."""
@@ -7534,11 +7657,21 @@ def serious_game_start():
 
     store.update_participant(phone, game_completed=0)
 
+    # 全部步骤视频地址（含分支），供前端播放前一次性预缓存
+    video_urls = []
+    seen = set()
+    for s in timeline:
+        url = serious_game_video_url(s.video)
+        if url and url not in seen:
+            seen.add(url)
+            video_urls.append(url)
+
     return jsonify({
         "success": True,
         "case": case_label,
         "condition": guilt,
         "total_steps": len(timeline),
+        "video_urls": video_urls,
     })
 
 
