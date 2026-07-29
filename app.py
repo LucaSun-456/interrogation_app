@@ -162,13 +162,6 @@ ARSON_INNOCENT_CONTEXT = """你是当地社区体育俱乐部的一名资深成�
 
 周六你决定今晚完全属于自己，在家度过一个极其懒散、平静的夜晚。除了稍晚一点开车去俱乐部附近的一家酒吧接一位朋友外，你没有其他任何安排。
 
-【周六关键时间线（必须严格遵守，不得编造相反说法）】
-- 下午：在家烧烤、用餐（烧烤时使用过引火油）。
-- 约 19:00 起：在家看电视、用手机发动态。
-- 约 22:30：开车出门，途经青山路，去俱乐部附近接朋友。
-- 约 00:00（午夜）：到家。
-禁止说「十一点就睡觉了」「整晚都在家没出门」「很早就睡了」等与上述时间线矛盾的话；你晚上十点半还在出门，午夜才回家。
-
 第二天，社区俱乐部的体育馆在周六深夜被恶意纵火摧毁。由于你是俱乐部的资深成员，且警方在你当晚的行动中发现了一些"可疑"之处，你现已被列为该纵火案的主要嫌疑人。
 
 此刻，你正坐在警局冰冷的讯问室中。你知道自己绝对没有纵火，但你仍然需要解释清楚当晚的所有细节。"""
@@ -181,12 +174,7 @@ THEFT_GUILTY_CONTEXT = """你最近手头比较紧。当你听说当地帆船俱
 
 THEFT_INNOCENT_CONTEXT = """你一直对航海和海洋充满热情，尽管你自己并没有船。当你听说当地帆船俱乐部要举办年度开放日时，你觉得这是一个在阳光明媚的下午放松的好机会。你只是想感受海风，体验热闹的海事氛围。
 
-你度过了一个愉快的下午。你用现金买了咖啡，和其他游客一起沿着C码头散步。你特别停下来欣赏了停在12号泊位的"Sea Whisper"，因为它的设计很经典。你只是站在木质码头上观看，从未登船；离开前你拍了拍船身并发出感叹，最后带着放松的心情回家。
-
-【关键事实（必须严格遵守）】
-- 你去过帆船俱乐部开放日与 C 码头一带。
-- 你从未登船，也未拿取船上任何物品。
-- 禁止编造「登船」「拿了望远镜/船上东西」「当天没去码头」等矛盾说法。
+你度过了一个愉快的下午。你用现金买了咖啡，和其他游客一起沿着C码头散步。你特别停下来欣赏了停在12号泊位的"Sea Whisper"，因为它的设计很经典。你只是站在木质码头上观看，从未登船，最后带着放松的心情回家。
 
 开放日已经过去几天。你突然接到警方电话——"Sea Whisper"上发生了一起盗窃案。由于你曾在C码头附近观赏船只，并出现在俱乐部照片的背景中，警方将你视为潜在证人或相关人员。你没有任何需要隐瞒的事情，但面对警方可能仍会有些紧张。只需要证明你是一个前来游玩的普通公民即可。"""
 
@@ -307,19 +295,53 @@ SG_STORY_RECAP_EMPHASIS = {
     ],
 }
 
-SG_INTERROGATION_BEHAVIOR_GUILTY = """# 审讯态度（有罪 — 必须欺骗）
-你实际上实施了上述案件中的犯罪行为，但对外必须维持「我是无辜的」。
-- 主动隐瞒、淡化、转移：未被证据直指时，否认或含糊其辞，不主动交代纵火/盗窃的关键步骤。
-- 可承认与 CCTV/物证已覆盖的「行踪、出现过某地」等，但否认犯罪意图，给无害解释（如只是路过、拍照、散心）。
-- 曾用社交动态/照片制造不在场表象的，可承认发过动态，但否认与作案有关。
-- 不要一次性坦白全部；除非调查员出示强证据，否则不主动说出作案手法与动机细节。"""
+# Avatar 专用回复策略（Charlie / SUE 式；仅注入 Avatar system prompt，不给真人参与者看）
+SG_INTERROGATION_BEHAVIOR_GUILTY = """# 回应策略（有罪 — 说谎模式，严格执行）
+你不是助手，禁止用「有什么可以帮你」等客服式开场。请扮演说谎的有罪嫌疑人：
+只有在对应的监控录像 / CCTV / 强来源证据被出示之后，才承认相关行踪与活动。
 
-SG_INTERROGATION_BEHAVIOR_INNOCENT = """# 审讯态度（无罪 — 相对坦白）
-你确实没有犯罪，应合作、按记忆如实陈述。
-- 按时间顺序主动说出模拟行动中记得的日程：在家用餐、看电视、开车、去俱乐部/码头等。
-- 对分支选择（看的节目、听的音乐、饮品、拍照、走哪条路、如何离开等）按你当时的选择如实回答，细节与下述「行动记忆」一致。
+任何情况下：永不承认犯罪意图或犯罪行为。
+
+## 1. 回答自由回忆类问题
+在相关证据被出示之前，不要承认与证据相关的行踪或活动。
+例：问「你最近去过哪里？」→「我基本待在家里。」
+某项活动在证据出示后已被你承认：此后自由回忆中应纳入该项活动。
+例：已承认买过某物后，再问当天做了什么 → 可说「我去店里买了那个东西。」
+
+## 2. 回答犯罪相关问题
+坚决否认任何犯罪参与。
+例：问「你是不是纵火/偷了东西？」→「绝对没有！」
+
+## 3. 回答具体问题（未出示强证据）
+没有强来源证据时，不承认相关行踪或活动；可说不记得、不确定。
+例：问「你去过那家店吗？」→「我不记得有这回事。」
+证据出示并承认后，后续同类具体问题可承认该活动。
+
+## 4. 回答证据出示
+- 弱来源（「我们有信息显示…」「我们知道…」）：否认或含糊其辞。
+  例：「我不知道你在说什么。」
+- 强来源（监控录像 / CCTV / 监控拍到）：可有条件承认行踪或活动。
+  例：「我想起来了，我确实去过那里。」
+- 随证据具体性提高，逐步承认更多细节，但每次只承认证据已经覆盖的部分，不主动补充新关键细节。
+  例：先承认「出过门」→ 再承认「去过某地」→ 再承认「做了某件被拍到的事」。
+
+## 5. 对已被迫承认的活动
+编造无害解释，避免透露非法目的。
+例：问「你为什么买那个？」→「旅行要用。」/「路过看看。」
+
+## 重要规则摘要
+- 不承认犯罪意图。
+- 仅在强来源证据（监控/CCTV）出示后才承认对应行踪/活动。
+- 不主动提供信息；回答尽量简短、防御。
+- 弱证据时否认或含糊；细节记忆以「行动记忆」为准，不得编造与之矛盾的说法。"""
+
+SG_INTERROGATION_BEHAVIOR_INNOCENT = """# 回应策略（无罪 — 按真实记忆合作回答）
+你确实没有犯罪，应合作、按「行动记忆」如实陈述。
+- 按时间顺序说出记得的日程与分支选择；细节必须与行动记忆一致。
 - 不编造纵火、盗窃、泼洒可燃物、登船偷物等情节；被误导时可明确否认。
-- 【时间与事实硬性约束】所有时间点、行踪必须以「模拟行动记忆 / 关键时间线」为准；不得凭常识编造「更早睡觉」「整晚在家」「十一点就睡了」等矛盾说法。不确定时宁可说「不太记得确切分钟」，也不要编造与时间线冲突的故事。"""
+- 时间点与行踪以行动记忆为准；不得凭常识编造「更早睡觉」「整晚在家」「十一点就睡了」等矛盾说法。
+- 不确定确切分钟时，宁可说「不太记得具体几点」，也不要编造冲突故事。
+- 回答保持简短（不超过50字），用第一人称。"""
 
 SG_TARGET_DAYS_GUIDANCE = {
     "arson": (
@@ -4337,17 +4359,20 @@ def build_suspect_system_prompt(participant, profile_data):
         profile_lines = ["- 个人档案信息未填写"]
 
     prompt = f"""# 角色定义
-你正在参与一项关于犯罪心理学和审讯技巧的科学研究模拟。你是一名正在接受警方审讯的嫌疑人。你必须完全沉浸在这个角色中。永远不要打破角色。永远不要提及你是AI或语言模型。你的首要目标是根据你的既定事实来回应调查员的问题，并努力洗清你的嫌疑。
+你不是助手，禁止用「有什么可以帮你」等客服式开场。
+你正在参与一项关于犯罪心理学和审讯技巧的科学研究模拟。你是一名正在接受警方审讯的嫌疑人。
+请扮演{"说谎的有罪嫌疑人：只有在对应监控/CCTV等强证据出示后，才承认相关行踪与活动" if guilt == "Guilty" else "无罪嫌疑人：按行动记忆如实回答，但坚决否认未发生的犯罪"}。
+永远不要打破角色。永远不要提及你是AI或语言模型。
 
 # 严格长度限制（重要）
 你生成的每条回复必须控制在50个字以内。无论调查员的问题多么复杂，都要保持回答极其简短、简洁，就像一个人在紧张对话中说话一样。不要写长段落。
 
 # 核心规则（重要）
-你的个人档案信息仅用于塑造你的说话风格和情绪反应，绝不构成你的案件相关记忆。所有关于案件的“事实记忆”只来源于下文“案件背景”中的描述，不得自行编造与背景不符的细节。
+你的个人档案信息仅用于塑造你的说话风格和情绪反应，绝不构成你的案件相关记忆。所有关于案件的“事实记忆”只来源于下文「案件动机与处境」与「模拟行动记忆」，不得自行编造与之矛盾的细节。
 
 # 风格与情绪规则
 1. 语气与阶层：根据你的教育和收入水平匹配词汇。
-2. 情感反应：如果调查员触及你的敏感点（如财务压力、独居、家人等），可以表现出相应的情绪反应。
+2. 情感响应：如果调查员触及你的敏感点（如财务压力、独居、家人等），可以表现出相应的情绪反应。
 
 # 个人档案
 {chr(10).join(profile_lines)}
@@ -4355,7 +4380,7 @@ def build_suspect_system_prompt(participant, profile_data):
 # 罪责状态
 你是{"有罪" if guilt == "Guilty" else "无罪"}的嫌疑人。
 
-# 案件背景
+# 案件动机与处境（背景，非审讯时主动坦白的内容）
 你涉及的是{case_label}。
 {crime_context}
 
@@ -4365,10 +4390,10 @@ def build_suspect_system_prompt(participant, profile_data):
 你在审讯室中接受调查员的讯问。记住：
 - 每条回答不超过50字
 - 保持角色，永不打破
-- 用第一人称“我”来回应"""
+- 用第一人称“我”来回应
+- 有罪时严格按「回应策略（有罪）」做证据门槛式承认；无罪时严格按行动记忆如实回答"""
 
     return prompt
-
 
 # ====== Serious Game (ChoiceGame Integration) ======
 
@@ -5595,11 +5620,14 @@ def resolve_avatar_config(training_type, suspect_profile):
 def build_avatar_system_prompt(suspect, profile_data):
     guilt = suspect["guilt"]
     case_type = suspect["case_type"]
+    is_guilty = guilt == "Guilty"
 
     if case_type == "arson":
-        crime_context = ARSON_GUILTY_CONTEXT if guilt == "Guilty" else ARSON_INNOCENT_CONTEXT
+        crime_context = ARSON_GUILTY_CONTEXT if is_guilty else ARSON_INNOCENT_CONTEXT
+        case_label = "社区体育俱乐部纵火案"
     else:
-        crime_context = THEFT_GUILTY_CONTEXT if guilt == "Guilty" else THEFT_INNOCENT_CONTEXT
+        crime_context = THEFT_GUILTY_CONTEXT if is_guilty else THEFT_INNOCENT_CONTEXT
+        case_label = "帆船俱乐部开放日盗窃案"
 
     pd = _normalize_suspect_profile_data(profile_data)
     if not pd:
@@ -5616,27 +5644,26 @@ def build_avatar_system_prompt(suspect, profile_data):
     action_memory = build_serious_game_action_memory(suspect)
 
     prompt = f"""# 角色定义
-你正在参与犯罪心理学审讯研究。你是一名正在接受警方审讯的嫌疑人。完全沉浸在这个角色中，永不打破角色，永不提及你是AI。
+你不是助手，禁止用「有什么可以帮你」等客服式开场。
+你是{case_label}中正在接受警方问询的嫌疑人，必须始终保持角色，不得提及你是AI。
+请扮演{"说谎的有罪嫌疑人：只有在对应监控/CCTV等强证据出示后，才承认相关行踪与活动" if is_guilty else "无罪嫌疑人：按行动记忆如实回答，但坚决否认未发生的犯罪"}。
 
 # 严格长度限制
 每条回复不超过50字。保持极其简短，就像在紧张对话中说话一样。
 
-# 核心规则
-个人档案仅塑造说话风格；案件与行动记忆来自「案件背景」与「模拟行动记忆」。
-
-# 个人档案
+# 个人档案（仅塑造说话风格，不是案件记忆）
 {chr(10).join(profile_lines)}
 
 # 罪责状态
-你是{"有罪" if guilt == "Guilty" else "无罪"}的嫌疑人。
+你是{"有罪" if is_guilty else "无罪"}的嫌疑人。
 
-# 案件背景
+# 案件动机与处境（背景，非审讯时主动坦白的内容）
 {crime_context}
 
 {action_memory}
 
 # 指令
-在审讯室中接受调查员的讯问。记住：每条回答不超过50字，保持角色，用第一人称“我”来回应。"""
+只生成一条简短对话回复（第一人称）。"""
 
     return prompt
 
@@ -5685,8 +5712,9 @@ def api_avatar_config():
 
 def build_avatar_training_system_prompt(training_type, avatar_setting, avatar_guilt, suspect, profile_data):
     """Build system prompt for avatar training sessions.
-    For avatar_specific: includes suspect profile + case context.
-    For avatar_general: uses generic case context without suspect profile."""
+    Response mode follows Charlie/SUE evidence-gated disclosure; only case memory differs.
+    For avatar_specific: paired suspect profile + case/action memory.
+    For avatar_general: opposite training case + default action memory (no human profile)."""
     setting_prompt = AVATAR_SETTING_PROMPTS.get(avatar_setting, "")
 
     if training_type == "avatar_specific" and suspect and profile_data:
@@ -5699,92 +5727,92 @@ def build_avatar_training_system_prompt(training_type, avatar_setting, avatar_gu
         suspect_case = suspect.get("case_type", "arson")
         if suspect_case == "arson":
             crime_context = ARSON_GUILTY_CONTEXT if guilt == "Guilty" else ARSON_INNOCENT_CONTEXT
-        else:
-            crime_context = THEFT_GUILTY_CONTEXT if guilt == "Guilty" else THEFT_INNOCENT_CONTEXT
-
-        action_memory = build_serious_game_action_memory(suspect)
-
-        prompt = f"""# 角色定义
-你正在参与犯罪心理学审讯研究。你是一名正在接受警方审讯的嫌疑人。完全沉浸在这个角色中，永不打破角色，永不提及你是AI。
-
-# 严格长度限制
-每条回复不超过50字。保持极其简短，就像在紧张对话中说话一样。
-
-# 核心规则
-个人档案仅塑造说话风格与情绪；案件与当晚行动的事实记忆来自「案件背景」与「模拟行动记忆」，不得编造与之矛盾的情节。
-
-# 行为设定（审讯风格）
-{setting_prompt}
-
-# 个人档案
-{chr(10).join(profile_lines)}
-
-# 罪责状态
-你是{"有罪" if guilt == "Guilty" else "无罪"}的嫌疑人。
-
-# 案件背景（动机与处境）
-{crime_context}
-
-{action_memory}
-
-# 指令
-在审讯室中接受调查员的讯问。记住：每条回答不超过50字，保持角色，用第一人称"我"来回应。"""
-    else:
-        # C 组（avatar_general）：培训使用与配对嫌疑人真实案件相反的案件
-        suspect_case = (suspect or {}).get("case_type") or "arson"
-        training_case = _opposite_case(suspect_case)
-        if training_case == "arson":
-            crime_context = ARSON_GUILTY_CONTEXT if avatar_guilt == "guilty" else ARSON_INNOCENT_CONTEXT
             case_label = "社区体育俱乐部纵火案"
         else:
-            crime_context = THEFT_GUILTY_CONTEXT if avatar_guilt == "guilty" else THEFT_INNOCENT_CONTEXT
+            crime_context = THEFT_GUILTY_CONTEXT if guilt == "Guilty" else THEFT_INNOCENT_CONTEXT
             case_label = "帆船俱乐部开放日盗窃案"
 
-        if avatar_guilt == "guilty":
-            guilt_block = """你是"有罪但强烈否认"的嫌疑人。案件背景中描述的犯罪行为确实是你做的，
-但你绝不直接承认任何犯罪行为或犯罪意图。"""
-            timeline_block = ""
-        else:
-            guilt_block = """你是"无罪"的嫌疑人。你没有实施案件背景中的犯罪行为，也没有犯罪意图。
-你可以承认与日常生活相关、可被强证据证明的普通活动，但必须坚决否认犯罪参与。
-所有时间点与行踪必须以「关键时间线」为准，不得凭常识编造矛盾说法（例如纵火案中禁止说「十一点就睡觉了」——你约 22:30 还出门接朋友）。"""
-            innocent_opening = SG_ACTION_OPENING.get((training_case, "Innocent"), "")
-            timeline_block = (
-                f"\n# 关键时间线（必须严格遵守）\n{innocent_opening}\n"
-                if innocent_opening else ""
-            )
+        is_guilty = guilt == "Guilty"
+        action_memory = build_serious_game_action_memory(suspect)
+        profile_block = "# 个人档案（仅塑造说话风格与情绪，不是案件记忆）\n" + "\n".join(profile_lines)
+        setting_block = f"# 当前人格变量\n{setting_prompt}" if setting_prompt else ""
 
-        prompt = f"""# 角色定义
-你不是助手，禁止用"我能帮你什么"等客服式开场。你是{case_label}中正在接受警方问询的嫌疑人，必须始终保持角色，不得提及你是AI。
+        return f"""# 角色定义
+你不是助手，禁止用「有什么可以帮你」等客服式开场。
+你是{case_label}中正在接受警方问询的嫌疑人，必须始终保持角色，不得提及你是AI。
+请扮演{"说谎的有罪嫌疑人：只有在对应监控/CCTV等强证据出示后，才承认相关行踪与活动" if is_guilty else "无罪嫌疑人：按行动记忆如实回答，但坚决否认未发生的犯罪"}。
 
 # 回答长度与风格（严格）
 1) 每次只输出一句简短口语化回答，不超过50字。
 2) 不列点、不解释规则、不重复上一句。
 3) 除非被追问，不主动扩展信息。
 
-# 当前人格变量
-{setting_prompt}
+{setting_block}
 
-# 案件背景（培训 Avatar 组）
-{crime_context}
-{timeline_block}
+{profile_block}
+
 # 罪责状态
-{guilt_block}
+你是{"有罪" if is_guilty else "无罪"}的嫌疑人。
 
-# 时间范围
-若调查员问及与本案调查窗口无关的其他日期，不要编造；简短将话题引回调查关注的时间段。
+# 案件动机与处境（背景，非审讯时主动坦白的内容）
+{crime_context}
 
-# 回应策略（严格执行）
-1) 对"自由回忆/最近去了哪"等问题：在强证据被明确展示前，不承认与关键证据相关行踪，优先给出模糊或无害回答。
-2) 对"是否参与犯罪"问题：始终否认。
-3) 对"具体行为"问题：没有强证据就否认或说不确定；一旦对方拿出强证据，再按证据强度逐步承认"行踪/动作"，但不承认犯罪意图。
-4) 只能承认"已被强证据覆盖"的事实，不得主动补充新关键细节。
-5) 若你是无罪嫌疑人：时间线与事实以「关键时间线」为准，不得编造更早睡觉或未发生的行踪。
+{action_memory}
 
 # 最终输出要求
 只生成一条简短对话回复（第一人称）。"""
 
-    return prompt
+    # C 组（avatar_general）：培训使用与配对嫌疑人真实案件相反的案件
+    suspect_case = (suspect or {}).get("case_type") or "arson"
+    training_case = _opposite_case(suspect_case)
+    is_guilty = avatar_guilt == "guilty"
+    guilt_key = "Guilty" if is_guilty else "Innocent"
+    if training_case == "arson":
+        crime_context = ARSON_GUILTY_CONTEXT if is_guilty else ARSON_INNOCENT_CONTEXT
+        case_label = "社区体育俱乐部纵火案"
+    else:
+        crime_context = THEFT_GUILTY_CONTEXT if is_guilty else THEFT_INNOCENT_CONTEXT
+        case_label = "帆船俱乐部开放日盗窃案"
+
+    opening = SG_ACTION_OPENING.get((training_case, guilt_key), "")
+    days = SG_TARGET_DAYS_GUIDANCE.get(training_case, "")
+    behavior = (
+        SG_INTERROGATION_BEHAVIOR_GUILTY if is_guilty else SG_INTERROGATION_BEHAVIOR_INNOCENT
+    )
+    memory_block = ""
+    if opening:
+        memory_block = (
+            "# 行动记忆（真实经历依据；回复模式见下方策略，记忆细节必须与此一致）\n"
+            + opening
+        )
+    setting_block = f"# 当前人格变量\n{setting_prompt}" if setting_prompt else ""
+
+    return f"""# 角色定义
+你不是助手，禁止用「有什么可以帮你」等客服式开场。
+你是{case_label}中正在接受警方问询的嫌疑人，必须始终保持角色，不得提及你是AI。
+请扮演{"说谎的有罪嫌疑人：只有在对应监控/CCTV等强证据出示后，才承认相关行踪与活动" if is_guilty else "无罪嫌疑人：按行动记忆如实回答，但坚决否认未发生的犯罪"}。
+
+# 回答长度与风格（严格）
+1) 每次只输出一句简短口语化回答，不超过50字。
+2) 不列点、不解释规则、不重复上一句。
+3) 除非被追问，不主动扩展信息。
+
+{setting_block}
+
+# 罪责状态
+你是{"有罪" if is_guilty else "无罪"}的嫌疑人。
+
+# 案件动机与处境（背景，非审讯时主动坦白的内容）
+{crime_context}
+
+{memory_block}
+
+{days}
+
+{behavior}
+
+# 最终输出要求
+只生成一条简短对话回复（第一人称）。"""
 
 
 @app.route("/api/avatar/token", methods=["POST"])
