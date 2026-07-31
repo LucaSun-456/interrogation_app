@@ -43,7 +43,7 @@ EXCEL_FILE = os.environ.get(
 )
 # Legacy path when Excel lived at project root (pre-Docker data/ layout)
 LEGACY_EXCEL_FILE = os.path.join(BASE_DIR, "experiment_data.xlsx")
-_excel_lock = threading.Lock()
+_excel_lock = threading.RLock()  # RLock：避免同线程嵌套读写 Excel 时死锁
 
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 DEEPSEEK_CHAT_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
@@ -1344,6 +1344,65 @@ class ExcelStore:
                 self._write_all(wb, SHEET_PARTICIPANTS, participants)
                 self._save(wb)
                 return kwargs.get("phone")
+            finally:
+                self._close(wb)
+
+    def add_balanced_participant(self, phone, register_ip="", fingerprint=""):
+        """Atomically pick S/I by current counts and insert the participant.
+        Prevents concurrent registrations from both getting the same role."""
+        phone = (phone or "").strip()
+        with _excel_lock:
+            wb = self._load()
+            try:
+                participants = self._read_all(wb, SHEET_PARTICIPANTS)
+                for p in participants:
+                    if (p.get("phone") or "").strip() == phone:
+                        return {"status": "exists", "participant": dict(p)}
+
+                s_count = sum(1 for p in participants if p.get("role") == "S")
+                i_count = sum(1 for p in participants if p.get("role") == "I")
+                # 嫌疑人多于审讯者 → 补审讯者；否则（含相等）→ 嫌疑人
+                role = "I" if s_count > i_count else "S"
+
+                row = {
+                    "phone": phone,
+                    "role": role,
+                    "group_name": "",
+                    "full_id": "",
+                    "register_ip": register_ip or "",
+                    "fingerprint": fingerprint or "",
+                    "consent_attention_passed": 0,
+                    "attention_passed": 0,
+                    "sue_attention_passed": 0,
+                    "sue_attention_attempts": 0,
+                    "control_attention_passed": 0,
+                    "game_completed": 0,
+                    "profile_completed": 0,
+                    "completed": 0,
+                    "flow_step": "",
+                    "case_evidence_recap_passed": 0,
+                    "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
+                if role == "S":
+                    case_type, guilt = SUSPECT_ATTR_CYCLE[s_count % len(SUSPECT_ATTR_CYCLE)]
+                    row["case_type"] = case_type
+                    row["guilt"] = guilt
+                    row["training_type"] = ""
+                else:
+                    row["case_type"] = ""
+                    row["guilt"] = ""
+                    row["training_type"] = ""
+
+                participants.append(row)
+                self._write_all(wb, SHEET_PARTICIPANTS, participants)
+                self._save(wb)
+                return {
+                    "status": "created",
+                    "role": role,
+                    "s_count_before": s_count,
+                    "i_count_before": i_count,
+                    "participant": dict(row),
+                }
             finally:
                 self._close(wb)
 
@@ -3274,7 +3333,8 @@ def assign_participant_group_on_booking(phone, time_slot):
 
 
 def pick_register_role():
-    """Balance S/I at registration: equal counts -> suspect; excess suspects -> interviewer."""
+    """Balance S/I at registration: equal counts -> suspect; excess suspects -> interviewer.
+    Prefer store.add_balanced_participant() for actual registration (atomic)."""
     suspects = sum(1 for p in store.get_all_participants() if p.get("role") == "S")
     interviewers = sum(1 for p in store.get_all_participants() if p.get("role") == "I")
     if suspects > interviewers:
@@ -4618,16 +4678,19 @@ def register():
             "ip_blocked": True,
         }), 403
 
-    role = pick_register_role()
+    # 原子分配角色并写入，避免并发注册都分到同一角色导致差额持续
+    created = store.add_balanced_participant(
+        phone, register_ip=client_ip, fingerprint=fingerprint,
+    )
+    if created.get("status") == "exists":
+        return jsonify({"error": "该手机号已注册", "participant": created["participant"]}), 409
+
+    role = created["role"]
+    p = created["participant"]
 
     if role == "S":
-        guilt, case_type = pick_sequential_suspect_attrs()
-        pid = store.add_participant(
-            phone=phone, role="S", group_name="",
-            guilt=guilt, case_type=case_type,
-            register_ip=client_ip, fingerprint=fingerprint,
-        )
-
+        case_type = p.get("case_type", "arson")
+        guilt = p.get("guilt", "Innocent")
         if case_type == "arson":
             context_text = ARSON_GUILTY_CONTEXT if guilt == "Guilty" else ARSON_INNOCENT_CONTEXT
         else:
@@ -4647,12 +4710,6 @@ def register():
             "attention_questions": attention_questions,
             "consent_attention_required": True,
         })
-
-    store.add_participant(
-        phone=phone, role="I", group_name="",
-        training_type="",
-        register_ip=client_ip, fingerprint=fingerprint,
-    )
 
     return jsonify({
         "role": "I",
@@ -7385,29 +7442,32 @@ def admin_update_participant_role_config(pid):
     if role not in ("S", "I"):
         return jsonify({"error": "角色必须是 S 或 I"}), 400
 
+    # 先在锁外检查冲突，避免在持有 Excel 锁时再调 get_appointments 等导致死锁
+    existing = store.get_participant(pid)
+    if not existing:
+        return jsonify({"error": "未找到参与者"}), 404
+    phone = (existing.get("phone") or "").strip()
+    old_role = (existing.get("role") or "").strip().upper()
+    if old_role not in ("S", "I"):
+        old_role = role
+
+    slot_err = _role_change_slot_conflict(phone, role)
+    if slot_err:
+        return jsonify({"error": slot_err}), 409
+
     with _excel_lock:
         wb = store._load()
         try:
             participants = store._read_all(wb, SHEET_PARTICIPANTS)
             target_p = None
             for p in participants:
-                if (p.get("phone") or "").strip() == pid:
+                if (p.get("phone") or "").strip() == phone:
                     target_p = p
                     break
-                    
+
             if not target_p:
                 return jsonify({"error": "未找到参与者"}), 404
-                
-            phone = (target_p.get("phone") or "").strip()
-            old_role = (target_p.get("role") or "").strip().upper()
-            if old_role not in ("S", "I"):
-                old_role = role
 
-            slot_err = _role_change_slot_conflict(phone, role)
-            if slot_err:
-                return jsonify({"error": slot_err}), 409
-            
-            # Update fields
             target_p["role"] = role
             if role == "S":
                 target_p["case_type"] = case_type or "arson"
@@ -7418,7 +7478,7 @@ def admin_update_participant_role_config(pid):
                 target_p["case_type"] = ""
                 target_p["guilt"] = ""
                 target_p["training_type"] = training_type or "control"
-                
+
             # Reset progress fields
             target_p["flow_step"] = ""
             target_p["attention_passed"] = 0
@@ -7431,44 +7491,33 @@ def admin_update_participant_role_config(pid):
             target_p["profile_completed"] = 0
             target_p["completed"] = 0
             target_p["case_evidence_recap_passed"] = 0
-            
-            # Rebuild full_id if they have a group
+
             group_name = target_p.get("group_name", "")
             if group_name:
                 suffix = participant_id_suffix(target_p)
                 target_p["full_id"] = make_full_id(group_name, role, suffix)
-                
+
             store._write_all(wb, SHEET_PARTICIPANTS, participants)
-            
-            # Delete associated records that represent progress
+
             if phone:
-                # Questionnaires
                 qrows = [q for q in store._read_all(wb, SHEET_INTERVIEW_QUESTIONNAIRES) if q.get("phone") != phone]
                 store._write_all(wb, SHEET_INTERVIEW_QUESTIONNAIRES, qrows)
-                
-                # Training sessions
                 sessions = [s for s in store._read_all(wb, SHEET_TRAINING_SESSIONS) if s.get("phone") != phone]
                 store._write_all(wb, SHEET_TRAINING_SESSIONS, sessions)
-                
-                # Serious game
                 sg_rows = [r for r in store._read_all(wb, SHEET_SERIOUS_GAME) if r.get("phone") != phone]
                 store._write_all(wb, SHEET_SERIOUS_GAME, sg_rows)
-                
-                # Profiles (maybe keep? the user said "restart training from the beginning", usually means resetting profile too)
                 profiles = [p for p in store._read_all(wb, SHEET_PROFILES) if p.get("phone") != phone]
                 store._write_all(wb, SHEET_PROFILES, profiles)
-                
+
             store._save(wb)
+            saved_group = (target_p.get("group_name") or "").strip()
+            saved_snapshot = dict(target_p)
         finally:
             store._close(wb)
 
-    group_name = (target_p.get("group_name") or "").strip()
-    _sync_role_side_records(phone, old_role, role, group_name)
+    _sync_role_side_records(phone, old_role, role, saved_group)
 
-    # Reconcile group allocations in case role change affected slot matching
-    _reconcile_group_allocations()
-
-    updated = store.get_participant(phone) or target_p
+    updated = store.get_participant(phone) or saved_snapshot
     return jsonify({
         "success": True,
         "message": "参与者配置已更新，进度已重置",

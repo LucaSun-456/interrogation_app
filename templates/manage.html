@@ -2011,25 +2011,31 @@ async function submitRoleConfig() {
   const role = document.getElementById('roleConfigRole').value;
   const caseType = document.getElementById('roleConfigCaseType').value;
   const trainingType = document.getElementById('roleConfigTrainingType').value;
+  const overlay = document.getElementById('adminLoadingOverlay');
+  const loadingText = document.getElementById('adminLoadingText');
+  if (overlay) overlay.classList.add('show');
+  if (loadingText) loadingText.textContent = '正在修改角色配置…';
   
   try {
-    const resp = await fetch(`/api/admin/participants/${currentRoleConfigPid}/role-config`, {
+    const resp = await fetch(`/api/admin/participants/${encodeURIComponent(currentRoleConfigPid)}/role-config`, {
       method: 'PATCH',
       headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ role, case_type: caseType, training_type: trainingType })
     });
+    const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
-      const e = await resp.json();
-      throw new Error(e.error || '修改失败');
+      throw new Error(data.error || '修改失败');
     }
-    const data = await resp.json();
     const p = data.participant || {};
     const roleText = p.role === 'S' ? '嫌疑人' : p.role === 'I' ? '审讯者' : (p.role || '');
     alert(`修改成功：${roleText}${p.full_id ? ' · ' + p.full_id : ''}\n进度已重置`);
     closeRoleConfigModal();
-    loadData({ reconcile: 1 });
+    // 不触发全量 reconcile，避免大数据量下管理页长时间卡住
+    await loadData();
   } catch (err) {
     alert('修改失败: ' + err.message);
+  } finally {
+    if (overlay) overlay.classList.remove('show');
   }
 }
 
